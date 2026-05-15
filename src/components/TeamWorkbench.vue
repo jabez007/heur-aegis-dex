@@ -4,6 +4,7 @@ import TypeBadge from './TypeBadge.vue';
 
 const props = defineProps<{
   allDataTypes: any[];
+  filteredTypes: any[];
 }>();
 
 const { 
@@ -24,7 +25,7 @@ const {
       <div class="workbench-actions">
         <button 
           class="gba-btn action-btn mini" 
-          @click="fillRemainingSlots(allDataTypes)" 
+          @click="fillRemainingSlots(allDataTypes, filteredTypes)" 
           :disabled="currentParty.length >= 3 || isGenerating"
         >
           {{ isGenerating ? '...' : (currentParty.length === 0 ? 'Generate Team' : 'Auto-Fill Slot') }}
@@ -41,73 +42,112 @@ const {
     
     <div class="party-grid">
       <div v-for="(_, index) in 3" :key="index" class="party-slot" :class="{ empty: !currentParty[index] }">
-        <template v-if="currentParty[index]">
-          <div class="slot-info">
-            <img :src="currentParty[index].sprite" :alt="currentParty[index].name" class="pixel-sprite mini"/>
-            <div class="slot-text">
-              <p class="slot-name">{{ currentParty[index].name }}</p>
-              <div class="slot-types">
-                <TypeBadge 
-                  v-for="type in currentParty[index].types" 
-                  :key="type" 
-                  :type="type" 
-                  size="mini"
-                />
+        <Transition name="party-pop" mode="out-in">
+          <div v-if="currentParty[index]" class="slot-content">
+            <div class="slot-info">
+              <img :src="currentParty[index].sprite" :alt="currentParty[index].name" class="pixel-sprite mini"/>
+              <div class="slot-text">
+                <p class="slot-name">{{ currentParty[index].name }}</p>
+                <div class="slot-types">
+                  <TypeBadge 
+                    v-for="type in currentParty[index].types" 
+                    :key="type" 
+                    :type="type" 
+                    size="mini"
+                  />
+                </div>
               </div>
             </div>
+            <button class="remove-btn" @click="removeFromParty(index)">×</button>
           </div>
-          <button class="remove-btn" @click="removeFromParty(index)">×</button>
-        </template>
-        <template v-else>
-          <p class="empty-text">Slot {{ index + 1 }} Empty</p>
-        </template>
+          <div v-else class="slot-content empty">
+            <p class="empty-text">Slot {{ index + 1 }} Empty</p>
+          </div>
+        </Transition>
       </div>
     </div>
 
-    <div class="team-analysis" v-if="currentParty.length > 0">
-      <div class="analysis-grid">
-        <div class="analysis-col">
-          <p class="analysis-label">Team Weaknesses:</p>
-          <div class="type-badge-list">
-            <TypeBadge 
-              v-for="(count, type) in teamWeaknessSummary" 
-              :key="type" 
-              :type="type" 
-              size="mini"
-            >
-              {{ type }} {{ count > 1 ? 'x' + count : '' }}
-            </TypeBadge>
-            <p v-if="Object.keys(teamWeaknessSummary).length === 0" class="none-text">None! Excellent.</p>
+    <Transition name="analysis-fade" mode="out-in">
+      <div class="team-analysis" v-if="currentParty.length > 0" key="data">
+        <div class="analysis-grid">
+          <div class="analysis-col">
+            <p class="analysis-label">Team Weaknesses:</p>
+            <TransitionGroup name="badge-list" tag="div" class="type-badge-list">
+              <TypeBadge 
+                v-for="(count, type) in teamWeaknessSummary" 
+                :key="type" 
+                :type="type" 
+                size="mini"
+              >
+                {{ type }} {{ count > 1 ? 'x' + count : '' }}
+              </TypeBadge>
+              <p v-if="Object.keys(teamWeaknessSummary).length === 0" key="none" class="none-text">None! Excellent.</p>
+            </TransitionGroup>
           </div>
-        </div>
-        <div class="analysis-col">
-          <p class="analysis-label">Team Coverage:</p>
-          <div class="type-badge-list">
-            <TypeBadge 
-              v-for="(count, type) in teamCoverageSummary" 
-              :key="type" 
-              :type="type" 
-              size="mini"
-            >
-              {{ type }} {{ count > 1 ? 'x' + count : '' }}
-            </TypeBadge>
-            <p v-if="Object.keys(teamCoverageSummary).length === 0" class="none-text">None yet.</p>
+          <div class="analysis-col">
+            <p class="analysis-label">Team Coverage:</p>
+            <TransitionGroup name="badge-list" tag="div" class="type-badge-list">
+              <TypeBadge 
+                v-for="(count, type) in teamCoverageSummary" 
+                :key="type" 
+                :type="type" 
+                size="mini"
+              >
+                {{ type }} {{ count > 1 ? 'x' + count : '' }}
+              </TypeBadge>
+              <p v-if="Object.keys(teamCoverageSummary).length === 0" key="none" class="none-text">None yet.</p>
+            </TransitionGroup>
           </div>
         </div>
       </div>
-    </div>
-    <div class="team-analysis" v-else>
-      <p class="hint-text">Add Pokemon from the Meta Analysis below to build your team.</p>
-    </div>
+      <div class="team-analysis" v-else key="hint">
+        <p class="hint-text">Add Pokemon from the Meta Analysis below to build your team.</p>
+      </div>
+    </Transition>
   </section>
 </template>
 
 <style lang="scss" scoped>
+.analysis-fade-enter-active,
+.analysis-fade-leave-active {
+  transition: all 0.3s steps(5);
+}
+.analysis-fade-enter-from,
+.analysis-fade-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.badge-list-move,
+.badge-list-enter-active,
+.badge-list-leave-active {
+  transition: all 0.2s steps(4);
+}
+
+.badge-list-leave-active {
+  position: absolute;
+}
+
+.badge-list-enter-from,
+.badge-list-leave-to {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+.type-badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  position: relative;
+  min-height: 22px;
+}
+
 .team-workbench {
   background-color: var(--gba-screen-bg);
   border: 4px solid var(--gba-screen-border);
   margin-bottom: 24px;
-  
+  padding: 16px;
+
   .workbench-header {
     display: flex;
     justify-content: space-between;
@@ -124,6 +164,28 @@ const {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
+}
+
+.party-pop-enter-active,
+.party-pop-leave-active {
+  transition: all 0.2s steps(4);
+}
+.party-pop-enter-from,
+.party-pop-leave-to {
+  opacity: 0;
+  transform: scale(0.8) rotate(-5deg);
+}
+
+.slot-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &.empty {
+    opacity: 0.5;
+  }
 }
 
 .party-slot {

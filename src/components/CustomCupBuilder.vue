@@ -32,9 +32,15 @@ const filteredTypes = computed(() => {
   <div class="custom-cup-builder">
     <MetaControls />
     
-    <TeamWorkbench :allDataTypes="allDataTypes" />
+    <TeamWorkbench 
+      :allDataTypes="allDataTypes" 
+      :filteredTypes="filteredTypes"
+    />
 
-    <MetaAnalysisGrid :filteredTypes="filteredTypes" />
+    <MetaAnalysisGrid 
+      :filteredTypes="filteredTypes" 
+      :selectedTypesCount="selectedTypes.length"
+    />
   </div>
 </template>
 

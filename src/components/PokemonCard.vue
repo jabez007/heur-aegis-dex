@@ -111,14 +111,16 @@ const handleAddToParty = () => {
         {{ selectedPokemonIndex + 1 }} / {{ typeData.pokemon.length }}
       </p>
 
-      <div v-if="showStats" class="stat-bars">
-        <StatBar 
-          v-for="(val, stat) in typeData.pokemon[selectedPokemonIndex].stats" 
-          :key="stat"
-          :label="(stat as string).replace('special-', 'S').substring(0, 3)"
-          :value="val"
-        />
-      </div>
+      <Transition name="wipe">
+        <div v-if="showStats" class="stat-bars">
+          <StatBar 
+            v-for="(val, stat) in typeData.pokemon[selectedPokemonIndex].stats" 
+            :key="stat"
+            :label="(stat as string).replace('special-', 'S').substring(0, 3)"
+            :value="val"
+          />
+        </div>
+      </Transition>
     </div>
     <div v-else>
       <p class="poke-name">No Pokemon found</p>
@@ -191,6 +193,20 @@ const handleAddToParty = () => {
   justify-content: center;
   gap: 4px;
   margin-top: 8px;
+}
+
+.wipe-enter-active,
+.wipe-leave-active {
+  transition: max-height 0.2s steps(4);
+  overflow: hidden;
+}
+.wipe-enter-from,
+.wipe-leave-to {
+  max-height: 0;
+}
+.wipe-enter-to,
+.wipe-leave-from {
+  max-height: 200px;
 }
 
 .stat-bars {

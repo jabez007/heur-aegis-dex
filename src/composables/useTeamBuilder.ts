@@ -1,5 +1,8 @@
 import { ref, computed } from 'vue';
 import { generateTeams } from '../lib/pokedex';
+import { useNotifications } from './useNotifications';
+
+const { notify } = useNotifications();
 
 export interface PartyMember {
   name: string;
@@ -42,6 +45,12 @@ export function useTeamBuilder() {
 
   const addToParty = (typeData: any, pokemonIndex: number) => {
     if (currentParty.value.length >= 3) return;
+
+    // Check if the same type combo is already in the party
+    if (currentParty.value.some(member => member.typeName === typeData.name)) {
+      notify(`A ${typeData.name.toUpperCase()} type is already in your party.`, "error");
+      return;
+    }
     
     const pokemon = typeData.pokemon[pokemonIndex];
     currentParty.value.push({
@@ -54,6 +63,7 @@ export function useTeamBuilder() {
       coverages: typeData.coverages,
       typeName: typeData.name
     });
+    notify(`Added ${pokemon.pokemon.name.toUpperCase()} to party.`, "success");
   };
 
   const removeFromParty = (index: number) => {
@@ -64,10 +74,10 @@ export function useTeamBuilder() {
     currentParty.value = [];
   };
 
-  const generateFullTeam = (allDataTypes: any[]) => {
+  const generateFullTeam = (allowedTypes: any[]) => {
     isGenerating.value = true;
     const teams = generateTeams({
-      allowedTypes: allDataTypes,
+      allowedTypes: allowedTypes,
       teamSize: 3,
       seed: []
     });
@@ -75,7 +85,7 @@ export function useTeamBuilder() {
     if (teams.length > 0) {
       const topTeam = teams[0];
       currentParty.value = topTeam.pokemon.map((p: any, idx: number) => {
-          const typeData = allDataTypes.find(t => t.name === topTeam.types[idx]);
+          const typeData = allowedTypes.find(t => t.name === topTeam.types[idx]);
           return {
               name: p.name,
               types: p.types,
@@ -87,22 +97,24 @@ export function useTeamBuilder() {
               typeName: typeData.name
           };
       });
+      notify("Generated optimal team based on meta.", "success");
     } else {
-      alert("No valid teams found with current filters.");
+      notify("No valid teams found with current filters.", "error");
     }
     isGenerating.value = false;
   };
 
-  const fillRemainingSlots = (allDataTypes: any[]) => {
+  const fillRemainingSlots = (fullList: any[], allowedTypes: any[]) => {
     if (currentParty.value.length === 3) return;
     if (currentParty.value.length === 0) {
-      generateFullTeam(allDataTypes);
+      generateFullTeam(allowedTypes);
       return;
     }
 
     isGenerating.value = true;
     const seed = currentParty.value.map(member => {
-      const typeData = allDataTypes.find(t => t.name === member.typeName);
+      // Use fullList for seed lookup because the member might not be in the current allowed list
+      const typeData = fullList.find(t => t.name === member.typeName);
       return {
         ...typeData,
         selectedPokemon: typeData.pokemon.find((p: any) => p.pokemon.name === member.name)
@@ -110,7 +122,7 @@ export function useTeamBuilder() {
     });
 
     const teams = generateTeams({
-      allowedTypes: allDataTypes,
+      allowedTypes: allowedTypes,
       teamSize: 3,
       seed: seed
     });
@@ -118,7 +130,8 @@ export function useTeamBuilder() {
     if (teams.length > 0) {
       const topTeam = teams[0];
       currentParty.value = topTeam.pokemon.map((p: any, idx: number) => {
-          const typeData = allDataTypes.find(t => t.name === topTeam.types[idx]);
+          // Re-hydrate using fullList so we can find types that might be outside the current 'allowed' filter (for the seed members)
+          const typeData = fullList.find(t => t.name === topTeam.types[idx]);
           return {
               name: p.name,
               types: p.types,
@@ -130,8 +143,9 @@ export function useTeamBuilder() {
               typeName: typeData.name
           };
       });
+      notify("Found compatible partners for your team.", "success");
     } else {
-      alert("No compatible partners found for this team.");
+      notify("No compatible partners found for this team.", "error");
     }
     isGenerating.value = false;
   };

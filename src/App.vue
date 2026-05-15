@@ -46,6 +46,8 @@
 
       <CustomCupBuilder v-if="types.length > 0" :allDataTypes="types" />
     </main>
+
+    <GbaNotification />
   </div>
 </template>
 
@@ -54,6 +56,7 @@ import { ref, onMounted } from 'vue';
 import lscache from 'lscache';
 import { getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
+import GbaNotification from './components/GbaNotification.vue';
 
 const loading = ref(false);
 const types = ref<any[]>([]);
