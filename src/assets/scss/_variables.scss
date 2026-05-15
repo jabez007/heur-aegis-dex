@@ -1,0 +1,47 @@
+// GBA Retro Aesthetic Variables
+$bg-color: #282828;
+$gba-screen-bg: #8bac0f;
+$gba-screen-border: #0f380f;
+$gba-screen-shadow: #306230;
+
+// Accents
+$accent-magenta: #e0185d;
+$accent-yellow: #f8d800;
+$accent-cyan: #00f0ff;
+$text-light: #e0f8cf;
+$text-dark: #0f380f;
+
+// Typography
+$font-heading: 'VT323', monospace;
+$font-body: 'DotGothic16', sans-serif;
+
+// Borders & Shadows
+$border-thick: 4px solid $gba-screen-border;
+$shadow-thick: 4px 4px 0px $gba-screen-shadow;
+
+// Spacing
+$spacing-sm: 8px;
+$spacing-md: 16px;
+$spacing-lg: 24px;
+$spacing-xl: 32px;
+
+$type-colors: (
+  normal: #A8A77A,
+  fire: #EE8130,
+  water: #6390F0,
+  electric: #F7D02C,
+  grass: #7AC74C,
+  ice: #96D9D6,
+  fighting: #C22E28,
+  poison: #A33EA1,
+  ground: #E2BF65,
+  flying: #A98FF3,
+  psychic: #F95587,
+  bug: #A6B91A,
+  rock: #B6A136,
+  ghost: #735797,
+  dragon: #6F35FC,
+  dark: #705848,
+  steel: #B7B7CE,
+  fairy: #D685AD
+);
