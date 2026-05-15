@@ -274,7 +274,8 @@ export function generateTeams(options: any = {}): any[] {
     const {
         allowedTypes = [],
         teamSize = 3,
-        teamComposition = { allowSharedTypes: true, allowSharedWeaknesses: false, coverWeaknesses: true }
+        teamComposition = { allowSharedTypes: true, allowSharedWeaknesses: false, coverWeaknesses: true },
+        seed = [] // Existing team members to build around
     } = options;
 
     const _teamComposition = {
@@ -284,71 +285,89 @@ export function generateTeams(options: any = {}): any[] {
         ...teamComposition
     }
 
-    const damageScores: any = allowedTypes.reduce((acc: any, t: any) => ({
+    // Filter out empty pokemon lists just in case
+    const validAllowedTypes = allowedTypes.filter((t: any) => t.pokemon && t.pokemon.length > 0);
+
+    const damageScores: any = validAllowedTypes.reduce((acc: any, t: any) => ({
         to: [...(acc.to || []), t.damage_to_score],
         from: [...(acc.from || []), t.damage_from_score]
     }), {}) 
     
-    const maxDamageToScore = Math.max(...(damageScores.to || []))
-    const minDamageToScore = Math.min(...(damageScores.to || []))
+    const maxDamageToScore = Math.max(...(damageScores.to || [1]))
+    const minDamageToScore = Math.min(...(damageScores.to || [0]))
 
-    const maxDamageFromScore = Math.max(...(damageScores.from || []))
-    const minDamageFromScore = Math.min(...(damageScores.from || []))
+    const maxDamageFromScore = Math.max(...(damageScores.from || [1]))
+    const minDamageFromScore = Math.min(...(damageScores.from || [0]))
 
-    for (let i = 0; i < allowedTypes.length; i++) {
-        allowedTypes[i] = {
-            ...allowedTypes[i],
-            normalized_damage_from_score:
-                (allowedTypes[i].damage_from_score - minDamageFromScore)
-                /
-                (maxDamageFromScore - minDamageFromScore),
-            normalized_damage_to_score:
-                (allowedTypes[i].damage_to_score - minDamageToScore)
-                /
-                (maxDamageToScore - minDamageToScore)
-        }
+    const normalizedTypes = validAllowedTypes.map((t: any) => ({
+        ...t,
+        normalized_damage_from_score: (maxDamageFromScore === minDamageFromScore) ? 0.5 :
+            (t.damage_from_score - minDamageFromScore) / (maxDamageFromScore - minDamageFromScore),
+        normalized_damage_to_score: (maxDamageToScore === minDamageToScore) ? 0.5 :
+            (t.damage_to_score - minDamageToScore) / (maxDamageToScore - minDamageToScore)
+    }));
+
+    function isCompatible(current: any, candidate: any): boolean {
+        const passesSharedType = _teamComposition.allowSharedTypes || current.name.split("/").every((n: any) => !candidate.name.includes(n));
+        const passesSharedWeakness = _teamComposition.allowSharedWeaknesses || 
+            (current.weaknesses.every((w: any) => !candidate.weaknesses.includes(w)) && current.ineffectives.every((i: any) => !candidate.ineffectives.includes(i)));
+        
+        const passesCoverage = !_teamComposition.coverWeaknesses ||
+            current.weaknesses.some((w: any) => candidate.coverages.includes(w) || candidate.resistances.includes(w)) ||
+            candidate.coverages.some((c: any) => current.weaknesses.includes(c)) ||
+            candidate.resistances.some((r: any) => current.weaknesses.includes(r));
+
+        return passesSharedType && passesSharedWeakness && passesCoverage;
     }
 
-    function teamCombinations(typs: any[], size: number): any[] {
-        if (size === 0) return [[]];
+    function teamCombinations(typs: any[], size: number, currentTeam: any[]): any[] {
+        if (size === 0) return [currentTeam];
         if (typs.length === 0) return [];
         
-        const currentType = typs[0];
-        
-        const validNextTypes = typs.slice(1).filter((t: any) => {
-            const passesSharedType = _teamComposition.allowSharedTypes || currentType.name.split("/").every((n: any) => !t.name.includes(n));
-            const passesSharedWeakness = _teamComposition.allowSharedWeaknesses || 
-                (currentType.weaknesses.every((w: any) => !t.weaknesses.includes(w)) && currentType.ineffectives.every((i: any) => !t.ineffectives.includes(i)));
-            
-            const passesCoverage = !_teamComposition.coverWeaknesses ||
-                currentType.weaknesses.some((w: any) => t.coverages.includes(w) || t.resistances.includes(w)) ||
-                currentType.coverages.some((c: any) => t.weaknesses.includes(c)) ||
-                currentType.resistances.some((r: any) => t.weaknesses.includes(r));
+        const first = typs[0];
+        const rest = typs.slice(1);
 
-            return passesSharedType && passesSharedWeakness && passesCoverage;
-        });
+        // Check if 'first' is compatible with all members currently in the team
+        const canAddFirst = currentTeam.every(member => isCompatible(member, first));
 
-        const branchesWithCurrent = teamCombinations(validNextTypes, size - 1).map((m: any) => [currentType].concat(m));
-        const branchesWithoutCurrent = teamCombinations(typs.slice(1), size);
+        let results: any[] = [];
+        if (canAddFirst) {
+            results = results.concat(teamCombinations(rest, size - 1, [...currentTeam, first]));
+        }
+        results = results.concat(teamCombinations(rest, size, currentTeam));
 
-        return branchesWithCurrent.concat(branchesWithoutCurrent);
+        return results;
     }
 
-    return teamCombinations(allowedTypes, teamSize)
+    // Filter normalizedTypes to only those compatible with the seed
+    const seedCompatibleTypes = normalizedTypes.filter((t: any) => 
+        seed.every((s: any) => isCompatible(s, t))
+    );
+
+    return teamCombinations(seedCompatibleTypes, teamSize - seed.length, seed)
         .map((tm: any) => ({
             types: tm.map((t: any) => t.name),
             typesTotal: (new Set(tm.flatMap((t: any) => t.name.split("/")))).size,
-            pokemon: tm.map((t: any) => ({
-                types: t.name.split("/"),
-                name: t.pokemon.pokemon.name,
-                sprite: t.pokemon.sprite
-            })),
-            score: tm.map((t: any) => (
-                t.pokemon.stats.hp +
-                ((t.pokemon.stats.attack + t.pokemon.stats['special-attack']) * t.normalized_damage_to_score) +
-                ((t.pokemon.stats.defense + t.pokemon.stats['special-defense']) / (1 + t.normalized_damage_from_score)) +
-                t.pokemon.stats.speed
-            )).reduce((a: number, b: number) => a + b)
+            pokemon: tm.map((t: any) => {
+                // If the member came from the seed, it might already have a specific pokemon picked
+                // Otherwise pick the first (strongest) one from the type entry
+                const poke = t.selectedPokemon || t.pokemon[0];
+                return {
+                    types: t.name.split("/"),
+                    name: poke.pokemon.name,
+                    sprite: poke.sprite,
+                    stats: poke.stats,
+                    normalized_damage_to_score: t.normalized_damage_to_score,
+                    normalized_damage_from_score: t.normalized_damage_from_score
+                };
+            }),
+            score: tm.map((t: any) => {
+                const poke = t.selectedPokemon || t.pokemon[0];
+                return poke.stats.hp +
+                ((poke.stats.attack + poke.stats['special-attack']) * t.normalized_damage_to_score) +
+                ((poke.stats.defense + poke.stats['special-defense']) / (1 + t.normalized_damage_from_score)) +
+                poke.stats.speed;
+            }).reduce((a: number, b: number) => a + b, 0)
         }))
-        .sort((t1: any, t2: any) => t2.score - t1.score)
+        .sort((t1: any, t2: any) => t2.score - t1.score);
 }
