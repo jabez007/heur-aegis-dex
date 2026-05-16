@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "predeploy": "npm run build",
+    "deploy": "push-dir --dir=dist --branch=main --cleanup"
   },
   "dependencies": {
     "events": "^3.3.0",
@@ -22,6 +24,7 @@
     "@types/lodash": "^4.17.24",
     "@types/node": "^25.8.0",
     "@vitejs/plugin-vue": "^6.0.6",
+    "push-dir": "^0.4.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.12",
     "vitest": "^4.1.6",
