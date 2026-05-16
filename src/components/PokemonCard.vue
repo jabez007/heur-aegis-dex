@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import TypeBadge from './TypeBadge.vue';
 import StatBar from './StatBar.vue';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
@@ -12,6 +12,15 @@ const { addToParty, currentParty } = useTeamBuilder();
 
 const selectedPokemonIndex = ref(0);
 const showStats = ref(false);
+
+watch(() => props.typeData.pokemon, (newList) => {
+  const maxLength = newList?.length || 0;
+  if (maxLength > 0) {
+    selectedPokemonIndex.value = Math.min(selectedPokemonIndex.value, maxLength - 1);
+  } else {
+    selectedPokemonIndex.value = 0;
+  }
+}, { immediate: true });
 
 const prevPokemon = () => {
   const maxLength = props.typeData.pokemon.length;
@@ -45,11 +54,18 @@ const handleAddToParty = () => {
     
     <div class="stats">
       <div class="score-grid">
-        <p class="score">Def: {{ typeData.damage_from_score }}</p>
-        <p class="score">Off: {{ typeData.damage_to_score }}</p>
+        <p class="score">
+          Def: {{ typeData.damage_from_score }}
+        </p>
+        <p class="score">
+          Off: {{ typeData.damage_to_score }}
+        </p>
       </div>
       
-      <div class="weakness-list" v-if="typeData.weaknesses.length - (typeData.quadruple_weaknesses ? typeData.quadruple_weaknesses.length : 0) > 0">
+      <div
+        v-if="typeData.weaknesses.length - (typeData.quadruple_weaknesses ? typeData.quadruple_weaknesses.length : 0) > 0"
+        class="weakness-list"
+      >
         <p>Weaknesses:</p>
         <TypeBadge 
           v-for="w in typeData.weaknesses.filter((w: string) => !(typeData.quadruple_weaknesses || []).includes(w))" 
@@ -58,7 +74,10 @@ const handleAddToParty = () => {
         />
       </div>
       
-      <div class="weakness-list" v-if="typeData.quadruple_weaknesses && typeData.quadruple_weaknesses.length > 0">
+      <div
+        v-if="typeData.quadruple_weaknesses && typeData.quadruple_weaknesses.length > 0"
+        class="weakness-list"
+      >
         <p>Quad Weaknesses:</p>
         <TypeBadge 
           v-for="w in typeData.quadruple_weaknesses" 
@@ -68,7 +87,10 @@ const handleAddToParty = () => {
         />
       </div>
 
-      <div class="weakness-list" v-if="typeData.coverages.length > 0">
+      <div
+        v-if="typeData.coverages.length > 0"
+        class="weakness-list"
+      >
         <p>Coverage:</p>
         <TypeBadge 
           v-for="c in typeData.coverages" 
@@ -78,41 +100,67 @@ const handleAddToParty = () => {
       </div>
     </div>
 
-    <div class="pokemon-list" v-if="typeData.pokemon.length > 0">
+    <div
+      v-if="typeData.pokemon.length > 0"
+      class="pokemon-list"
+    >
       <div class="pokemon-selector">
-        <button class="arrow-btn" @click="prevPokemon" v-if="typeData.pokemon.length > 1">◀</button>
+        <button
+          v-if="typeData.pokemon.length > 1"
+          class="arrow-btn"
+          @click="prevPokemon"
+        >
+          ◀
+        </button>
         <img 
           v-if="typeData.pokemon[selectedPokemonIndex].sprite" 
           :src="typeData.pokemon[selectedPokemonIndex].sprite" 
           :alt="typeData.pokemon[selectedPokemonIndex].pokemon.name" 
           class="pixel-sprite"
-        />
-        <button class="arrow-btn" @click="nextPokemon" v-if="typeData.pokemon.length > 1">▶</button>
+        >
+        <button
+          v-if="typeData.pokemon.length > 1"
+          class="arrow-btn"
+          @click="nextPokemon"
+        >
+          ▶
+        </button>
       </div>
       
       <div class="poke-name-wrapper">
-        <p class="poke-name">{{ typeData.pokemon[selectedPokemonIndex].pokemon.name }}</p>
+        <p class="poke-name">
+          {{ typeData.pokemon[selectedPokemonIndex].pokemon.name }}
+        </p>
       </div>
       
       <div class="poke-actions">
-        <button class="gba-btn mini-btn" @click="toggleStats">
+        <button
+          class="gba-btn mini-btn"
+          @click="toggleStats"
+        >
           {{ showStats ? 'Hide' : 'Stats' }}
         </button>
         <button 
           class="gba-btn mini-btn party-btn" 
-          @click="handleAddToParty" 
-          :disabled="currentParty.length >= 3"
+          :disabled="currentParty.length >= 3" 
+          @click="handleAddToParty"
         >
           + Party
         </button>
       </div>
       
-      <p class="poke-count" v-if="typeData.pokemon.length > 1">
+      <p
+        v-if="typeData.pokemon.length > 1"
+        class="poke-count"
+      >
         {{ selectedPokemonIndex + 1 }} / {{ typeData.pokemon.length }}
       </p>
 
       <Transition name="wipe">
-        <div v-if="showStats" class="stat-bars">
+        <div
+          v-if="showStats"
+          class="stat-bars"
+        >
           <StatBar 
             v-for="(val, stat) in typeData.pokemon[selectedPokemonIndex].stats" 
             :key="stat"
@@ -123,7 +171,9 @@ const handleAddToParty = () => {
       </Transition>
     </div>
     <div v-else>
-      <p class="poke-name">No Pokemon found</p>
+      <p class="poke-name">
+        No Pokemon found
+      </p>
     </div>
   </div>
 </template>

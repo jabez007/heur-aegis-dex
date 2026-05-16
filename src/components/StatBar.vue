@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const props = defineProps<{
+defineProps<{
   label: string;
   value: number;
   max?: number;
@@ -23,7 +23,7 @@ const getStatColor = (val: number) => {
           width: Math.min(100, (value / (max || 150) * 100)) + '%', 
           backgroundColor: getStatColor(value) 
         }"
-      ></div>
+      />
     </div>
     <span class="stat-val">{{ value }}</span>
   </div>

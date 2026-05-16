@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import PokemonCard from './PokemonCard.vue';
 
 const props = defineProps<{
@@ -8,6 +8,11 @@ const props = defineProps<{
 }>();
 
 const visibleCount = ref(20);
+
+watch(() => props.filteredTypes, () => {
+  visibleCount.value = 20;
+});
+
 const showMore = () => {
   visibleCount.value += 20;
 };
@@ -17,21 +22,44 @@ const showMore = () => {
   <section class="gba-container">
     <h2>Meta Analysis: Top Typing</h2>
     
-    <Transition name="state-fade" mode="out-in">
-      <div v-if="selectedTypesCount === 0" key="no-types" class="empty-state">
-        <p class="status-msg">No types selected.</p>
+    <Transition
+      name="state-fade"
+      mode="out-in"
+    >
+      <div
+        v-if="selectedTypesCount === 0"
+        key="no-types"
+        class="empty-state"
+      >
+        <p class="status-msg">
+          No types selected.
+        </p>
         <p>Please select at least one type in the Cup Builder to begin the scan.</p>
       </div>
       
-      <div v-else-if="filteredTypes.length === 0" key="no-pokemon" class="empty-state">
-        <p class="status-msg">No compatible Pokemon found.</p>
+      <div
+        v-else-if="filteredTypes.length === 0"
+        key="no-pokemon"
+        class="empty-state"
+      >
+        <p class="status-msg">
+          No compatible Pokemon found.
+        </p>
         <p>Try adjusting your stat filters or region, or uncheck "Hide Empty Types".</p>
       </div>
 
-      <div v-else key="results" class="results-container">
+      <div
+        v-else
+        key="results"
+        class="results-container"
+      >
         <p>Ranked by Balance (High Coverage vs. Low Weaknesses).</p>
         
-        <TransitionGroup name="grid-fade" tag="div" class="type-grid">
+        <TransitionGroup
+          name="grid-fade"
+          tag="div"
+          class="type-grid"
+        >
           <PokemonCard 
             v-for="t in filteredTypes.slice(0, visibleCount)" 
             :key="t.name" 
@@ -39,8 +67,14 @@ const showMore = () => {
           />
         </TransitionGroup>
 
-        <div class="grid-actions" v-if="filteredTypes.length > visibleCount">
-          <button class="gba-btn action-btn show-more-btn" @click="showMore">
+        <div
+          v-if="filteredTypes.length > visibleCount"
+          class="grid-actions"
+        >
+          <button
+            class="gba-btn action-btn show-more-btn"
+            @click="showMore"
+          >
             Show More ({{ filteredTypes.length - visibleCount }} Left)
           </button>
         </div>

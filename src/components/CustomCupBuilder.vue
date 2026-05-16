@@ -33,13 +33,13 @@ const filteredTypes = computed(() => {
     <MetaControls />
     
     <TeamWorkbench 
-      :allDataTypes="allDataTypes" 
-      :filteredTypes="filteredTypes"
+      :all-data-types="allDataTypes" 
+      :filtered-types="filteredTypes"
     />
 
     <MetaAnalysisGrid 
-      :filteredTypes="filteredTypes" 
-      :selectedTypesCount="selectedTypes.length"
+      :filtered-types="filteredTypes" 
+      :selected-types-count="selectedTypes.length"
     />
   </div>
 </template>

@@ -2,7 +2,7 @@
 import { useTeamBuilder } from '../composables/useTeamBuilder';
 import TypeBadge from './TypeBadge.vue';
 
-const props = defineProps<{
+defineProps<{
   allDataTypes: any[];
   filteredTypes: any[];
 }>();
@@ -25,15 +25,15 @@ const {
       <div class="workbench-actions">
         <button 
           class="gba-btn action-btn mini" 
-          @click="fillRemainingSlots(allDataTypes, filteredTypes)" 
-          :disabled="currentParty.length >= 3 || isGenerating"
+          :disabled="currentParty.length >= 3 || isGenerating" 
+          @click="fillRemainingSlots(allDataTypes, filteredTypes)"
         >
           {{ isGenerating ? '...' : (currentParty.length === 0 ? 'Generate Team' : 'Auto-Fill Slot') }}
         </button>
         <button 
           class="gba-btn action-btn mini" 
-          @click="clearParty" 
-          :disabled="currentParty.length === 0 || isGenerating"
+          :disabled="currentParty.length === 0 || isGenerating" 
+          @click="clearParty"
         >
           Clear Party
         </button>
@@ -41,13 +41,30 @@ const {
     </div>
     
     <div class="party-grid">
-      <div v-for="(_, index) in 3" :key="index" class="party-slot" :class="{ empty: !currentParty[index] }">
-        <Transition name="party-pop" mode="out-in">
-          <div v-if="currentParty[index]" class="slot-content">
+      <div
+        v-for="(_, index) in 3"
+        :key="index"
+        class="party-slot"
+        :class="{ empty: !currentParty[index] }"
+      >
+        <Transition
+          name="party-pop"
+          mode="out-in"
+        >
+          <div
+            v-if="currentParty[index]"
+            class="slot-content"
+          >
             <div class="slot-info">
-              <img :src="currentParty[index].sprite" :alt="currentParty[index].name" class="pixel-sprite mini"/>
+              <img
+                :src="currentParty[index].sprite"
+                :alt="currentParty[index].name"
+                class="pixel-sprite mini"
+              >
               <div class="slot-text">
-                <p class="slot-name">{{ currentParty[index].name }}</p>
+                <p class="slot-name">
+                  {{ currentParty[index].name }}
+                </p>
                 <div class="slot-types">
                   <TypeBadge 
                     v-for="type in currentParty[index].types" 
@@ -58,21 +75,45 @@ const {
                 </div>
               </div>
             </div>
-            <button class="remove-btn" @click="removeFromParty(index)">×</button>
+            <button
+              class="remove-btn"
+              :aria-label="`Remove ${currentParty[index].name} from party`"
+              @click="removeFromParty(index)"
+            >
+              ×
+            </button>
           </div>
-          <div v-else class="slot-content empty">
-            <p class="empty-text">Slot {{ index + 1 }} Empty</p>
+          <div
+            v-else
+            class="slot-content empty"
+          >
+            <p class="empty-text">
+              Slot {{ index + 1 }} Empty
+            </p>
           </div>
         </Transition>
       </div>
     </div>
 
-    <Transition name="analysis-fade" mode="out-in">
-      <div class="team-analysis" v-if="currentParty.length > 0" key="data">
+    <Transition
+      name="analysis-fade"
+      mode="out-in"
+    >
+      <div
+        v-if="currentParty.length > 0"
+        key="data"
+        class="team-analysis"
+      >
         <div class="analysis-grid">
           <div class="analysis-col">
-            <p class="analysis-label">Team Weaknesses:</p>
-            <TransitionGroup name="badge-list" tag="div" class="type-badge-list">
+            <p class="analysis-label">
+              Team Weaknesses:
+            </p>
+            <TransitionGroup
+              name="badge-list"
+              tag="div"
+              class="type-badge-list"
+            >
               <TypeBadge 
                 v-for="(count, type) in teamWeaknessSummary" 
                 :key="type" 
@@ -81,12 +122,24 @@ const {
               >
                 {{ type }} {{ count > 1 ? 'x' + count : '' }}
               </TypeBadge>
-              <p v-if="Object.keys(teamWeaknessSummary).length === 0" key="none" class="none-text">None! Excellent.</p>
+              <p
+                v-if="Object.keys(teamWeaknessSummary).length === 0"
+                key="none"
+                class="none-text"
+              >
+                None! Excellent.
+              </p>
             </TransitionGroup>
           </div>
           <div class="analysis-col">
-            <p class="analysis-label">Team Coverage:</p>
-            <TransitionGroup name="badge-list" tag="div" class="type-badge-list">
+            <p class="analysis-label">
+              Team Coverage:
+            </p>
+            <TransitionGroup
+              name="badge-list"
+              tag="div"
+              class="type-badge-list"
+            >
               <TypeBadge 
                 v-for="(count, type) in teamCoverageSummary" 
                 :key="type" 
@@ -95,13 +148,25 @@ const {
               >
                 {{ type }} {{ count > 1 ? 'x' + count : '' }}
               </TypeBadge>
-              <p v-if="Object.keys(teamCoverageSummary).length === 0" key="none" class="none-text">None yet.</p>
+              <p
+                v-if="Object.keys(teamCoverageSummary).length === 0"
+                key="none"
+                class="none-text"
+              >
+                None yet.
+              </p>
             </TransitionGroup>
           </div>
         </div>
       </div>
-      <div class="team-analysis" v-else key="hint">
-        <p class="hint-text">Add Pokemon from the Meta Analysis below to build your team.</p>
+      <div
+        v-else
+        key="hint"
+        class="team-analysis"
+      >
+        <p class="hint-text">
+          Add Pokemon from the Meta Analysis below to build your team.
+        </p>
       </div>
     </Transition>
   </section>

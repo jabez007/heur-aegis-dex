@@ -293,17 +293,17 @@ export function generateTeams(options: any = {}): any[] {
         from: [...(acc.from || []), t.damage_from_score]
     }), {}) 
     
-    const maxDamageToScore = Math.max(...(damageScores.to || [1]))
-    const minDamageToScore = Math.min(...(damageScores.to || [0]))
+    const maxDamageToScore = Math.max(...(damageScores.to.filter((s: any) => s !== undefined) || [1]))
+    const minDamageToScore = Math.min(...(damageScores.to.filter((s: any) => s !== undefined) || [0]))
 
-    const maxDamageFromScore = Math.max(...(damageScores.from || [1]))
-    const minDamageFromScore = Math.min(...(damageScores.from || [0]))
+    const maxDamageFromScore = Math.max(...(damageScores.from.filter((s: any) => s !== undefined) || [1]))
+    const minDamageFromScore = Math.min(...(damageScores.from.filter((s: any) => s !== undefined) || [0]))
 
     const normalizedTypes = validAllowedTypes.map((t: any) => ({
         ...t,
-        normalized_damage_from_score: (maxDamageFromScore === minDamageFromScore) ? 0.5 :
+        normalized_damage_from_score: (t.damage_from_score === undefined || maxDamageFromScore === minDamageFromScore) ? 0.5 :
             (t.damage_from_score - minDamageFromScore) / (maxDamageFromScore - minDamageFromScore),
-        normalized_damage_to_score: (maxDamageToScore === minDamageToScore) ? 0.5 :
+        normalized_damage_to_score: (t.damage_to_score === undefined || maxDamageToScore === minDamageToScore) ? 0.5 :
             (t.damage_to_score - minDamageToScore) / (maxDamageToScore - minDamageToScore)
     }));
 
@@ -340,34 +340,45 @@ export function generateTeams(options: any = {}): any[] {
     }
 
     // Filter normalizedTypes to only those compatible with the seed
+    const validSeed = seed.filter((s: any) => s.name && s.weaknesses && (s.selectedPokemon || (s.pokemon && s.pokemon.length > 0)));
+    
     const seedCompatibleTypes = normalizedTypes.filter((t: any) => 
-        seed.every((s: any) => isCompatible(s, t))
+        !validSeed.some((s: any) => s.name === t.name) &&
+        validSeed.every((s: any) => {
+            return isCompatible(s, t);
+        })
     );
 
-    return teamCombinations(seedCompatibleTypes, teamSize - seed.length, seed)
-        .map((tm: any) => ({
-            types: tm.map((t: any) => t.name),
-            typesTotal: (new Set(tm.flatMap((t: any) => t.name.split("/")))).size,
-            pokemon: tm.map((t: any) => {
-                // If the member came from the seed, it might already have a specific pokemon picked
-                // Otherwise pick the first (strongest) one from the type entry
-                const poke = t.selectedPokemon || t.pokemon[0];
-                return {
+    return teamCombinations(seedCompatibleTypes, teamSize - validSeed.length, validSeed)
+        .map((tm: any) => {
+            const pokemon = tm.map((t: any) => {
+                const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
+                return poke ? {
                     types: t.name.split("/"),
                     name: poke.pokemon.name,
                     sprite: poke.sprite,
                     stats: poke.stats,
-                    normalized_damage_to_score: t.normalized_damage_to_score,
-                    normalized_damage_from_score: t.normalized_damage_from_score
-                };
-            }),
-            score: tm.map((t: any) => {
-                const poke = t.selectedPokemon || t.pokemon[0];
-                return poke.stats.hp +
-                ((poke.stats.attack + poke.stats['special-attack']) * t.normalized_damage_to_score) +
-                ((poke.stats.defense + poke.stats['special-defense']) / (1 + t.normalized_damage_from_score)) +
-                poke.stats.speed;
-            }).reduce((a: number, b: number) => a + b, 0)
-        }))
+                    normalized_damage_to_score: t.normalized_damage_to_score ?? 0,
+                    normalized_damage_from_score: t.normalized_damage_from_score ?? 0
+                } : null;
+            }).filter((p: any) => p !== null);
+
+            return {
+                types: tm.map((t: any) => t.name),
+                typesTotal: (new Set(tm.flatMap((t: any) => t.name.split("/")))).size,
+                pokemon,
+                score: tm.map((t: any) => {
+                    const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
+                    if (!poke) return 0;
+                    const offScore = t.normalized_damage_to_score ?? 0;
+                    const defScore = t.normalized_damage_from_score ?? 0;
+                    return poke.stats.hp +
+                    ((poke.stats.attack + poke.stats['special-attack']) * offScore) +
+                    ((poke.stats.defense + poke.stats['special-defense']) / (1 + defScore)) +
+                    poke.stats.speed;
+                }).reduce((a: number, b: number) => a + b, 0)
+            };
+        })
+        .filter((team: any) => team.pokemon.length === teamSize)
         .sort((t1: any, t2: any) => t2.score - t1.score);
 }

@@ -29,13 +29,36 @@ const {
     </div>
 
     <div class="cup-actions">
-      <button class="gba-btn action-btn" @click="selectAll">Select All</button>
-      <button class="gba-btn action-btn" @click="clearTypes">Clear All</button>
-      <button class="gba-btn action-btn" @click="setPreset('boulder')">Boulder Cup Preset</button>
-      <button class="gba-btn action-btn" @click="setPreset('twilight')">Twilight Cup Preset</button>
+      <button
+        class="gba-btn action-btn"
+        @click="selectAll"
+      >
+        Select All
+      </button>
+      <button
+        class="gba-btn action-btn"
+        @click="clearTypes"
+      >
+        Clear All
+      </button>
+      <button
+        class="gba-btn action-btn"
+        @click="setPreset('boulder')"
+      >
+        Boulder Cup Preset
+      </button>
+      <button
+        class="gba-btn action-btn"
+        @click="setPreset('twilight')"
+      >
+        Twilight Cup Preset
+      </button>
       
       <label class="gba-checkbox">
-        <input type="checkbox" v-model="hideEmptyTypes" />
+        <input
+          v-model="hideEmptyTypes"
+          type="checkbox"
+        >
         Hide Empty Types
       </label>
     </div>

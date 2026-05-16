@@ -5,20 +5,24 @@ const { notifications, remove } = useNotifications();
 </script>
 
 <template>
-  <div class="notification-container">
+  <div
+    class="notification-container"
+    aria-live="polite"
+  >
     <TransitionGroup name="gba-msg">
-      <div 
+      <button 
         v-for="n in notifications" 
         :key="n.id" 
         class="gba-message-box"
         :class="n.type"
+        :aria-label="`Dismiss ${n.type} notification: ${n.message}`"
         @click="remove(n.id)"
       >
         <div class="msg-content">
           <p>{{ n.message }}</p>
-          <div class="msg-arrow"></div>
+          <div class="msg-arrow" />
         </div>
-      </div>
+      </button>
     </TransitionGroup>
   </div>
 </template>
@@ -46,6 +50,14 @@ const { notifications, remove } = useNotifications();
   padding: 16px 24px;
   position: relative;
   cursor: pointer;
+  width: 100%;
+  text-align: left;
+  display: block;
+  
+  &:focus-visible {
+    outline: 4px solid var(--accent-blue);
+    outline-offset: 4px;
+  }
   
   // Custom double-border look
   &::before {
