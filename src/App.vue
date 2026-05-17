@@ -86,6 +86,29 @@
     </main>
 
     <GbaNotification />
+
+    <Transition name="fade">
+      <div
+        v-if="loading"
+        class="loading-overlay"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="loading-title"
+      >
+        <div class="loading-content">
+          <div class="scanner-line" />
+          <div
+            id="loading-title"
+            class="loading-text"
+          >
+            SCANNING DATABASE
+          </div>
+          <div class="loading-subtext">
+            CONNECTED TO POKEAPI_
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -238,5 +261,85 @@ onMounted(() => {
 
 @keyframes blink {
   to { visibility: hidden; }
+}
+
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.loading-content {
+  position: relative;
+  border: 4px solid var(--accent-magenta);
+  padding: 40px 60px;
+  background: var(--text-dark);
+  text-align: center;
+  box-shadow: 8px 8px 0px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.15) 0px,
+      rgba(0, 0, 0, 0.15) 1px,
+      transparent 1px,
+      transparent 2px
+    );
+    pointer-events: none;
+  }
+}
+
+.scanner-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--accent-cyan);
+  box-shadow: 0 0 15px var(--accent-cyan);
+  animation: scan 2s linear infinite;
+  opacity: 0.7;
+}
+
+@keyframes scan {
+  0% { top: 0; }
+  100% { top: 100%; }
+}
+
+.loading-text {
+  font-family: var(--font-heading);
+  font-size: 2.5rem;
+  color: var(--accent-magenta);
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+}
+
+.loading-subtext {
+  font-family: var(--font-body);
+  color: var(--accent-cyan);
+  font-size: 1rem;
+  opacity: 0.8;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.4s steps(4);
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
