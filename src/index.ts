@@ -25,6 +25,16 @@ export {
   TypeBadge
 }
 
+// Export composables
+export { useTeamBuilder } from './composables/useTeamBuilder'
+export { useMetaFilters, ALL_TYPES } from './composables/useMetaFilters'
+export { useNotifications } from './composables/useNotifications'
+
+// Export types
+export type { PartyMember } from './composables/useTeamBuilder'
+export type { Notification } from './composables/useNotifications'
+export type { PokemonTypeData, DamageRelations, NamedResource } from './lib/pokedex'
+
 // Export a plugin for global installation
 export default {
   install: (app: App) => {
