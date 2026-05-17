@@ -2,6 +2,8 @@
 
 An advanced Pokémon meta-analysis and team building engine designed with a retro GBA aesthetic. Built for stability, resilience, and precise competitive planning.
 
+[**Live Demo**](https://jabez007.github.io/heur-aegis-dex/)
+
 ## 🛠 Features
 
 - **Dynamic Cup Builder:** Define custom meta-games by selecting specific type pools and region constraints.
