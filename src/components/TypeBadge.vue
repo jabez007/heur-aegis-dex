@@ -23,8 +23,8 @@ defineProps<{
 .type-badge {
   display: inline-block;
   text-transform: uppercase;
-  color: #fff;
-  text-shadow: 1px 1px 1px rgba(0,0,0,0.8);
+  color: var(--gba-text-white);
+  text-shadow: 1px 1px 1px var(--gba-shadow-dark);
   border: 2px solid var(--gba-text-dark);
   box-shadow: 1px 1px 0px var(--gba-text-dark);
   font-family: var(--gba-font-body);
@@ -49,7 +49,7 @@ defineProps<{
     border-width: 3px;
     box-shadow: 2px 2px 0px var(--gba-text-dark);
     font-family: var(--gba-font-heading);
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+    text-shadow: 1px 1px 2px var(--gba-shadow-dark);
   }
 
   &.quad {
