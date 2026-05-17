@@ -91,10 +91,16 @@
       <div
         v-if="loading"
         class="loading-overlay"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="loading-title"
       >
         <div class="loading-content">
           <div class="scanner-line" />
-          <div class="loading-text">
+          <div
+            id="loading-title"
+            class="loading-text"
+          >
             SCANNING DATABASE
           </div>
           <div class="loading-subtext">
@@ -268,6 +274,7 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
 
