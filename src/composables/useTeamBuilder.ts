@@ -98,7 +98,7 @@ export function useTeamBuilder() {
                 coverages: typeData.coverages,
                 typeName: typeData.name
             };
-        }).filter((m): m is PartyMember => m !== null);
+        }).filter((m: any): m is PartyMember => m !== null);
         notify("Generated optimal team based on meta.", "success");
       } else {
         notify("No valid teams found with current filters.", "error");
@@ -151,7 +151,7 @@ export function useTeamBuilder() {
                 coverages: typeData.coverages,
                 typeName: typeData.name
             };
-        }).filter((m): m is PartyMember => m !== null);
+        }).filter((m: any): m is PartyMember => m !== null);
         notify("Found compatible partners for your team.", "success");
       } else {
         notify("No compatible partners found for this team.", "error");

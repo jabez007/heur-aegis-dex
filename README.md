@@ -22,15 +22,51 @@ An advanced Pokémon meta-analysis and team building engine designed with a retr
 - **Quality Assurance:** Vitest for unit testing, ESLint for code standards.
 - **Deployment:** GitHub Actions for automated deployment to GitHub Pages.
 
-## 🚀 Getting Started
+## 📦 Library Usage
+
+Heur-Aegis Dex can also be used as a component library in other Vue 3 projects.
 
 ### Installation
 
 ```bash
-npm install
+npm install @jabez007/heur-aegis-dex
 ```
 
-### Development
+### Registration
+
+You can register it as a plugin to make the entire app and all components available globally:
+
+```typescript
+import { createApp } from 'vue'
+import HeurAegisDex from '@jabez007/heur-aegis-dex'
+import '@jabez007/heur-aegis-dex/style.css'
+
+const app = createApp(App)
+app.use(HeurAegisDex)
+app.mount('#app')
+
+// In your template:
+// <HeurAegisDexMain />
+```
+
+Or import the main app component directly:
+
+```typescript
+import { HeurAegisDexMain } from '@jabez007/heur-aegis-dex'
+import '@jabez007/heur-aegis-dex/style.css'
+
+// In your component:
+// <HeurAegisDexMain />
+```
+
+Or import individual components:
+
+```typescript
+import { PokemonCard } from '@jabez007/heur-aegis-dex'
+import '@jabez007/heur-aegis-dex/style.css'
+```
+
+## 🚀 Development
 
 ```bash
 npm run dev
