@@ -2,7 +2,7 @@
   "name": "@jabez007/heur-aegis-dex",
   "version": "0.1.1",
   "type": "module",
-  "main": "lib/heur-aegis-dex.umd.js",
+  "main": "lib/heur-aegis-dex.cjs",
   "module": "lib/heur-aegis-dex.es.js",
   "types": "lib/index.d.ts",
   "files": [
@@ -11,7 +11,7 @@
   "exports": {
     ".": {
       "import": "./lib/heur-aegis-dex.es.js",
-      "require": "./lib/heur-aegis-dex.umd.js",
+      "require": "./lib/heur-aegis-dex.cjs",
       "types": "./lib/index.d.ts"
     },
     "./style.css": "./lib/heur-aegis-dex.css"

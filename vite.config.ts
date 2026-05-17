@@ -24,7 +24,8 @@ export default defineConfig(({ mode }) => {
       lib: {
         entry: resolve(__dirname, 'src/index.ts'),
         name: 'HeurAegisDex',
-        fileName: (format) => `heur-aegis-dex.${format}.js`
+        formats: ['es', 'cjs'],
+        fileName: (format) => format === 'cjs' ? 'heur-aegis-dex.cjs' : `heur-aegis-dex.${format}.js`
       },
       rollupOptions: {
         external: ['vue'],
