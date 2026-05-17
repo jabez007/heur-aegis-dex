@@ -2,22 +2,39 @@
   <div class="gba-app">
     <header class="gba-header gba-container">
       <h1>Heur-Aegis Dex</h1>
-      <p v-if="loading">System Online // Loading Pokedex Data...</p>
-      <p v-else-if="types.length > 0" class="status-ready">System Online // Pokedex Database Ready</p>
-      <p v-else>System Online // Waiting for Scan...</p>
+      <p v-if="loading">
+        System Online // Loading Pokedex Data...
+      </p>
+      <p
+        v-else-if="types.length > 0"
+        class="status-ready"
+      >
+        System Online // Pokedex Database Ready
+      </p>
+      <p v-else>
+        System Online // Waiting for Scan...
+      </p>
     </header>
 
     <main class="gba-main">
       <section class="gba-container">
         <h2>System Settings</h2>
         <div class="controls">
-          <button class="gba-btn" :class="{ active: loading }" @click="fetchTypes">
+          <button
+            class="gba-btn"
+            :class="{ active: loading }"
+            @click="fetchTypes"
+          >
             {{ loading ? 'Loading...' : 'Scan Types' }}
           </button>
           
           <label class="gba-label">
             Pokedex Region:
-            <select v-model="inPokedex" @change="fetchTypes" class="gba-select">
+            <select
+              v-model="inPokedex"
+              class="gba-select"
+              @change="fetchTypes"
+            >
               <option value="national">National</option>
               <option value="kanto">Kanto</option>
               <option value="galar">Galar</option>
@@ -31,21 +48,44 @@
         <div class="stat-controls">
           <label class="gba-label">
             Min Total Stats:
-            <input type="number" v-model.number="minStatsTotal" @change="fetchTypes" class="gba-input" step="10" />
+            <input
+              v-model.number="minStatsTotal"
+              type="number"
+              class="gba-input"
+              step="10"
+              @change="fetchTypes"
+            >
           </label>
           <label class="gba-label">
             Min Attacks:
-            <input type="number" v-model.number="minAttacks" @change="fetchTypes" class="gba-input" step="5" />
+            <input
+              v-model.number="minAttacks"
+              type="number"
+              class="gba-input"
+              step="5"
+              @change="fetchTypes"
+            >
           </label>
           <label class="gba-label">
             Min Defenses:
-            <input type="number" v-model.number="minDefenses" @change="fetchTypes" class="gba-input" step="5" />
+            <input
+              v-model.number="minDefenses"
+              type="number"
+              class="gba-input"
+              step="5"
+              @change="fetchTypes"
+            >
           </label>
         </div>
       </section>
 
-      <CustomCupBuilder v-if="types.length > 0" :allDataTypes="types" />
+      <CustomCupBuilder
+        v-if="types.length > 0"
+        :all-data-types="types"
+      />
     </main>
+
+    <GbaNotification />
   </div>
 </template>
 
@@ -54,6 +94,7 @@ import { ref, onMounted } from 'vue';
 import lscache from 'lscache';
 import { getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
+import GbaNotification from './components/GbaNotification.vue';
 
 const loading = ref(false);
 const types = ref<any[]>([]);

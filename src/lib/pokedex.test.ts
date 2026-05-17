@@ -188,11 +188,11 @@ describe('pokedex.js - generateTeams', () => {
       resistances: ['fire', 'grass', 'bug'],
       coverages: ['grass', 'bug', 'ice'],
       ineffectives: ['water', 'fire', 'rock'],
-      pokemon: {
+      pokemon: [{
         pokemon: { name: 'charizard' },
         sprite: 'charizard.png',
         stats: { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 }
-      }
+      }]
     },
     {
       name: 'water',
@@ -202,11 +202,11 @@ describe('pokedex.js - generateTeams', () => {
       resistances: ['fire', 'water', 'ice'],
       coverages: ['fire', 'rock', 'ground'],
       ineffectives: ['water', 'grass', 'dragon'],
-      pokemon: {
+      pokemon: [{
         pokemon: { name: 'blastoise' },
         sprite: 'blastoise.png',
         stats: { hp: 79, attack: 83, defense: 100, 'special-attack': 85, 'special-defense': 105, speed: 78 }
-      }
+      }]
     },
     {
       name: 'grass',
@@ -216,11 +216,11 @@ describe('pokedex.js - generateTeams', () => {
       resistances: ['water', 'grass', 'electric', 'ground'],
       coverages: ['water', 'rock', 'ground'],
       ineffectives: ['fire', 'grass', 'bug', 'dragon', 'poison', 'flying', 'steel'],
-      pokemon: {
+      pokemon: [{
         pokemon: { name: 'venusaur' },
         sprite: 'venusaur.png',
         stats: { hp: 80, attack: 82, defense: 83, 'special-attack': 100, 'special-defense': 100, speed: 80 }
-      }
+      }]
     }
   ];
 
@@ -257,11 +257,11 @@ describe('pokedex.js - generateTeams', () => {
         resistances: ['normal', 'fire', 'poison', 'flying'],
         coverages: ['fire', 'ice', 'flying', 'bug'],
         ineffectives: ['fighting', 'ground', 'steel'],
-        pokemon: {
+        pokemon: [{
           pokemon: { name: 'golem' },
           sprite: 'golem.png',
           stats: { hp: 80, attack: 120, defense: 130, 'special-attack': 55, 'special-defense': 65, speed: 45 }
-        }
+        }]
       }
     ];
 
@@ -295,9 +295,99 @@ describe('pokedex.js - generateTeams', () => {
       teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
     });
     
+    expect(Array.isArray(teams)).toBe(true);
+    expect(teams.length).toBeGreaterThan(0);
     expect(typeof teams[0].score).toBe('number');
     expect(Number.isFinite(teams[0].score)).toBe(true);
     expect(teams[0].score).toBeGreaterThan(0);
+  });
+
+  it('should handle missing normalized scores without producing NaN', () => {
+    const typesWithMissingScores = [
+      {
+        name: 'fire',
+        pokemon: [{
+          pokemon: { name: 'charizard' },
+          sprite: 'charizard.png',
+          stats: { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 }
+        }],
+        weaknesses: [],
+        resistances: [],
+        coverages: [],
+        ineffectives: []
+        // normalized_damage_to_score is missing
+      }
+    ];
+
+    const teams = generateTeams({
+      allowedTypes: typesWithMissingScores as any,
+      teamSize: 1
+    });
+
+    expect(Array.isArray(teams)).toBe(true);
+    expect(teams.length).toBeGreaterThan(0);
+    expect(teams[0].score).toBeDefined();
+    expect(Number.isNaN(teams[0].score)).toBe(false);
+    expect(typeof teams[0].score).toBe('number');
+  });
+
+  it('should skip invalid types in seeded generation gracefully', () => {
+    const seedWithInvalidType = [
+      {
+        name: 'invalid-type', 
+        typeName: 'invalid-type',
+        weaknesses: [],
+        ineffectives: []
+      },
+      {
+        name: 'fire',
+        typeName: 'fire',
+        weaknesses: ['water', 'rock', 'ground'],
+        ineffectives: ['water', 'fire', 'rock'],
+        pokemon: mockTypes[0].pokemon,
+        selectedPokemon: mockTypes[0].pokemon[0] // Explicitly set selectedPokemon to be extra safe
+      }
+    ];
+
+    const teams = generateTeams({
+      allowedTypes: [...mockTypes],
+      teamSize: 3,
+      seed: seedWithInvalidType as any,
+      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
+    });
+
+    // Valid seed was 'fire'. It should have filled the remaining 2 slots with 'water' and 'grass'.
+    expect(Array.isArray(teams)).toBe(true);
+    expect(teams.length).toBeGreaterThan(0);
+    expect(Array.isArray(teams[0].pokemon)).toBe(true);
+    expect(teams[0].pokemon.length).toBe(3);
+
+    // Assert that 'invalid-type' is NOT in the team
+    const hasInvalidType = teams[0].pokemon.some((p: any) => p.name === 'missing-poke');
+    expect(hasInvalidType).toBe(false);
+
+    // Assert that 'fire' (charizard) IS in the team and it's the correct one from the seed
+    const charizard = teams[0].pokemon.find((p: any) => p.name === 'charizard');
+    expect(charizard).toBeDefined();
+    expect(charizard.sprite).toBe('charizard.png');
+  });
+
+  it('should correctly map nested pokemon data to the team structure', () => {
+    const teams = generateTeams({
+      allowedTypes: [...mockTypes],
+      teamSize: 1
+    });
+
+    expect(Array.isArray(teams)).toBe(true);
+    expect(teams.length).toBeGreaterThan(0);
+    expect(Array.isArray(teams[0].pokemon)).toBe(true);
+    expect(teams[0].pokemon.length).toBe(1);
+
+    const poke = teams[0].pokemon[0];
+    expect(poke.name).toBeDefined();
+    expect(poke.sprite).toBeDefined();
+    expect(poke.stats).toBeDefined();
+    expect(Array.isArray(poke.types)).toBe(true);
   });
 });
 
