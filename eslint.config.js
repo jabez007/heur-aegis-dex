@@ -11,22 +11,18 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/recommended'],
   {
-    files: ['**/*.vue'],
     languageOptions: {
       globals: {
         ...globals.browser,
         ...globals.node,
-      },
-      parserOptions: {
-        parser: tseslint.parser,
       },
     },
   },
   {
+    files: ['**/*.vue'],
     languageOptions: {
-      globals: {
-        ...globals.browser,
-        ...globals.node,
+      parserOptions: {
+        parser: tseslint.parser,
       },
     },
   },

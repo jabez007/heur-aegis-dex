@@ -20,8 +20,10 @@ const {
       <button 
         v-for="type in ALL_TYPES" 
         :key="type"
+        type="button"
         class="gba-btn type-btn"
         :class="{ active: selectedTypes.includes(type) }"
+        :aria-pressed="selectedTypes.includes(type)"
         @click="toggleType(type)"
       >
         {{ type }}
@@ -30,24 +32,28 @@ const {
 
     <div class="cup-actions">
       <button
+        type="button"
         class="gba-btn action-btn"
         @click="selectAll"
       >
         Select All
       </button>
       <button
+        type="button"
         class="gba-btn action-btn"
         @click="clearTypes"
       >
         Clear All
       </button>
       <button
+        type="button"
         class="gba-btn action-btn"
         @click="setPreset('boulder')"
       >
         Boulder Cup Preset
       </button>
       <button
+        type="button"
         class="gba-btn action-btn"
         @click="setPreset('twilight')"
       >

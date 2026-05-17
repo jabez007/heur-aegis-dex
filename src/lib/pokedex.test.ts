@@ -295,6 +295,8 @@ describe('pokedex.js - generateTeams', () => {
       teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
     });
     
+    expect(Array.isArray(teams)).toBe(true);
+    expect(teams.length).toBeGreaterThan(0);
     expect(typeof teams[0].score).toBe('number');
     expect(Number.isFinite(teams[0].score)).toBe(true);
     expect(teams[0].score).toBeGreaterThan(0);
@@ -322,6 +324,8 @@ describe('pokedex.js - generateTeams', () => {
       teamSize: 1
     });
 
+    expect(Array.isArray(teams)).toBe(true);
+    expect(teams.length).toBeGreaterThan(0);
     expect(teams[0].score).toBeDefined();
     expect(Number.isNaN(teams[0].score)).toBe(false);
     expect(typeof teams[0].score).toBe('number');
@@ -353,8 +357,19 @@ describe('pokedex.js - generateTeams', () => {
     });
 
     // Valid seed was 'fire'. It should have filled the remaining 2 slots with 'water' and 'grass'.
+    expect(Array.isArray(teams)).toBe(true);
     expect(teams.length).toBeGreaterThan(0);
+    expect(Array.isArray(teams[0].pokemon)).toBe(true);
     expect(teams[0].pokemon.length).toBe(3);
+
+    // Assert that 'invalid-type' is NOT in the team
+    const hasInvalidType = teams[0].pokemon.some((p: any) => p.name === 'missing-poke');
+    expect(hasInvalidType).toBe(false);
+
+    // Assert that 'fire' (charizard) IS in the team and it's the correct one from the seed
+    const charizard = teams[0].pokemon.find((p: any) => p.name === 'charizard');
+    expect(charizard).toBeDefined();
+    expect(charizard.sprite).toBe('charizard.png');
   });
 
   it('should correctly map nested pokemon data to the team structure', () => {
@@ -362,6 +377,11 @@ describe('pokedex.js - generateTeams', () => {
       allowedTypes: [...mockTypes],
       teamSize: 1
     });
+
+    expect(Array.isArray(teams)).toBe(true);
+    expect(teams.length).toBeGreaterThan(0);
+    expect(Array.isArray(teams[0].pokemon)).toBe(true);
+    expect(teams[0].pokemon.length).toBe(1);
 
     const poke = teams[0].pokemon[0];
     expect(poke.name).toBeDefined();
