@@ -101,14 +101,14 @@ const showMore = () => {
 .empty-state {
   text-align: center;
   padding: 32px 16px;
-  border: 2px dashed var(--text-dark);
+  border: 2px dashed var(--gba-text-dark);
   background: rgba(0,0,0,0.05);
   margin-top: 16px;
   
   .status-msg {
-    font-family: var(--font-heading);
+    font-family: var(--gba-font-heading);
     font-size: 1.5rem;
-    color: var(--accent-magenta);
+    color: var(--gba-accent-magenta);
     margin-bottom: 8px;
   }
   
@@ -140,7 +140,7 @@ const showMore = () => {
   justify-content: center;
   margin-top: 24px;
   padding-top: 16px;
-  border-top: 2px dashed var(--text-dark);
+  border-top: 2px dashed var(--gba-text-dark);
 }
 
 .show-more-btn {
@@ -149,8 +149,8 @@ const showMore = () => {
 }
 
 .action-btn {
-  background-color: var(--accent-magenta);
-  color: var(--text-light);
-  border-color: var(--text-dark);
+  background-color: var(--gba-accent-magenta);
+  color: var(--gba-text-light);
+  border-color: var(--gba-text-dark);
 }
 </style>

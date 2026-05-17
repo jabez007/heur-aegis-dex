@@ -1,114 +1,116 @@
 <template>
-  <div class="gba-app">
-    <header class="gba-header gba-container">
-      <h1>Heur-Aegis Dex</h1>
-      <p v-if="loading">
-        System Online // Loading Pokedex Data...
-      </p>
-      <p
-        v-else-if="types.length > 0"
-        class="status-ready"
-      >
-        System Online // Pokedex Database Ready
-      </p>
-      <p v-else>
-        System Online // Waiting for Scan...
-      </p>
-    </header>
+  <div class="heur-aegis-dex">
+    <div class="gba-app">
+      <header class="gba-header gba-container">
+        <h1>Heur-Aegis Dex</h1>
+        <p v-if="loading">
+          System Online // Loading Pokedex Data...
+        </p>
+        <p
+          v-else-if="types.length > 0"
+          class="status-ready"
+        >
+          System Online // Pokedex Database Ready
+        </p>
+        <p v-else>
+          System Online // Waiting for Scan...
+        </p>
+      </header>
 
-    <main class="gba-main">
-      <section class="gba-container">
-        <h2>System Settings</h2>
-        <div class="controls">
-          <button
-            class="gba-btn"
-            :class="{ active: loading }"
-            @click="fetchTypes"
-          >
-            {{ loading ? 'Loading...' : 'Scan Types' }}
-          </button>
-          
-          <label class="gba-label">
-            Pokedex Region:
-            <select
-              v-model="inPokedex"
-              class="gba-select"
-              @change="fetchTypes"
+      <main class="gba-main">
+        <section class="gba-container">
+          <h2>System Settings</h2>
+          <div class="controls">
+            <button
+              class="gba-btn"
+              :class="{ active: loading }"
+              @click="fetchTypes"
             >
-              <option value="national">National</option>
-              <option value="kanto">Kanto</option>
-              <option value="galar">Galar</option>
-              <option value="sinnoh">Sinnoh</option>
-              <option value="hisui">Hisui</option>
-              <option value="paldea">Paldea</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="stat-controls">
-          <label class="gba-label">
-            Min Total Stats:
-            <input
-              v-model.number="minStatsTotal"
-              type="number"
-              class="gba-input"
-              step="10"
-              @change="fetchTypes"
-            >
-          </label>
-          <label class="gba-label">
-            Min Attacks:
-            <input
-              v-model.number="minAttacks"
-              type="number"
-              class="gba-input"
-              step="5"
-              @change="fetchTypes"
-            >
-          </label>
-          <label class="gba-label">
-            Min Defenses:
-            <input
-              v-model.number="minDefenses"
-              type="number"
-              class="gba-input"
-              step="5"
-              @change="fetchTypes"
-            >
-          </label>
-        </div>
-      </section>
-
-      <CustomCupBuilder
-        v-if="types.length > 0"
-        :all-data-types="types"
-      />
-    </main>
-
-    <GbaNotification />
-
-    <Transition name="fade">
-      <div
-        v-if="loading"
-        class="loading-overlay"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="loading-title"
-      >
-        <div class="loading-content">
-          <div class="scanner-line" />
-          <div
-            id="loading-title"
-            class="loading-text"
-          >
-            SCANNING DATABASE
+              {{ loading ? 'Loading...' : 'Scan Types' }}
+            </button>
+            
+            <label class="gba-label">
+              Pokedex Region:
+              <select
+                v-model="inPokedex"
+                class="gba-select"
+                @change="fetchTypes"
+              >
+                <option value="national">National</option>
+                <option value="kanto">Kanto</option>
+                <option value="galar">Galar</option>
+                <option value="sinnoh">Sinnoh</option>
+                <option value="hisui">Hisui</option>
+                <option value="paldea">Paldea</option>
+              </select>
+            </label>
           </div>
-          <div class="loading-subtext">
-            CONNECTED TO POKEAPI_
+
+          <div class="stat-controls">
+            <label class="gba-label">
+              Min Total Stats:
+              <input
+                v-model.number="minStatsTotal"
+                type="number"
+                class="gba-input"
+                step="10"
+                @change="fetchTypes"
+              >
+            </label>
+            <label class="gba-label">
+              Min Attacks:
+              <input
+                v-model.number="minAttacks"
+                type="number"
+                class="gba-input"
+                step="5"
+                @change="fetchTypes"
+              >
+            </label>
+            <label class="gba-label">
+              Min Defenses:
+              <input
+                v-model.number="minDefenses"
+                type="number"
+                class="gba-input"
+                step="5"
+                @change="fetchTypes"
+              >
+            </label>
+          </div>
+        </section>
+
+        <CustomCupBuilder
+          v-if="types.length > 0"
+          :all-data-types="types"
+        />
+      </main>
+
+      <GbaNotification />
+
+      <Transition name="fade">
+        <div
+          v-if="loading"
+          class="loading-overlay"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="loading-title"
+        >
+          <div class="loading-content">
+            <div class="scanner-line" />
+            <div
+              id="loading-title"
+              class="loading-text"
+            >
+              SCANNING DATABASE
+            </div>
+            <div class="loading-subtext">
+              CONNECTED TO POKEAPI_
+            </div>
           </div>
         </div>
-      </div>
-    </Transition>
+      </Transition>
+    </div>
   </div>
 </template>
 
@@ -187,8 +189,8 @@ onMounted(() => {
   
   h1 {
     font-size: 3rem;
-    color: var(--accent-magenta);
-    text-shadow: 2px 2px 0px var(--text-dark);
+    color: var(--gba-accent-magenta);
+    text-shadow: 2px 2px 0px var(--gba-text-dark);
   }
 }
 
@@ -210,7 +212,7 @@ onMounted(() => {
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   padding-top: 16px;
-  border-top: 2px dashed var(--text-dark);
+  border-top: 2px dashed var(--gba-text-dark);
 }
 
 .stat-controls .gba-label {
@@ -231,7 +233,7 @@ onMounted(() => {
 }
 
 .gba-label {
-  font-family: var(--font-heading);
+  font-family: var(--gba-font-heading);
   font-size: 1.2rem;
   display: flex;
   gap: 8px;
@@ -239,16 +241,16 @@ onMounted(() => {
 }
 
 .gba-select, .gba-input {
-  font-family: var(--font-body);
-  background: var(--text-light);
-  border: 2px solid var(--text-dark);
+  font-family: var(--gba-font-body);
+  background: var(--gba-text-light);
+  border: 2px solid var(--gba-text-dark);
   padding: 4px 8px;
   text-transform: uppercase;
   width: 100px;
 }
 
 .status-ready {
-  color: var(--text-dark);
+  color: var(--gba-text-dark);
   font-weight: bold;
   position: relative;
 }
@@ -280,9 +282,9 @@ onMounted(() => {
 
 .loading-content {
   position: relative;
-  border: 4px solid var(--accent-magenta);
+  border: 4px solid var(--gba-accent-magenta);
   padding: 40px 60px;
-  background: var(--text-dark);
+  background: var(--gba-text-dark);
   text-align: center;
   box-shadow: 8px 8px 0px rgba(0, 0, 0, 0.5);
   overflow: hidden;
@@ -308,8 +310,8 @@ onMounted(() => {
   left: 0;
   width: 100%;
   height: 2px;
-  background: var(--accent-cyan);
-  box-shadow: 0 0 15px var(--accent-cyan);
+  background: var(--gba-accent-cyan);
+  box-shadow: 0 0 15px var(--gba-accent-cyan);
   animation: scan 2s linear infinite;
   opacity: 0.7;
 }
@@ -320,16 +322,16 @@ onMounted(() => {
 }
 
 .loading-text {
-  font-family: var(--font-heading);
+  font-family: var(--gba-font-heading);
   font-size: 2.5rem;
-  color: var(--accent-magenta);
+  color: var(--gba-accent-magenta);
   margin-bottom: 8px;
   letter-spacing: 2px;
 }
 
 .loading-subtext {
-  font-family: var(--font-body);
-  color: var(--accent-cyan);
+  font-family: var(--gba-font-body);
+  color: var(--gba-accent-cyan);
   font-size: 1rem;
   opacity: 0.8;
 }

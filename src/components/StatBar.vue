@@ -38,7 +38,7 @@ const getStatColor = (val: number) => {
 }
 
 .stat-label {
-  font-family: var(--font-heading);
+  font-family: var(--gba-font-heading);
   font-size: 0.8rem;
   width: 35px;
   text-align: right;
@@ -49,7 +49,7 @@ const getStatColor = (val: number) => {
   flex-grow: 1;
   height: 8px;
   background: rgba(0,0,0,0.1);
-  border: 1px solid var(--text-dark);
+  border: 1px solid var(--gba-text-dark);
 }
 
 .bar {
@@ -58,7 +58,7 @@ const getStatColor = (val: number) => {
 }
 
 .stat-val {
-  font-family: var(--font-body);
+  font-family: var(--gba-font-body);
   font-size: 0.7rem;
   width: 25px;
   text-align: right;

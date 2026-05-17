@@ -180,7 +180,7 @@ const handleAddToParty = () => {
 
 <style lang="scss" scoped>
 .type-card {
-  border: 2px solid var(--text-dark);
+  border: 2px solid var(--gba-text-dark);
   padding: 8px;
   background: rgba(255,255,255,0.1);
   display: flex;
@@ -192,7 +192,7 @@ const handleAddToParty = () => {
 .type-header {
   margin: 0;
   width: 100%;
-  border-bottom: 2px solid var(--text-dark);
+  border-bottom: 2px solid var(--gba-text-dark);
   padding-bottom: 8px;
   margin-bottom: 8px;
   display: flex;
@@ -209,7 +209,7 @@ const handleAddToParty = () => {
 
 .poke-name {
   text-transform: capitalize;
-  font-family: var(--font-heading);
+  font-family: var(--gba-font-heading);
   font-size: 1.2rem;
   margin: 0;
 }
@@ -231,11 +231,11 @@ const handleAddToParty = () => {
 .mini-btn {
   font-size: 0.7rem;
   padding: 2px 6px;
-  background-color: var(--accent-cyan);
+  background-color: var(--gba-accent-cyan);
 }
 
 .party-btn {
-  background-color: var(--accent-yellow);
+  background-color: var(--gba-accent-yellow);
 }
 
 .poke-actions {
@@ -263,7 +263,7 @@ const handleAddToParty = () => {
   width: 100%;
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px dashed var(--text-dark);
+  border-top: 1px dashed var(--gba-text-dark);
   text-align: left;
 }
 
@@ -278,7 +278,7 @@ const handleAddToParty = () => {
   width: 100%;
   gap: 8px;
   margin-bottom: 8px;
-  border-bottom: 1px dashed var(--text-dark);
+  border-bottom: 1px dashed var(--gba-text-dark);
   padding-bottom: 4px;
 }
 
@@ -306,13 +306,13 @@ const handleAddToParty = () => {
 .arrow-btn {
   background: transparent;
   border: none;
-  color: var(--text-dark);
+  color: var(--gba-text-dark);
   font-size: 1.5rem;
   cursor: pointer;
   padding: 0;
   
   &:hover {
-    color: var(--accent-magenta);
+    color: var(--gba-accent-magenta);
   }
   
   &:active {

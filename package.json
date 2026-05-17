@@ -1,11 +1,39 @@
 {
-  "name": "heur-aegis-dex",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@jabez007/heur-aegis-dex",
+  "version": "0.1.1",
   "type": "module",
+  "main": "lib/heur-aegis-dex.cjs",
+  "module": "lib/heur-aegis-dex.es.js",
+  "types": "lib/index.d.ts",
+  "files": [
+    "lib"
+  ],
+  "exports": {
+    ".": {
+      "import": "./lib/heur-aegis-dex.es.js",
+      "require": "./lib/heur-aegis-dex.cjs",
+      "types": "./lib/index.d.ts"
+    },
+    "./style.css": "./lib/heur-aegis-dex.css"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "jabez007",
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jabez007/heur-aegis-dex.git"
+  },
+  "homepage": "https://github.com/jabez007/heur-aegis-dex#readme",
+  "bugs": {
+    "url": "https://github.com/jabez007/heur-aegis-dex/issues"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:lib": "vite build --mode lib",
+    "build:all": "npm run build && npm run build:lib",
     "preview": "vite preview",
     "test": "vitest",
     "lint": "eslint .",
@@ -18,9 +46,10 @@
     "lodash": "^4.18.1",
     "lodash.combinations": "^18.11.1",
     "lscache": "^1.3.2",
-    "pokedex-promise-v2": "^4.2.3",
-    "sass": "^1.99.0",
-    "vue": "^3.5.34"
+    "pokedex-promise-v2": "^4.2.3"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -31,10 +60,13 @@
     "eslint-plugin-vue": "^10.9.1",
     "globals": "^17.6.0",
     "push-dir": "^0.4.1",
+    "sass": "^1.99.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.3",
     "vite": "^8.0.12",
+    "vite-plugin-dts": "^5.0.0",
     "vitest": "^4.1.6",
+    "vue": "^3.5.34",
     "vue-tsc": "^3.2.9"
   }
 }

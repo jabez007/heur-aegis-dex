@@ -1,88 +1,93 @@
 @use 'variables' as *;
 @import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=VT323&display=swap');
 
-:root {
-  --bg-color: #{$bg-color};
+.heur-aegis-dex {
+  --gba-bg-color: #{$bg-color};
   --gba-screen-bg: #{$gba-screen-bg};
   --gba-screen-border: #{$gba-screen-border};
   --gba-screen-shadow: #{$gba-screen-shadow};
   
-  --accent-magenta: #{$accent-magenta};
-  --accent-yellow: #{$accent-yellow};
-  --accent-cyan: #{$accent-cyan};
-  --text-light: #{$text-light};
-  --text-dark: #{$text-dark};
+  --gba-accent-magenta: #{$accent-magenta};
+  --gba-accent-yellow: #{$accent-yellow};
+  --gba-accent-cyan: #{$accent-cyan};
+  --gba-accent-blue: #{$accent-blue};
+  --gba-text-light: #{$text-light};
+  --gba-text-dark: #{$text-dark};
+  --gba-text-white: #ffffff;
+  --gba-shadow-dark: rgba(0, 0, 0, 0.8);
   
-  --font-heading: #{$font-heading};
-  --font-body: #{$font-body};
-}
+  --gba-font-heading: #{$font-heading};
+  --gba-font-body: #{$font-body};
 
-body {
-  margin: 0;
-  padding: 0;
-  background-color: $bg-color;
-  color: $text-light;
-  font-family: $font-body;
+  // Move body styles to wrapper
+  background-color: var(--gba-bg-color);
+  color: var(--gba-text-light);
+  font-family: var(--gba-font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: $font-heading;
-  text-transform: uppercase;
-  margin: 0 0 $spacing-md 0;
-  letter-spacing: 1px;
-}
-
-// Retro Container Style
-.gba-container {
-  background-color: $gba-screen-bg;
-  color: $text-dark;
-  border: $border-thick;
-  box-shadow: $shadow-thick;
-  padding: $spacing-lg;
-  margin: $spacing-md;
-  position: relative;
-  
-  // Inner border effect
-  &::before {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    right: 2px;
-    bottom: 2px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    pointer-events: none;
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--gba-font-heading);
+    text-transform: uppercase;
+    margin: 0 0 $spacing-md 0;
+    letter-spacing: 1px;
+    color: var(--gba-text-light); // Ensure headings don't inherit host colors
   }
-}
 
-// Retro Button
-.gba-btn {
-  font-family: $font-heading;
-  background-color: $text-light;
-  color: $text-dark;
-  border: 2px solid $text-dark;
-  box-shadow: 2px 2px 0px $text-dark;
-  padding: $spacing-sm $spacing-md;
-  font-size: 1.2rem;
-  cursor: pointer;
-  text-transform: uppercase;
-  transition: transform 0.1s, box-shadow 0.1s;
-  
-  &:active {
-    transform: translate(2px, 2px);
-    box-shadow: 0px 0px 0px $text-dark;
-  }
-  
-  &.active {
-    background-color: $accent-yellow;
-  }
-}
+  // Retro Container Style
+  .gba-container {
+    background-color: var(--gba-screen-bg);
+    color: var(--gba-text-dark);
+    border: $border-thick;
+    box-shadow: $shadow-thick;
+    padding: $spacing-lg;
+    margin: $spacing-md;
+    position: relative;
+    
+    // Inner border effect
+    &::before {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      right: 2px;
+      bottom: 2px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      pointer-events: none;
+    }
 
-// Pokemon Type Colors
-@each $type, $color in $type-colors {
-  .bg-#{$type} {
-    background-color: $color !important;
+    h1, h2, h3, h4, h5, h6 {
+      color: var(--gba-text-dark);
+    }
+  }
+
+  // Retro Button
+  .gba-btn {
+    font-family: var(--gba-font-heading);
+    background-color: var(--gba-text-light);
+    color: var(--gba-text-dark);
+    border: 2px solid var(--gba-text-dark);
+    box-shadow: 2px 2px 0px var(--gba-text-dark);
+    padding: $spacing-sm $spacing-md;
+    font-size: 1.2rem;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: transform 0.1s, box-shadow 0.1s;
+    
+    &:active {
+      transform: translate(2px, 2px);
+      box-shadow: 0px 0px 0px var(--gba-text-dark);
+    }
+    
+    &.active {
+      background-color: var(--gba-accent-yellow);
+    }
+  }
+
+  // Pokemon Type Colors
+  @each $type, $color in $type-colors {
+    .bg-#{$type} {
+      background-color: $color !important;
+    }
   }
 }

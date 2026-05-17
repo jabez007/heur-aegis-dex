@@ -85,7 +85,7 @@ const {
   padding: 4px 8px;
   
   &.active {
-    background-color: var(--accent-yellow);
+    background-color: var(--gba-accent-yellow);
   }
 }
 
@@ -96,11 +96,11 @@ const {
   gap: 16px;
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 2px dashed var(--text-dark);
+  border-top: 2px dashed var(--gba-text-dark);
 }
 
 .gba-checkbox {
-  font-family: var(--font-heading);
+  font-family: var(--gba-font-heading);
   font-size: 1.2rem;
   display: flex;
   align-items: center;
@@ -111,13 +111,13 @@ const {
     width: 18px;
     height: 18px;
     cursor: pointer;
-    accent-color: var(--accent-magenta);
+    accent-color: var(--gba-accent-magenta);
   }
 }
 
 .action-btn {
-  background-color: var(--accent-magenta);
-  color: var(--text-light);
-  border-color: var(--text-dark);
+  background-color: var(--gba-accent-magenta);
+  color: var(--gba-text-light);
+  border-color: var(--gba-text-dark);
 }
 </style>
