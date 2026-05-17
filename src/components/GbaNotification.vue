@@ -44,8 +44,8 @@ const { notifications, remove } = useNotifications();
 
 .gba-message-box {
   pointer-events: auto;
-  background-color: var(--text-light);
-  border: 4px solid var(--text-dark);
+  background-color: var(--gba-text-light);
+  border: 4px solid var(--gba-text-dark);
   box-shadow: 6px 6px 0px rgba(0,0,0,0.3);
   padding: 16px 24px;
   position: relative;
@@ -55,7 +55,7 @@ const { notifications, remove } = useNotifications();
   display: block;
   
   &:focus-visible {
-    outline: 4px solid var(--accent-blue);
+    outline: 4px solid var(--gba-accent-blue);
     outline-offset: 4px;
   }
   
@@ -64,13 +64,13 @@ const { notifications, remove } = useNotifications();
     content: '';
     position: absolute;
     top: 2px; left: 2px; right: 2px; bottom: 2px;
-    border: 2px solid var(--text-dark);
+    border: 2px solid var(--gba-text-dark);
     pointer-events: none;
   }
 
   &.error {
     background-color: #ffdce0;
-    .status-prefix { color: var(--accent-magenta); }
+    .status-prefix { color: var(--gba-accent-magenta); }
   }
   
   &.success {
@@ -79,9 +79,9 @@ const { notifications, remove } = useNotifications();
 }
 
 .msg-content {
-  font-family: var(--font-body);
+  font-family: var(--gba-font-body);
   font-size: 1.2rem;
-  color: var(--text-dark);
+  color: var(--gba-text-dark);
   margin: 0;
   line-height: 1.4;
   
@@ -96,7 +96,7 @@ const { notifications, remove } = useNotifications();
   height: 0;
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
-  border-top: 8px solid var(--text-dark);
+  border-top: 8px solid var(--gba-text-dark);
   animation: bounce 0.6s infinite alternate;
 }
 

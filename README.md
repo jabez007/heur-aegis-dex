@@ -66,6 +66,14 @@ import { PokemonCard } from '@jabez007/heur-aegis-dex'
 import '@jabez007/heur-aegis-dex/style.css'
 ```
 
+> **Note on Styling:** To prevent the GBA aesthetic from leaking into your host application, all library styles are namespaced under the `.heur-aegis-dex` class. If you use `HeurAegisDexMain`, this is handled automatically. If you use individual components, you should wrap them in a container with this class:
+> 
+> ```html
+> <div class="heur-aegis-dex">
+>   <PokemonCard :pokemon="..." />
+> </div>
+> ```
+
 ## 🚀 Development
 
 ```bash

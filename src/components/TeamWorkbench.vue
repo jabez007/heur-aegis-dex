@@ -217,7 +217,7 @@ const {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 2px solid var(--text-dark);
+    border-bottom: 2px solid var(--gba-text-dark);
     padding-bottom: 8px;
     margin-bottom: 16px;
     
@@ -254,7 +254,7 @@ const {
 }
 
 .party-slot {
-  border: 2px solid var(--text-dark);
+  border: 2px solid var(--gba-text-dark);
   background: rgba(255,255,255,0.2);
   min-height: 80px;
   display: flex;
@@ -289,7 +289,7 @@ const {
 }
 
 .slot-name {
-  font-family: var(--font-heading);
+  font-family: var(--gba-font-heading);
   font-size: 1.1rem;
   text-transform: capitalize;
   margin: 0;
@@ -304,9 +304,9 @@ const {
   position: absolute;
   top: -10px;
   right: -10px;
-  background: var(--accent-magenta);
+  background: var(--gba-accent-magenta);
   color: white;
-  border: 2px solid var(--text-dark);
+  border: 2px solid var(--gba-text-dark);
   border-radius: 50%;
   width: 24px;
   height: 24px;
@@ -322,7 +322,7 @@ const {
 }
 
 .empty-text {
-  font-family: var(--font-heading);
+  font-family: var(--gba-font-heading);
   opacity: 0.5;
   margin: 0;
 }
@@ -330,7 +330,7 @@ const {
 .team-analysis {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 2px dashed var(--text-dark);
+  border-top: 2px dashed var(--gba-text-dark);
 }
 
 .analysis-grid {
@@ -340,10 +340,10 @@ const {
 }
 
 .analysis-label {
-  font-family: var(--font-heading);
+  font-family: var(--gba-font-heading);
   font-weight: bold;
   margin-bottom: 8px;
-  border-bottom: 1px solid var(--text-dark);
+  border-bottom: 1px solid var(--gba-text-dark);
 }
 
 .type-badge-list {
@@ -365,8 +365,8 @@ const {
 }
 
 .action-btn {
-  background-color: var(--accent-magenta);
-  color: var(--text-light);
-  border-color: var(--text-dark);
+  background-color: var(--gba-accent-magenta);
+  color: var(--gba-text-light);
+  border-color: var(--gba-text-dark);
 }
 </style>

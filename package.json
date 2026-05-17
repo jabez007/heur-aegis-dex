@@ -1,6 +1,6 @@
 {
   "name": "@jabez007/heur-aegis-dex",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "lib/heur-aegis-dex.umd.js",
   "module": "lib/heur-aegis-dex.es.js",
