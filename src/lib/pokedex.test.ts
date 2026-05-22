@@ -313,6 +313,90 @@ describe('pokedex.js - generateTeams', () => {
     expect(teams[0].uniqueCoverages).toBe(7);
   });
 
+  it('should penalize shared quadruple weaknesses in team ranking', () => {
+    const severityTypes = [
+      {
+        name: 'bug/steel',
+        damage_from_score: 12,
+        damage_to_score: 19,
+        weaknesses: ['fire', 'rock'],
+        quadruple_weaknesses: ['fire'],
+        resistances: ['grass', 'ice', 'fairy'],
+        coverages: ['grass', 'psychic'],
+        ineffectives: [],
+        pokemon: [{
+          pokemon: { name: 'forretress' },
+          sprite: 'forretress.png',
+          stats: { hp: 75, attack: 140, defense: 180, 'special-attack': 40, 'special-defense': 120, speed: 40 }
+        }]
+      },
+      {
+        name: 'grass/ice',
+        damage_from_score: 13,
+        damage_to_score: 18,
+        weaknesses: ['fire', 'steel', 'flying'],
+        quadruple_weaknesses: ['fire'],
+        resistances: ['water', 'grass', 'ground'],
+        coverages: ['water', 'ground'],
+        ineffectives: [],
+        pokemon: [{
+          pokemon: { name: 'abomasnow' },
+          sprite: 'abomasnow.png',
+          stats: { hp: 90, attack: 132, defense: 120, 'special-attack': 132, 'special-defense': 120, speed: 60 }
+        }]
+      },
+      {
+        name: 'water/dragon',
+        damage_from_score: 16,
+        damage_to_score: 17,
+        weaknesses: ['dragon', 'fairy'],
+        quadruple_weaknesses: [],
+        resistances: ['fire', 'water', 'steel'],
+        coverages: ['fire', 'rock', 'ground'],
+        ineffectives: [],
+        pokemon: [{
+          pokemon: { name: 'kingdra' },
+          sprite: 'kingdra.png',
+          stats: { hp: 75, attack: 95, defense: 95, 'special-attack': 95, 'special-defense': 95, speed: 85 }
+        }]
+      },
+      {
+        name: 'electric/steel',
+        damage_from_score: 15,
+        damage_to_score: 17,
+        weaknesses: ['ground', 'fighting'],
+        quadruple_weaknesses: [],
+        resistances: ['electric', 'flying', 'fairy'],
+        coverages: ['water', 'flying', 'ice'],
+        ineffectives: [],
+        pokemon: [{
+          pokemon: { name: 'magnezone' },
+          sprite: 'magnezone.png',
+          stats: { hp: 70, attack: 70, defense: 115, 'special-attack': 130, 'special-defense': 90, speed: 60 }
+        }]
+      }
+    ];
+
+    const teams = generateTeams({
+      allowedTypes: severityTypes as any,
+      teamSize: 2,
+      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
+    });
+
+    const sharedQuadTeam = teams.find((team: any) =>
+      team.types.includes('bug/steel') && team.types.includes('grass/ice')
+    );
+    const safeTeam = teams.find((team: any) =>
+      team.types.includes('water/dragon') && team.types.includes('electric/steel')
+    );
+
+    expect(sharedQuadTeam).toBeDefined();
+    expect(sharedQuadTeam.sharedQuadrupleWeaknesses).toEqual(['fire']);
+    expect(safeTeam).toBeDefined();
+    expect(safeTeam.sharedQuadrupleWeaknesses).toEqual([]);
+    expect(sharedQuadTeam.score).toBeLessThan(safeTeam.score);
+  });
+
   it('should handle missing normalized scores without producing NaN', () => {
     const typesWithMissingScores = [
       {

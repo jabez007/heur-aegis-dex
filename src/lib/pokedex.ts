@@ -383,10 +383,23 @@ export function generateTeams(options: any = {}): any[] {
                 return acc;
             }, {});
 
+            const quadrupleWeaknessCounts = tm.reduce((acc: Record<string, number>, t: any) => {
+                (t.quadruple_weaknesses || []).forEach((weakness: string) => {
+                    acc[weakness] = (acc[weakness] || 0) + 1;
+                });
+                return acc;
+            }, {});
+
             const uncoveredWeaknesses = Object.entries(weaknessCounts)
                 .filter(([weakness]) => !resistanceCounts[weakness] && !coverageCounts[weakness])
                 .map(([weakness]) => weakness);
+            const uncoveredQuadrupleWeaknesses = Object.entries(quadrupleWeaknessCounts)
+                .filter(([weakness]) => !resistanceCounts[weakness] && !coverageCounts[weakness])
+                .map(([weakness]) => weakness);
             const sharedWeaknesses = Object.entries(weaknessCounts)
+                .filter(([, count]) => count > 1)
+                .map(([weakness]) => weakness);
+            const sharedQuadrupleWeaknesses = Object.entries(quadrupleWeaknessCounts)
                 .filter(([, count]) => count > 1)
                 .map(([weakness]) => weakness);
             const uniqueResistances = Object.keys(resistanceCounts).length;
@@ -409,14 +422,19 @@ export function generateTeams(options: any = {}): any[] {
                 (uniqueResistances * 12) +
                 (typesTotal * 10) -
                 (uncoveredWeaknesses.length * 30) -
-                sharedWeaknesses.reduce((total, weakness) => total + ((weaknessCounts[weakness] - 1) * 18), 0);
+                (uncoveredQuadrupleWeaknesses.length * 90) -
+                sharedWeaknesses.reduce((total, weakness) => total + ((weaknessCounts[weakness] - 1) * 18), 0) -
+                Object.values(quadrupleWeaknessCounts).reduce((total, count) => total + (count * 80), 0) -
+                sharedQuadrupleWeaknesses.reduce((total, weakness) => total + ((quadrupleWeaknessCounts[weakness] - 1) * 220), 0);
 
             return {
                 types: tm.map((t: any) => t.name),
                 typesTotal,
                 pokemon,
                 uncoveredWeaknesses,
+                uncoveredQuadrupleWeaknesses,
                 sharedWeaknesses,
+                sharedQuadrupleWeaknesses,
                 uniqueResistances,
                 uniqueCoverages,
                 score: pokemonScore + teamSynergyScore
