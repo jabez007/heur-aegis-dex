@@ -262,7 +262,6 @@ export async function getResistantTypes(options: any = {}): Promise<any[]> {
                 pokemon: await processPokemon(t)
             }))
     ))
-        .filter((t: any) => t.coverages.length >= t.weaknesses.length)
         .sort((t1: any, t2: any) => {
             const t1Quotient = (t1.damage_from_score / t1.damage_to_score);
             const t2Quotient = (t2.damage_from_score / t2.damage_to_score);

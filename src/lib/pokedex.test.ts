@@ -161,20 +161,18 @@ describe('pokedex.js API integration logic', () => {
       statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
     });
 
-    // We should get Fire and Water types back if they pass the coverage filters
-    // Note: getResistantTypes filters by `t.coverages.length >= t.weaknesses.length`.
-    // Fire: weaknesses: 3. coverages: 2. (2 >= 3) is FALSE. Fire is filtered out!
-    // Water: weaknesses: 2. coverages: 3. (3 >= 2) is TRUE. Water is kept!
-    // Fire/Water: weaknesses calculation will determine if kept.
-    
     expect(Array.isArray(resistant)).toBe(true);
-    
+
+    const fireType = resistant.find(t => t.name === 'fire');
+    expect(fireType).toBeDefined();
+    expect(fireType!.pokemon).toHaveLength(1);
+    expect(fireType!.pokemon[0].pokemon.name).toBe('charmander');
+
     const waterType = resistant.find(t => t.name === 'water');
-    if (waterType) {
-        expect(waterType.pokemon).toHaveLength(1);
-        expect(waterType.pokemon![0].pokemon.name).toBe('squirtle');
-        expect(waterType.pokemon![0].stats_total).toBe(44 + 48 + 65 + 50 + 64 + 43); // 314
-    }
+    expect(waterType).toBeDefined();
+    expect(waterType!.pokemon).toHaveLength(1);
+    expect(waterType!.pokemon[0].pokemon.name).toBe('squirtle');
+    expect(waterType!.pokemon[0].stats_total).toBe(44 + 48 + 65 + 50 + 64 + 43); // 314
   });
 });
 
