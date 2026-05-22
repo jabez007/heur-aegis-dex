@@ -47,6 +47,15 @@
           </div>
 
           <div class="stat-controls">
+            <label class="gba-label checkbox-label">
+              <input
+                v-model="includeAbilityImmunities"
+                type="checkbox"
+                class="gba-checkbox"
+                @change="fetchTypes"
+              >
+              Include Ability Immunities
+            </label>
             <label class="gba-label">
               Min Total Stats:
               <input
@@ -127,6 +136,7 @@ const inPokedex = ref('national');
 const minStatsTotal = ref(480);
 const minAttacks = ref(80);
 const minDefenses = ref(80);
+const includeAbilityImmunities = ref(true);
 
 const fetchTypes = () => {
   loading.value = true;
@@ -143,10 +153,11 @@ const fetchTypes = () => {
   };
   const pokedexFilter = {
     inPokedex: inPokedex.value,
-    allowMegas: false
+    allowMegas: false,
+    includeAbilityImmunities: includeAbilityImmunities.value
   };
 
-  const key = `heur_aegis_dex_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}`;
+  const key = `heur_aegis_dex_v3_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${includeAbilityImmunities.value}`;
 
   const cached = lscache.get(key);
   if (cached) {
@@ -224,6 +235,22 @@ onMounted(() => {
 .stat-controls .gba-input {
   width: 100%;
   box-sizing: border-box;
+}
+
+.stat-controls .checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  justify-self: start;
+  align-self: center;
+  grid-column: 1 / -1;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.gba-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--gba-accent-cyan);
 }
 
 @media (max-width: 600px) {

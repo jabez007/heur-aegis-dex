@@ -38,6 +38,7 @@ export interface PokemonTypeData {
     damage_relations: DamageRelations;
     pokemon?: any[];
     weaknesses?: string[];
+    quadruple_weaknesses?: string[];
     resistances?: string[];
     ineffectives?: string[];
     coverages?: string[];
@@ -66,6 +67,116 @@ const calculateDamageToScore = (dr: DamageRelations, baseScore: number): number 
 
 const filterUniqueBy = (arr: NamedResource[]): NamedResource[] => {
     return arr.filter(function(this: Set<string>, {name}: NamedResource) { return !this.has(name) && this.add(name) }, new Set<string>());
+}
+
+const ABILITY_IMMUNITIES: Record<string, string> = {
+    'dry-skin': 'water',
+    'earth-eater': 'ground',
+    'flash-fire': 'fire',
+    'levitate': 'ground',
+    'lightning-rod': 'electric',
+    'motor-drive': 'electric',
+    'sap-sipper': 'grass',
+    'storm-drain': 'water',
+    'volt-absorb': 'electric',
+    'water-absorb': 'water',
+    'well-baked-body': 'fire'
+};
+
+const removeType = (arr: NamedResource[] | undefined, typeName: string): NamedResource[] =>
+    (arr || []).filter(resource => resource.name !== typeName);
+
+const cloneDamageRelations = (dr: DamageRelations): DamageRelations => ({
+    double_damage_from: [...dr.double_damage_from],
+    half_damage_from: [...dr.half_damage_from],
+    no_damage_from: [...dr.no_damage_from],
+    double_damage_to: [...dr.double_damage_to],
+    half_damage_to: [...dr.half_damage_to],
+    no_damage_to: [...dr.no_damage_to],
+    quadruple_damage_from: [...(dr.quadruple_damage_from || [])],
+    quarter_damage_from: [...(dr.quarter_damage_from || [])],
+    damage_from_score: dr.damage_from_score,
+    damage_to_score: dr.damage_to_score
+});
+
+const createTypeSummary = (dr: DamageRelations) => ({
+    weaknesses: ((dr.quadruple_damage_from || []).concat(dr.double_damage_from)).map(w => w.name),
+    quadruple_weaknesses: (dr.quadruple_damage_from || []).map(w => w.name),
+    resistances: dr.no_damage_from
+        .concat(dr.quarter_damage_from || [])
+        .concat(dr.half_damage_from)
+        .map(r => r.name),
+    ineffectives: dr.no_damage_to
+        .concat(dr.half_damage_to)
+        .map(i => i.name),
+    coverages: dr.double_damage_to.map(c => c.name),
+    damage_from_score: dr.damage_from_score,
+    damage_to_score: dr.damage_to_score
+});
+
+const pickBetterDamageRelations = (current: DamageRelations | null, candidate: DamageRelations): DamageRelations => {
+    if (!current) return candidate;
+
+    const currentScore = current.damage_from_score ?? Number.POSITIVE_INFINITY;
+    const candidateScore = candidate.damage_from_score ?? Number.POSITIVE_INFINITY;
+
+    if (candidateScore !== currentScore) {
+        return candidateScore < currentScore ? candidate : current;
+    }
+
+    const currentWeaknesses = ((current.quadruple_damage_from || []).length * 2) + current.double_damage_from.length;
+    const candidateWeaknesses = ((candidate.quadruple_damage_from || []).length * 2) + candidate.double_damage_from.length;
+    if (candidateWeaknesses !== currentWeaknesses) {
+        return candidateWeaknesses < currentWeaknesses ? candidate : current;
+    }
+
+    const currentResistances = current.no_damage_from.length + (current.quarter_damage_from || []).length + current.half_damage_from.length;
+    const candidateResistances = candidate.no_damage_from.length + (candidate.quarter_damage_from || []).length + candidate.half_damage_from.length;
+    return candidateResistances > currentResistances ? candidate : current;
+};
+
+const applyAbilityModifier = (dr: DamageRelations, abilityName: string, baseScore: number): DamageRelations => {
+    const immunityType = ABILITY_IMMUNITIES[abilityName];
+    const nextDamageRelations = cloneDamageRelations(dr);
+
+    if (immunityType) {
+        nextDamageRelations.double_damage_from = removeType(nextDamageRelations.double_damage_from, immunityType);
+        nextDamageRelations.quadruple_damage_from = removeType(nextDamageRelations.quadruple_damage_from, immunityType);
+        nextDamageRelations.half_damage_from = removeType(nextDamageRelations.half_damage_from, immunityType);
+        nextDamageRelations.quarter_damage_from = removeType(nextDamageRelations.quarter_damage_from, immunityType);
+
+        if (!nextDamageRelations.no_damage_from.some(resource => resource.name === immunityType)) {
+            nextDamageRelations.no_damage_from = nextDamageRelations.no_damage_from.concat({ name: immunityType });
+        }
+    }
+
+    nextDamageRelations.damage_from_score = calculateDamageFromScore(nextDamageRelations, baseScore);
+    nextDamageRelations.damage_to_score = calculateDamageToScore(nextDamageRelations, baseScore);
+    return nextDamageRelations;
+};
+
+const createAbilityProfile = (dr: DamageRelations, abilityName: string, baseScore: number) => {
+    const damageRelations = applyAbilityModifier(dr, abilityName, baseScore);
+    return {
+        ability_name: abilityName,
+        damage_relations: damageRelations,
+        ...createTypeSummary(damageRelations)
+    };
+};
+
+const applyAbilityModifiers = (dr: DamageRelations, abilityNames: string[], baseScore: number) => {
+    const candidateAbilities = abilityNames.length > 0 ? abilityNames : [''];
+    const abilityProfiles = candidateAbilities.map((abilityName) => createAbilityProfile(dr, abilityName, baseScore));
+
+    const bestProfile = abilityProfiles.reduce((best: any, profile: any) => {
+        if (!best) return profile;
+        return pickBetterDamageRelations(best.damage_relations, profile.damage_relations) === profile.damage_relations ? profile : best;
+    }, null);
+
+    return {
+        abilityProfiles,
+        bestProfile: bestProfile || createAbilityProfile(dr, '', baseScore)
+    };
 }
 
 // --- Main Exports ---
@@ -157,12 +268,12 @@ export async function getResistantTypes(options: any = {}): Promise<any[]> {
     const {
         baseScore = BASESCORE,
         typeFilters = { maxDamageFromScore: true, allowQuadrupleDamage: true, limitQuadrupleDamage: true },
-        pokemonFilters = { inPokedex: 'national', allowMegas: false },
+        pokemonFilters = { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
         statsFilters = { minimumStatsTotal: 500, minimumAttacks: 90, minimumDefenses: 80 }
     } = options;
 
     const _typeFilters = { maxDamageFromScore: true, allowQuadrupleDamage: true, limitQuadrupleDamage: true, ...typeFilters }
-    const _pokemonFilters = { inPokedex: 'national', allowMegas: false, ...pokemonFilters }
+    const _pokemonFilters = { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, ...pokemonFilters }
     const _statsFilters = { minimumStatsTotal: 480, minimumAttacks: 80, minimumDefenses: 80, ...statsFilters }
 
     const pokedexMaps: Record<string, string[]> = {
@@ -202,6 +313,10 @@ export async function getResistantTypes(options: any = {}): Promise<any[]> {
                 
                 p.types = poke.types;
                 p.sprite = poke.sprites.front_default;
+                p.abilities = poke.abilities.map((abilityEntry: any) => ({
+                    name: abilityEntry.ability.name,
+                    is_hidden: abilityEntry.is_hidden
+                }));
                 p.stats = poke.stats.reduce((merged: any, curr: any) => {
                     merged[curr.stat.name] = curr.base_stat;
                     return merged;
@@ -212,6 +327,30 @@ export async function getResistantTypes(options: any = {}): Promise<any[]> {
                 
                 p.stats_total = poke.stats.reduce((total: number, curr: any) => total + curr.base_stat, 0);
                 if (p.stats_total < _statsFilters.minimumStatsTotal) return null;
+
+                const baseDamageRelations = cloneDamageRelations(t.damage_relations);
+                const abilityNames = p.abilities.map((ability: any) => ability.name);
+                const { abilityProfiles, bestProfile } = _pokemonFilters.includeAbilityImmunities
+                    ? applyAbilityModifiers(baseDamageRelations, abilityNames, baseScore)
+                    : {
+                        abilityProfiles: abilityNames.length > 0
+                            ? abilityNames.map((abilityName: string) => createAbilityProfile(baseDamageRelations, abilityName, baseScore))
+                            : [createAbilityProfile(baseDamageRelations, '', baseScore)],
+                        bestProfile: abilityNames.length > 0
+                            ? createAbilityProfile(baseDamageRelations, abilityNames[0], baseScore)
+                            : createAbilityProfile(baseDamageRelations, '', baseScore)
+                    };
+
+                p.ability_profiles = Object.fromEntries(abilityProfiles.map((profile: any) => [profile.ability_name, profile]));
+                p.selected_ability_name = bestProfile.ability_name;
+                p.effective_damage_relations = bestProfile.damage_relations;
+                p.effective_weaknesses = bestProfile.weaknesses;
+                p.effective_quadruple_weaknesses = bestProfile.quadruple_weaknesses;
+                p.effective_resistances = bestProfile.resistances;
+                p.effective_ineffectives = bestProfile.ineffectives;
+                p.effective_coverages = bestProfile.coverages;
+                p.effective_damage_from_score = bestProfile.damage_from_score;
+                p.effective_damage_to_score = bestProfile.damage_to_score;
                 
                 return p;
             })
@@ -243,24 +382,18 @@ export async function getResistantTypes(options: any = {}): Promise<any[]> {
                 
                 return meetsScoreFilter && meetsQuadFilter;
             })
-            .map(async (t: PokemonTypeData) => ({
-                name: t.name,
-                weaknesses: (t.damage_relations.quadruple_damage_from || [])
-                    .concat(t.damage_relations.double_damage_from)
-                    .map(w => w.name),
-                quadruple_weaknesses: (t.damage_relations.quadruple_damage_from || []).map(w => w.name),
-                resistances: t.damage_relations.no_damage_from
-                    .concat(t.damage_relations.quarter_damage_from || [])
-                    .concat(t.damage_relations.half_damage_from)
-                    .map(r => r.name),
-                damage_from_score: t.damage_relations.damage_from_score,
-                ineffectives: t.damage_relations.no_damage_to
-                    .concat(t.damage_relations.half_damage_to)
-                    .map(i => i.name),
-                coverages: t.damage_relations.double_damage_to.map(c => c.name),
-                damage_to_score: t.damage_relations.damage_to_score,
-                pokemon: await processPokemon(t)
-            }))
+            .map(async (t: PokemonTypeData) => {
+                const pokemon = await processPokemon(t);
+                const summarySource = pokemon[0]?.effective_damage_relations || t.damage_relations;
+                const summary = createTypeSummary(summarySource);
+
+                return {
+                    name: t.name,
+                    include_ability_immunities: _pokemonFilters.includeAbilityImmunities,
+                    ...summary,
+                    pokemon
+                };
+            })
     ))
         .sort((t1: any, t2: any) => {
             const t1Quotient = (t1.damage_from_score / t1.damage_to_score);
@@ -298,23 +431,76 @@ export function generateTeams(options: any = {}): any[] {
     const maxDamageFromScore = Math.max(...(damageScores.from.filter((s: any) => s !== undefined) || [1]))
     const minDamageFromScore = Math.min(...(damageScores.from.filter((s: any) => s !== undefined) || [0]))
 
+    const normalizeDamageFromScore = (score: number | undefined): number =>
+        (score === undefined || maxDamageFromScore === minDamageFromScore) ? 0.5 :
+            (score - minDamageFromScore) / (maxDamageFromScore - minDamageFromScore);
+    const normalizeDamageToScore = (score: number | undefined): number =>
+        (score === undefined || maxDamageToScore === minDamageToScore) ? 0.5 :
+            (score - minDamageToScore) / (maxDamageToScore - minDamageToScore);
+
     const normalizedTypes = validAllowedTypes.map((t: any) => ({
         ...t,
-        normalized_damage_from_score: (t.damage_from_score === undefined || maxDamageFromScore === minDamageFromScore) ? 0.5 :
-            (t.damage_from_score - minDamageFromScore) / (maxDamageFromScore - minDamageFromScore),
-        normalized_damage_to_score: (t.damage_to_score === undefined || maxDamageToScore === minDamageToScore) ? 0.5 :
-            (t.damage_to_score - minDamageToScore) / (maxDamageToScore - minDamageToScore)
+        normalized_damage_from_score: normalizeDamageFromScore(t.damage_from_score),
+        normalized_damage_to_score: normalizeDamageToScore(t.damage_to_score)
     }));
 
+    function getPokemonAbilityProfile(pokemon: any, abilityName?: string): any {
+        if (!pokemon) return null;
+        const selectedAbilityName = abilityName || pokemon.selected_ability_name;
+        if (selectedAbilityName && pokemon.ability_profiles?.[selectedAbilityName]) {
+            return pokemon.ability_profiles[selectedAbilityName];
+        }
+
+        const hasEffectiveProfile =
+            pokemon.effective_damage_from_score !== undefined ||
+            pokemon.effective_damage_to_score !== undefined ||
+            pokemon.effective_weaknesses !== undefined ||
+            pokemon.effective_resistances !== undefined;
+
+        if (!hasEffectiveProfile) {
+            return null;
+        }
+
+        return {
+            weaknesses: pokemon.effective_weaknesses || [],
+            quadruple_weaknesses: pokemon.effective_quadruple_weaknesses || [],
+            resistances: pokemon.effective_resistances || [],
+            ineffectives: pokemon.effective_ineffectives || [],
+            coverages: pokemon.effective_coverages || [],
+            damage_from_score: pokemon.effective_damage_from_score,
+            damage_to_score: pokemon.effective_damage_to_score
+        };
+    }
+
+    function getEffectiveProfile(typeData: any, selectedPokemon?: any): any {
+        const activePokemon = selectedPokemon || typeData.selectedPokemon;
+        if (!activePokemon) return typeData;
+        const abilityProfile = getPokemonAbilityProfile(activePokemon);
+
+        return {
+            ...typeData,
+            weaknesses: abilityProfile?.weaknesses || typeData.weaknesses || [],
+            quadruple_weaknesses: abilityProfile?.quadruple_weaknesses || typeData.quadruple_weaknesses || [],
+            resistances: abilityProfile?.resistances || typeData.resistances || [],
+            ineffectives: abilityProfile?.ineffectives || typeData.ineffectives || [],
+            coverages: abilityProfile?.coverages || typeData.coverages || [],
+            damage_from_score: abilityProfile?.damage_from_score ?? typeData.damage_from_score,
+            damage_to_score: abilityProfile?.damage_to_score ?? typeData.damage_to_score
+        };
+    }
+
     function isCompatible(current: any, candidate: any): boolean {
+        const currentProfile = getEffectiveProfile(current);
+        const candidateProfile = getEffectiveProfile(candidate);
+
         const passesSharedType = _teamComposition.allowSharedTypes || current.name.split("/").every((n: any) => !candidate.name.includes(n));
         const passesSharedWeakness = _teamComposition.allowSharedWeaknesses || 
-            (current.weaknesses.every((w: any) => !candidate.weaknesses.includes(w)) && current.ineffectives.every((i: any) => !candidate.ineffectives.includes(i)));
+            (currentProfile.weaknesses.every((w: any) => !candidateProfile.weaknesses.includes(w)) && currentProfile.ineffectives.every((i: any) => !candidateProfile.ineffectives.includes(i)));
         
         const passesCoverage = !_teamComposition.coverWeaknesses ||
-            current.weaknesses.some((w: any) => candidate.coverages.includes(w) || candidate.resistances.includes(w)) ||
-            candidate.coverages.some((c: any) => current.weaknesses.includes(c)) ||
-            candidate.resistances.some((r: any) => current.weaknesses.includes(r));
+            currentProfile.weaknesses.some((w: any) => candidateProfile.coverages.includes(w) || candidateProfile.resistances.includes(w)) ||
+            candidateProfile.coverages.some((c: any) => currentProfile.weaknesses.includes(c)) ||
+            candidateProfile.resistances.some((r: any) => currentProfile.weaknesses.includes(r));
 
         return passesSharedType && passesSharedWeakness && passesCoverage;
     }
@@ -330,41 +516,53 @@ export function generateTeams(options: any = {}): any[] {
         const cached = teamResultCache.get(cacheKey);
         if (cached) return cached;
 
-        const pokemon = tm.map((t: any) => {
+        const teamProfiles = tm.map((t: any) => {
             const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
-            return poke ? {
-                types: t.name.split("/"),
-                name: poke.pokemon.name,
-                sprite: poke.sprite,
-                stats: poke.stats,
-                normalized_damage_to_score: t.normalized_damage_to_score ?? 0,
-                normalized_damage_from_score: t.normalized_damage_from_score ?? 0
-            } : null;
-        }).filter((p: any) => p !== null);
+            const abilityProfile = getPokemonAbilityProfile(poke);
+            return {
+                pokemon: poke ? {
+                    types: t.name.split("/"),
+                    name: poke.pokemon.name,
+                    sprite: poke.sprite,
+                    stats: poke.stats,
+                    selected_ability_name: poke.selected_ability_name,
+                    effective_weaknesses: abilityProfile?.weaknesses || t.weaknesses || [],
+                    effective_quadruple_weaknesses: abilityProfile?.quadruple_weaknesses || t.quadruple_weaknesses || [],
+                    effective_resistances: abilityProfile?.resistances || t.resistances || [],
+                    effective_ineffectives: abilityProfile?.ineffectives || t.ineffectives || [],
+                    effective_coverages: abilityProfile?.coverages || t.coverages || [],
+                    normalized_damage_to_score: normalizeDamageToScore(abilityProfile?.damage_to_score ?? t.damage_to_score),
+                    normalized_damage_from_score: normalizeDamageFromScore(abilityProfile?.damage_from_score ?? t.damage_from_score)
+                } : null,
+                profile: getEffectiveProfile(t, poke)
+            };
+        });
 
-        const weaknessCounts = tm.reduce((acc: Record<string, number>, t: any) => {
-            (t.weaknesses || []).forEach((weakness: string) => {
+        const pokemon = teamProfiles.map(entry => entry.pokemon).filter((p: any) => p !== null);
+
+        const weaknessCounts = teamProfiles.reduce((acc: Record<string, number>, entry: any) => {
+            (entry.profile.weaknesses || []).forEach((weakness: string) => {
                 acc[weakness] = (acc[weakness] || 0) + 1;
             });
             return acc;
         }, {});
 
-        const resistanceCounts = tm.reduce((acc: Record<string, number>, t: any) => {
-            (t.resistances || []).forEach((resistance: string) => {
+        const resistanceCounts = teamProfiles.reduce((acc: Record<string, number>, entry: any) => {
+            (entry.profile.resistances || []).forEach((resistance: string) => {
                 acc[resistance] = (acc[resistance] || 0) + 1;
             });
             return acc;
         }, {});
 
-        const coverageCounts = tm.reduce((acc: Record<string, number>, t: any) => {
-            (t.coverages || []).forEach((coverage: string) => {
+        const coverageCounts = teamProfiles.reduce((acc: Record<string, number>, entry: any) => {
+            (entry.profile.coverages || []).forEach((coverage: string) => {
                 acc[coverage] = (acc[coverage] || 0) + 1;
             });
             return acc;
         }, {});
 
-        const quadrupleWeaknessCounts = tm.reduce((acc: Record<string, number>, t: any) => {
-            (t.quadruple_weaknesses || []).forEach((weakness: string) => {
+        const quadrupleWeaknessCounts = teamProfiles.reduce((acc: Record<string, number>, entry: any) => {
+            (entry.profile.quadruple_weaknesses || []).forEach((weakness: string) => {
                 acc[weakness] = (acc[weakness] || 0) + 1;
             });
             return acc;
@@ -386,11 +584,11 @@ export function generateTeams(options: any = {}): any[] {
         const uniqueCoverages = Object.keys(coverageCounts).length;
         const typesTotal = (new Set(tm.flatMap((t: any) => t.name.split("/")))).size;
 
-        const pokemonScore = tm.map((t: any) => {
-            const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
+        const pokemonScore = teamProfiles.map((entry: any) => {
+            const poke = entry.pokemon;
             if (!poke) return 0;
-            const offScore = t.normalized_damage_to_score ?? 0;
-            const defScore = t.normalized_damage_from_score ?? 0;
+            const offScore = poke.normalized_damage_to_score ?? 0;
+            const defScore = poke.normalized_damage_from_score ?? 0;
             return poke.stats.hp +
             ((poke.stats.attack + poke.stats['special-attack']) * offScore) +
             ((poke.stats.defense + poke.stats['special-defense']) / (1 + defScore)) +
@@ -426,14 +624,17 @@ export function generateTeams(options: any = {}): any[] {
 
     function typePriorityScore(t: any): number {
         const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
+        const profile = getEffectiveProfile(t, poke);
         const statsTotal = poke ? Object.values(poke.stats || {}).reduce((total: number, stat: any) => total + Number(stat || 0), 0) : 0;
-        return ((t.normalized_damage_to_score ?? 0.5) * 40) +
-            ((1 - (t.normalized_damage_from_score ?? 0.5)) * 32) +
-            ((t.coverages || []).length * 8) +
-            ((t.resistances || []).length * 5) +
+        const damageToScore = normalizeDamageToScore(poke?.effective_damage_to_score ?? t.damage_to_score);
+        const damageFromScore = normalizeDamageFromScore(poke?.effective_damage_from_score ?? t.damage_from_score);
+        return (damageToScore * 40) +
+            ((1 - damageFromScore) * 32) +
+            ((profile.coverages || []).length * 8) +
+            ((profile.resistances || []).length * 5) +
             (statsTotal * 0.08) -
-            ((t.weaknesses || []).length * 6) -
-            ((t.quadruple_weaknesses || []).length * 40);
+            ((profile.weaknesses || []).length * 6) -
+            ((profile.quadruple_weaknesses || []).length * 40);
     }
 
     // Filter normalizedTypes to only those compatible with the seed

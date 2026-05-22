@@ -7,6 +7,11 @@ const props = defineProps<{
   selectedTypesCount: number;
 }>();
 
+const emit = defineEmits<{
+  (e: 'update:selected-pokemon-index', typeName: string, nextIndex: number): void;
+  (e: 'update:selected-ability-name', typeName: string, abilityName: string): void;
+}>();
+
 const visibleCount = ref(20);
 
 watch(() => props.filteredTypes, () => {
@@ -64,6 +69,8 @@ const showMore = () => {
             v-for="t in filteredTypes.slice(0, visibleCount)" 
             :key="t.name" 
             :type-data="t"
+            @update:selected-pokemon-index="(nextIndex) => emit('update:selected-pokemon-index', t.name, nextIndex)"
+            @update:selected-ability-name="(abilityName) => emit('update:selected-ability-name', t.name, abilityName)"
           />
         </TransitionGroup>
 
@@ -118,10 +125,16 @@ const showMore = () => {
   }
 }
 
+.grid-fade-move,
 .grid-fade-enter-active,
 .grid-fade-leave-active {
-  transition: all 0.3s steps(5);
+  transition: transform 0.3s steps(5), opacity 0.3s steps(5);
 }
+
+.grid-fade-leave-active {
+  position: absolute;
+}
+
 .grid-fade-enter-from,
 .grid-fade-leave-to {
   opacity: 0;

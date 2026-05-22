@@ -9,6 +9,7 @@ export interface PartyMember {
   types: string[];
   sprite: string;
   stats: Record<string, number>;
+  abilityName?: string;
   weaknesses: string[];
   resistances: string[];
   coverages: string[];
@@ -43,7 +44,7 @@ export function useTeamBuilder() {
     return summary;
   });
 
-  const addToParty = (typeData: any, pokemonIndex: number) => {
+  const addToParty = (typeData: any, pokemonIndex: number, abilityName?: string) => {
     if (currentParty.value.length >= 3) return;
 
     // Check if the same type combo is already in the party
@@ -53,14 +54,18 @@ export function useTeamBuilder() {
     }
     
     const pokemon = typeData.pokemon[pokemonIndex];
+    if (abilityName) {
+      pokemon.selected_ability_name = abilityName;
+    }
     currentParty.value.push({
       name: pokemon.pokemon.name,
       types: pokemon.types.map((p: any) => p.type.name),
       sprite: pokemon.sprite,
       stats: pokemon.stats,
-      weaknesses: typeData.weaknesses,
-      resistances: typeData.resistances,
-      coverages: typeData.coverages,
+      abilityName: pokemon.selected_ability_name,
+      weaknesses: pokemon.effective_weaknesses || typeData.weaknesses,
+      resistances: pokemon.effective_resistances || typeData.resistances,
+      coverages: pokemon.effective_coverages || typeData.coverages,
       typeName: typeData.name
     });
     notify(`Added ${pokemon.pokemon.name.toUpperCase()} to party.`, "success");
@@ -93,9 +98,10 @@ export function useTeamBuilder() {
                 types: p.types,
                 sprite: p.sprite,
                 stats: p.stats,
-                weaknesses: typeData.weaknesses,
-                resistances: typeData.resistances,
-                coverages: typeData.coverages,
+                abilityName: p.selected_ability_name,
+                weaknesses: p.effective_weaknesses || typeData.weaknesses,
+                resistances: p.effective_resistances || typeData.resistances,
+                coverages: p.effective_coverages || typeData.coverages,
                 typeName: typeData.name
             };
         }).filter((m: any): m is PartyMember => m !== null);
@@ -125,7 +131,13 @@ export function useTeamBuilder() {
         if (!typeData) return null;
         return {
           ...typeData,
-          selectedPokemon: typeData.pokemon.find((p: any) => p.pokemon.name === member.name)
+          selectedPokemon: (() => {
+            const pokemon = typeData.pokemon.find((p: any) => p.pokemon.name === member.name);
+            if (pokemon && member.abilityName) {
+              pokemon.selected_ability_name = member.abilityName;
+            }
+            return pokemon;
+          })()
         };
       }).filter(Boolean);
 
@@ -146,9 +158,10 @@ export function useTeamBuilder() {
                 types: p.types,
                 sprite: p.sprite,
                 stats: p.stats,
-                weaknesses: typeData.weaknesses,
-                resistances: typeData.resistances,
-                coverages: typeData.coverages,
+                abilityName: p.selected_ability_name,
+                weaknesses: p.effective_weaknesses || typeData.weaknesses,
+                resistances: p.effective_resistances || typeData.resistances,
+                coverages: p.effective_coverages || typeData.coverages,
                 typeName: typeData.name
             };
         }).filter((m: any): m is PartyMember => m !== null);

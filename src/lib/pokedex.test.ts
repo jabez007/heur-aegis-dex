@@ -84,6 +84,7 @@ vi.mock('pokedex-promise-v2', () => {
             { base_stat: 50, stat: { name: 'special-defense' } },
             { base_stat: 65, stat: { name: 'speed' } }
           ],
+          abilities: [{ ability: { name: 'blaze' }, is_hidden: false }, { ability: { name: 'levitate' }, is_hidden: true }],
           species: { url: 'https://pokeapi.co/api/v2/pokemon-species/4/' }
         };
       }
@@ -107,6 +108,7 @@ vi.mock('pokedex-promise-v2', () => {
             { base_stat: 64, stat: { name: 'special-defense' } },
             { base_stat: 43, stat: { name: 'speed' } }
           ],
+          abilities: [{ ability: { name: 'torrent' }, is_hidden: false }],
           species: { url: 'https://pokeapi.co/api/v2/pokemon-species/7/' }
         };
       }
@@ -173,6 +175,77 @@ describe('pokedex.js API integration logic', () => {
     expect(waterType!.pokemon).toHaveLength(1);
     expect(waterType!.pokemon[0].pokemon.name).toBe('squirtle');
     expect(waterType!.pokemon[0].stats_total).toBe(44 + 48 + 65 + 50 + 64 + 43); // 314
+  });
+
+  it('getResistantTypes should apply ability immunities by default', async () => {
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    const fireType = resistant.find(t => t.name === 'fire');
+    expect(fireType).toBeDefined();
+    expect(fireType!.pokemon[0].selected_ability_name).toBe('levitate');
+    expect(fireType!.pokemon[0].ability_profiles.blaze.weaknesses).toContain('ground');
+    expect(fireType!.pokemon[0].ability_profiles.levitate.weaknesses).toEqual(['water', 'rock']);
+    expect(fireType!.pokemon[0].effective_weaknesses).toEqual(['water', 'rock']);
+    expect(fireType!.pokemon[0].effective_resistances).toContain('ground');
+    expect(fireType!.damage_from_score).toBe(17.5);
+  });
+
+  it('getResistantTypes should allow disabling ability immunities', async () => {
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: false },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    const fireType = resistant.find(t => t.name === 'fire');
+    expect(fireType).toBeDefined();
+    expect(fireType!.pokemon[0].selected_ability_name).toBe('blaze');
+    expect(fireType!.pokemon[0].effective_weaknesses).toContain('ground');
+    expect(fireType!.pokemon[0].effective_resistances).not.toContain('ground');
+    expect(fireType!.damage_from_score).toBe(19.5);
+  });
+
+  it('generateTeams should respect a selected pokemon ability profile', () => {
+    const abilityTypes = [{
+      name: 'fire',
+      damage_from_score: 19.5,
+      damage_to_score: 20,
+      weaknesses: ['water', 'rock', 'ground'],
+      resistances: ['fire', 'grass', 'bug'],
+      coverages: ['grass', 'bug', 'ice'],
+      ineffectives: ['water', 'fire', 'rock'],
+      pokemon: [{
+        pokemon: { name: 'charizard' },
+        sprite: 'charizard.png',
+        stats: { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 },
+        selected_ability_name: 'levitate',
+        ability_profiles: {
+          blaze: { weaknesses: ['water', 'rock', 'ground'], quadruple_weaknesses: [], resistances: ['fire', 'grass', 'bug'], ineffectives: ['water', 'fire', 'rock'], coverages: ['grass', 'bug', 'ice'], damage_from_score: 19.5, damage_to_score: 20 },
+          levitate: { weaknesses: ['water', 'rock'], quadruple_weaknesses: [], resistances: ['fire', 'grass', 'bug', 'ground'], ineffectives: ['water', 'fire', 'rock'], coverages: ['grass', 'bug', 'ice'], damage_from_score: 17.5, damage_to_score: 20 }
+        },
+        effective_weaknesses: ['water', 'rock'],
+        effective_quadruple_weaknesses: [],
+        effective_resistances: ['fire', 'grass', 'bug', 'ground'],
+        effective_ineffectives: ['water', 'fire', 'rock'],
+        effective_coverages: ['grass', 'bug', 'ice'],
+        effective_damage_from_score: 17.5,
+        effective_damage_to_score: 20
+      }]
+    }];
+
+    const teams = generateTeams({
+      allowedTypes: abilityTypes as any,
+      teamSize: 1
+    });
+
+    expect(teams[0].pokemon[0].selected_ability_name).toBe('levitate');
+    expect(teams[0].pokemon[0].effective_weaknesses).toEqual(['water', 'rock']);
   });
 });
 
