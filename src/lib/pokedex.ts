@@ -319,28 +319,127 @@ export function generateTeams(options: any = {}): any[] {
         return passesSharedType && passesSharedWeakness && passesCoverage;
     }
 
-    function teamCombinations(typs: any[], size: number, currentTeam: any[]): any[] {
-        if (size === 0) return [currentTeam];
-        if (typs.length === 0) return [];
-        
-        const first = typs[0];
-        const rest = typs.slice(1);
+    function getTeamKey(tm: any[]): string {
+        return tm.map((t: any) => t.name).sort().join("|");
+    }
 
-        // Check if 'first' is compatible with all members currently in the team
-        const canAddFirst = currentTeam.every(member => isCompatible(member, first));
+    const teamResultCache = new Map<string, any>();
 
-        let results: any[] = [];
-        if (canAddFirst) {
-            results = results.concat(teamCombinations(rest, size - 1, [...currentTeam, first]));
-        }
-        results = results.concat(teamCombinations(rest, size, currentTeam));
+    function buildTeamResult(tm: any[]): any {
+        const cacheKey = getTeamKey(tm);
+        const cached = teamResultCache.get(cacheKey);
+        if (cached) return cached;
 
-        return results;
+        const pokemon = tm.map((t: any) => {
+            const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
+            return poke ? {
+                types: t.name.split("/"),
+                name: poke.pokemon.name,
+                sprite: poke.sprite,
+                stats: poke.stats,
+                normalized_damage_to_score: t.normalized_damage_to_score ?? 0,
+                normalized_damage_from_score: t.normalized_damage_from_score ?? 0
+            } : null;
+        }).filter((p: any) => p !== null);
+
+        const weaknessCounts = tm.reduce((acc: Record<string, number>, t: any) => {
+            (t.weaknesses || []).forEach((weakness: string) => {
+                acc[weakness] = (acc[weakness] || 0) + 1;
+            });
+            return acc;
+        }, {});
+
+        const resistanceCounts = tm.reduce((acc: Record<string, number>, t: any) => {
+            (t.resistances || []).forEach((resistance: string) => {
+                acc[resistance] = (acc[resistance] || 0) + 1;
+            });
+            return acc;
+        }, {});
+
+        const coverageCounts = tm.reduce((acc: Record<string, number>, t: any) => {
+            (t.coverages || []).forEach((coverage: string) => {
+                acc[coverage] = (acc[coverage] || 0) + 1;
+            });
+            return acc;
+        }, {});
+
+        const quadrupleWeaknessCounts = tm.reduce((acc: Record<string, number>, t: any) => {
+            (t.quadruple_weaknesses || []).forEach((weakness: string) => {
+                acc[weakness] = (acc[weakness] || 0) + 1;
+            });
+            return acc;
+        }, {});
+
+        const uncoveredWeaknesses = Object.entries(weaknessCounts)
+            .filter(([weakness]) => !resistanceCounts[weakness] && !coverageCounts[weakness])
+            .map(([weakness]) => weakness);
+        const uncoveredQuadrupleWeaknesses = Object.entries(quadrupleWeaknessCounts)
+            .filter(([weakness]) => !resistanceCounts[weakness] && !coverageCounts[weakness])
+            .map(([weakness]) => weakness);
+        const sharedWeaknesses = Object.entries(weaknessCounts)
+            .filter(([, count]) => count > 1)
+            .map(([weakness]) => weakness);
+        const sharedQuadrupleWeaknesses = Object.entries(quadrupleWeaknessCounts)
+            .filter(([, count]) => count > 1)
+            .map(([weakness]) => weakness);
+        const uniqueResistances = Object.keys(resistanceCounts).length;
+        const uniqueCoverages = Object.keys(coverageCounts).length;
+        const typesTotal = (new Set(tm.flatMap((t: any) => t.name.split("/")))).size;
+
+        const pokemonScore = tm.map((t: any) => {
+            const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
+            if (!poke) return 0;
+            const offScore = t.normalized_damage_to_score ?? 0;
+            const defScore = t.normalized_damage_from_score ?? 0;
+            return poke.stats.hp +
+            ((poke.stats.attack + poke.stats['special-attack']) * offScore) +
+            ((poke.stats.defense + poke.stats['special-defense']) / (1 + defScore)) +
+            poke.stats.speed;
+        }).reduce((a: number, b: number) => a + b, 0);
+
+        const teamSynergyScore =
+            (uniqueCoverages * 20) +
+            (uniqueResistances * 12) +
+            (typesTotal * 10) -
+            (uncoveredWeaknesses.length * 30) -
+            (uncoveredQuadrupleWeaknesses.length * 90) -
+            sharedWeaknesses.reduce((total, weakness) => total + ((weaknessCounts[weakness] - 1) * 18), 0) -
+            Object.values(quadrupleWeaknessCounts).reduce((total, count) => total + (count * 80), 0) -
+            sharedQuadrupleWeaknesses.reduce((total, weakness) => total + ((quadrupleWeaknessCounts[weakness] - 1) * 220), 0);
+
+        const result = {
+            types: tm.map((t: any) => t.name),
+            typesTotal,
+            pokemon,
+            uncoveredWeaknesses,
+            uncoveredQuadrupleWeaknesses,
+            sharedWeaknesses,
+            sharedQuadrupleWeaknesses,
+            uniqueResistances,
+            uniqueCoverages,
+            score: pokemonScore + teamSynergyScore
+        };
+
+        teamResultCache.set(cacheKey, result);
+        return result;
+    }
+
+    function typePriorityScore(t: any): number {
+        const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
+        const statsTotal = poke ? Object.values(poke.stats || {}).reduce((total: number, stat: any) => total + Number(stat || 0), 0) : 0;
+        return ((t.normalized_damage_to_score ?? 0.5) * 40) +
+            ((1 - (t.normalized_damage_from_score ?? 0.5)) * 32) +
+            ((t.coverages || []).length * 8) +
+            ((t.resistances || []).length * 5) +
+            (statsTotal * 0.08) -
+            ((t.weaknesses || []).length * 6) -
+            ((t.quadruple_weaknesses || []).length * 40);
     }
 
     // Filter normalizedTypes to only those compatible with the seed
     const validSeed = seed.filter((s: any) => s.name && s.weaknesses && (s.selectedPokemon || (s.pokemon && s.pokemon.length > 0)));
-    
+    if (validSeed.length > teamSize) return [];
+
     const seedCompatibleTypes = normalizedTypes.filter((t: any) => 
         !validSeed.some((s: any) => s.name === t.name) &&
         validSeed.every((s: any) => {
@@ -348,98 +447,37 @@ export function generateTeams(options: any = {}): any[] {
         })
     );
 
-    return teamCombinations(seedCompatibleTypes, teamSize - validSeed.length, validSeed)
-        .map((tm: any) => {
-            const pokemon = tm.map((t: any) => {
-                const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
-                return poke ? {
-                    types: t.name.split("/"),
-                    name: poke.pokemon.name,
-                    sprite: poke.sprite,
-                    stats: poke.stats,
-                    normalized_damage_to_score: t.normalized_damage_to_score ?? 0,
-                    normalized_damage_from_score: t.normalized_damage_from_score ?? 0
-                } : null;
-            }).filter((p: any) => p !== null);
+    const prioritizedTypes = [...seedCompatibleTypes].sort((t1: any, t2: any) => typePriorityScore(t2) - typePriorityScore(t1));
+    const beamWidth = Math.max(96, teamSize * 96);
 
-            const weaknessCounts = tm.reduce((acc: Record<string, number>, t: any) => {
-                (t.weaknesses || []).forEach((weakness: string) => {
-                    acc[weakness] = (acc[weakness] || 0) + 1;
-                });
-                return acc;
-            }, {});
+    let partialTeams = [validSeed];
+    prioritizedTypes.forEach((candidate: any, index: number) => {
+        const remainingCandidates = prioritizedTypes.length - index - 1;
+        const expandedTeams = partialTeams.flatMap((team: any[]) => {
+            const branch = [team];
+            const canAddCandidate = team.length < teamSize && team.every((member: any) => isCompatible(member, candidate));
+            if (canAddCandidate) {
+                branch.push([...team, candidate]);
+            }
+            return branch;
+        });
 
-            const resistanceCounts = tm.reduce((acc: Record<string, number>, t: any) => {
-                (t.resistances || []).forEach((resistance: string) => {
-                    acc[resistance] = (acc[resistance] || 0) + 1;
-                });
-                return acc;
-            }, {});
+        const seen = new Set<string>();
+        partialTeams = expandedTeams
+            .filter((team: any[]) => team.length <= teamSize && team.length + remainingCandidates >= teamSize)
+            .sort((teamA: any[], teamB: any[]) => buildTeamResult(teamB).score - buildTeamResult(teamA).score)
+            .filter((team: any[]) => {
+                const key = getTeamKey(team);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .slice(0, beamWidth);
+    });
 
-            const coverageCounts = tm.reduce((acc: Record<string, number>, t: any) => {
-                (t.coverages || []).forEach((coverage: string) => {
-                    acc[coverage] = (acc[coverage] || 0) + 1;
-                });
-                return acc;
-            }, {});
-
-            const quadrupleWeaknessCounts = tm.reduce((acc: Record<string, number>, t: any) => {
-                (t.quadruple_weaknesses || []).forEach((weakness: string) => {
-                    acc[weakness] = (acc[weakness] || 0) + 1;
-                });
-                return acc;
-            }, {});
-
-            const uncoveredWeaknesses = Object.entries(weaknessCounts)
-                .filter(([weakness]) => !resistanceCounts[weakness] && !coverageCounts[weakness])
-                .map(([weakness]) => weakness);
-            const uncoveredQuadrupleWeaknesses = Object.entries(quadrupleWeaknessCounts)
-                .filter(([weakness]) => !resistanceCounts[weakness] && !coverageCounts[weakness])
-                .map(([weakness]) => weakness);
-            const sharedWeaknesses = Object.entries(weaknessCounts)
-                .filter(([, count]) => count > 1)
-                .map(([weakness]) => weakness);
-            const sharedQuadrupleWeaknesses = Object.entries(quadrupleWeaknessCounts)
-                .filter(([, count]) => count > 1)
-                .map(([weakness]) => weakness);
-            const uniqueResistances = Object.keys(resistanceCounts).length;
-            const uniqueCoverages = Object.keys(coverageCounts).length;
-            const typesTotal = (new Set(tm.flatMap((t: any) => t.name.split("/")))).size;
-
-            const pokemonScore = tm.map((t: any) => {
-                const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
-                if (!poke) return 0;
-                const offScore = t.normalized_damage_to_score ?? 0;
-                const defScore = t.normalized_damage_from_score ?? 0;
-                return poke.stats.hp +
-                ((poke.stats.attack + poke.stats['special-attack']) * offScore) +
-                ((poke.stats.defense + poke.stats['special-defense']) / (1 + defScore)) +
-                poke.stats.speed;
-            }).reduce((a: number, b: number) => a + b, 0);
-
-            const teamSynergyScore =
-                (uniqueCoverages * 20) +
-                (uniqueResistances * 12) +
-                (typesTotal * 10) -
-                (uncoveredWeaknesses.length * 30) -
-                (uncoveredQuadrupleWeaknesses.length * 90) -
-                sharedWeaknesses.reduce((total, weakness) => total + ((weaknessCounts[weakness] - 1) * 18), 0) -
-                Object.values(quadrupleWeaknessCounts).reduce((total, count) => total + (count * 80), 0) -
-                sharedQuadrupleWeaknesses.reduce((total, weakness) => total + ((quadrupleWeaknessCounts[weakness] - 1) * 220), 0);
-
-            return {
-                types: tm.map((t: any) => t.name),
-                typesTotal,
-                pokemon,
-                uncoveredWeaknesses,
-                uncoveredQuadrupleWeaknesses,
-                sharedWeaknesses,
-                sharedQuadrupleWeaknesses,
-                uniqueResistances,
-                uniqueCoverages,
-                score: pokemonScore + teamSynergyScore
-            };
-        })
+    return partialTeams
+        .filter((team: any[]) => team.length === teamSize)
+        .map((team: any[]) => buildTeamResult(team))
         .filter((team: any) => team.pokemon.length === teamSize)
         .sort((t1: any, t2: any) => t2.score - t1.score);
 }
