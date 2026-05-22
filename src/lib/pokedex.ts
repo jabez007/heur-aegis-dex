@@ -363,20 +363,64 @@ export function generateTeams(options: any = {}): any[] {
                 } : null;
             }).filter((p: any) => p !== null);
 
+            const weaknessCounts = tm.reduce((acc: Record<string, number>, t: any) => {
+                (t.weaknesses || []).forEach((weakness: string) => {
+                    acc[weakness] = (acc[weakness] || 0) + 1;
+                });
+                return acc;
+            }, {});
+
+            const resistanceCounts = tm.reduce((acc: Record<string, number>, t: any) => {
+                (t.resistances || []).forEach((resistance: string) => {
+                    acc[resistance] = (acc[resistance] || 0) + 1;
+                });
+                return acc;
+            }, {});
+
+            const coverageCounts = tm.reduce((acc: Record<string, number>, t: any) => {
+                (t.coverages || []).forEach((coverage: string) => {
+                    acc[coverage] = (acc[coverage] || 0) + 1;
+                });
+                return acc;
+            }, {});
+
+            const uncoveredWeaknesses = Object.entries(weaknessCounts)
+                .filter(([weakness]) => !resistanceCounts[weakness] && !coverageCounts[weakness])
+                .map(([weakness]) => weakness);
+            const sharedWeaknesses = Object.entries(weaknessCounts)
+                .filter(([, count]) => count > 1)
+                .map(([weakness]) => weakness);
+            const uniqueResistances = Object.keys(resistanceCounts).length;
+            const uniqueCoverages = Object.keys(coverageCounts).length;
+            const typesTotal = (new Set(tm.flatMap((t: any) => t.name.split("/")))).size;
+
+            const pokemonScore = tm.map((t: any) => {
+                const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
+                if (!poke) return 0;
+                const offScore = t.normalized_damage_to_score ?? 0;
+                const defScore = t.normalized_damage_from_score ?? 0;
+                return poke.stats.hp +
+                ((poke.stats.attack + poke.stats['special-attack']) * offScore) +
+                ((poke.stats.defense + poke.stats['special-defense']) / (1 + defScore)) +
+                poke.stats.speed;
+            }).reduce((a: number, b: number) => a + b, 0);
+
+            const teamSynergyScore =
+                (uniqueCoverages * 20) +
+                (uniqueResistances * 12) +
+                (typesTotal * 10) -
+                (uncoveredWeaknesses.length * 30) -
+                sharedWeaknesses.reduce((total, weakness) => total + ((weaknessCounts[weakness] - 1) * 18), 0);
+
             return {
                 types: tm.map((t: any) => t.name),
-                typesTotal: (new Set(tm.flatMap((t: any) => t.name.split("/")))).size,
+                typesTotal,
                 pokemon,
-                score: tm.map((t: any) => {
-                    const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
-                    if (!poke) return 0;
-                    const offScore = t.normalized_damage_to_score ?? 0;
-                    const defScore = t.normalized_damage_from_score ?? 0;
-                    return poke.stats.hp +
-                    ((poke.stats.attack + poke.stats['special-attack']) * offScore) +
-                    ((poke.stats.defense + poke.stats['special-defense']) / (1 + defScore)) +
-                    poke.stats.speed;
-                }).reduce((a: number, b: number) => a + b, 0)
+                uncoveredWeaknesses,
+                sharedWeaknesses,
+                uniqueResistances,
+                uniqueCoverages,
+                score: pokemonScore + teamSynergyScore
             };
         })
         .filter((team: any) => team.pokemon.length === teamSize)

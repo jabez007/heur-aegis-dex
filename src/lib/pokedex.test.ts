@@ -302,6 +302,19 @@ describe('pokedex.js - generateTeams', () => {
     expect(teams[0].score).toBeGreaterThan(0);
   });
 
+  it('should expose team-level synergy metrics for ranking', () => {
+    const teams = generateTeams({
+      allowedTypes: [...mockTypes],
+      teamSize: 3,
+      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
+    });
+
+    expect(teams[0].sharedWeaknesses).toEqual([]);
+    expect(teams[0].uncoveredWeaknesses).toEqual(['flying', 'poison']);
+    expect(teams[0].uniqueResistances).toBe(7);
+    expect(teams[0].uniqueCoverages).toBe(7);
+  });
+
   it('should handle missing normalized scores without producing NaN', () => {
     const typesWithMissingScores = [
       {
