@@ -4,6 +4,7 @@ import MetaControls from './MetaControls.vue';
 import TeamWorkbench from './TeamWorkbench.vue';
 import MetaAnalysisGrid from './MetaAnalysisGrid.vue';
 import { useMetaFilters } from '../composables/useMetaFilters';
+import { buildActiveTypeData } from '../lib/activePokemon';
 
 const props = defineProps<{
   allDataTypes: any[]
@@ -16,52 +17,6 @@ const selectedAbilityNames = ref<Record<string, string>>({});
 const getSelectedPokemonIndex = (typeData: any) => {
   const maxIndex = Math.max((typeData.pokemon?.length || 1) - 1, 0);
   return Math.min(selectedPokemonIndices.value[typeData.name] ?? 0, maxIndex);
-};
-
-const buildActiveTypeData = (typeData: any) => {
-  const pokemonIndex = getSelectedPokemonIndex(typeData);
-  const selectedPokemon = typeData.pokemon?.[pokemonIndex];
-
-  if (!selectedPokemon) {
-    return {
-      ...typeData,
-      selected_pokemon_index: pokemonIndex,
-      selectedPokemon: null,
-      selected_ability_name: ''
-    };
-  }
-
-  const abilityName = selectedAbilityNames.value[typeData.name]
-    || selectedPokemon.selected_ability_name
-    || selectedPokemon.abilities?.[0]?.name
-    || '';
-  const abilityProfile = selectedPokemon.ability_profiles?.[abilityName] || null;
-  const activePokemon = {
-    ...selectedPokemon,
-    selected_ability_name: abilityName,
-    effective_damage_relations: abilityProfile?.damage_relations || selectedPokemon.effective_damage_relations,
-    effective_weaknesses: abilityProfile?.weaknesses || selectedPokemon.effective_weaknesses || typeData.weaknesses || [],
-    effective_quadruple_weaknesses: abilityProfile?.quadruple_weaknesses || selectedPokemon.effective_quadruple_weaknesses || typeData.quadruple_weaknesses || [],
-    effective_resistances: abilityProfile?.resistances || selectedPokemon.effective_resistances || typeData.resistances || [],
-    effective_ineffectives: abilityProfile?.ineffectives || selectedPokemon.effective_ineffectives || typeData.ineffectives || [],
-    effective_coverages: abilityProfile?.coverages || selectedPokemon.effective_coverages || typeData.coverages || [],
-    effective_damage_from_score: abilityProfile?.damage_from_score ?? selectedPokemon.effective_damage_from_score ?? typeData.damage_from_score,
-    effective_damage_to_score: abilityProfile?.damage_to_score ?? selectedPokemon.effective_damage_to_score ?? typeData.damage_to_score
-  };
-
-  return {
-    ...typeData,
-    selected_pokemon_index: pokemonIndex,
-    selectedPokemon: activePokemon,
-    selected_ability_name: abilityName,
-    weaknesses: activePokemon.effective_weaknesses,
-    quadruple_weaknesses: activePokemon.effective_quadruple_weaknesses,
-    resistances: activePokemon.effective_resistances,
-    ineffectives: activePokemon.effective_ineffectives,
-    coverages: activePokemon.effective_coverages,
-    damage_from_score: activePokemon.effective_damage_from_score,
-    damage_to_score: activePokemon.effective_damage_to_score
-  };
 };
 
 const getActiveDamageFromScore = (typeData: any) => typeData.selectedPokemon?.effective_damage_from_score ?? typeData.damage_from_score ?? Number.POSITIVE_INFINITY;
@@ -80,7 +35,11 @@ const filteredTypes = computed(() => {
 
       return true;
     })
-    .map(buildActiveTypeData)
+    .map(typeData => buildActiveTypeData(
+      typeData,
+      getSelectedPokemonIndex(typeData),
+      selectedAbilityNames.value[typeData.name]
+    ))
     .sort((t1, t2) => {
       const t1From = getActiveDamageFromScore(t1);
       const t2From = getActiveDamageFromScore(t2);

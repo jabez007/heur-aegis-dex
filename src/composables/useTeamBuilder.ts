@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { generateTeams } from '../lib/pokedex';
+import { resolveSelectedPokemon } from '../lib/activePokemon';
 import { useNotifications } from './useNotifications';
 
 const { notify } = useNotifications();
@@ -20,27 +21,6 @@ const currentParty = ref<PartyMember[]>([]);
 const isGenerating = ref(false);
 
 export function useTeamBuilder() {
-  const resolveSelectedPokemon = (typeData: any, pokemonIndex: number, abilityName?: string) => {
-    const selectedPokemon = typeData.selectedPokemon;
-    const indexedPokemon = typeData.pokemon?.[pokemonIndex];
-    const basePokemon = selectedPokemon?.pokemon?.name === indexedPokemon?.pokemon?.name
-      ? selectedPokemon
-      : (indexedPokemon || selectedPokemon);
-
-    if (!basePokemon) return null;
-
-    const nextAbilityName = abilityName || selectedPokemon?.selected_ability_name || basePokemon.selected_ability_name;
-    const abilityProfile = nextAbilityName ? basePokemon.ability_profiles?.[nextAbilityName] : null;
-
-    return {
-      ...basePokemon,
-      selected_ability_name: nextAbilityName,
-      effective_weaknesses: abilityProfile?.weaknesses || selectedPokemon?.effective_weaknesses || basePokemon.effective_weaknesses || typeData.weaknesses || [],
-      effective_resistances: abilityProfile?.resistances || selectedPokemon?.effective_resistances || basePokemon.effective_resistances || typeData.resistances || [],
-      effective_coverages: abilityProfile?.coverages || selectedPokemon?.effective_coverages || basePokemon.effective_coverages || typeData.coverages || []
-    };
-  };
-
   const teamWeaknessSummary = computed(() => {
     const summary: Record<string, number> = {};
     currentParty.value.forEach(member => {

@@ -2,6 +2,7 @@
 import Pokedex from 'pokedex-promise-v2';
 import 'lodash.combinations';
 import _ from 'lodash';
+import { getEffectiveTypeProfile, getPokemonAbilityProfile } from './activePokemon';
 
 const _lodash = _ as any;
 const BASESCORE = 18
@@ -444,54 +445,9 @@ export function generateTeams(options: any = {}): any[] {
         normalized_damage_to_score: normalizeDamageToScore(t.damage_to_score)
     }));
 
-    function getPokemonAbilityProfile(pokemon: any, abilityName?: string): any {
-        if (!pokemon) return null;
-        const selectedAbilityName = abilityName || pokemon.selected_ability_name;
-        if (selectedAbilityName && pokemon.ability_profiles?.[selectedAbilityName]) {
-            return pokemon.ability_profiles[selectedAbilityName];
-        }
-
-        const hasEffectiveProfile =
-            pokemon.effective_damage_from_score !== undefined ||
-            pokemon.effective_damage_to_score !== undefined ||
-            pokemon.effective_weaknesses !== undefined ||
-            pokemon.effective_resistances !== undefined;
-
-        if (!hasEffectiveProfile) {
-            return null;
-        }
-
-        return {
-            weaknesses: pokemon.effective_weaknesses || [],
-            quadruple_weaknesses: pokemon.effective_quadruple_weaknesses || [],
-            resistances: pokemon.effective_resistances || [],
-            ineffectives: pokemon.effective_ineffectives || [],
-            coverages: pokemon.effective_coverages || [],
-            damage_from_score: pokemon.effective_damage_from_score,
-            damage_to_score: pokemon.effective_damage_to_score
-        };
-    }
-
-    function getEffectiveProfile(typeData: any, selectedPokemon?: any): any {
-        const activePokemon = selectedPokemon || typeData.selectedPokemon;
-        if (!activePokemon) return typeData;
-        const abilityProfile = getPokemonAbilityProfile(activePokemon);
-
-        return {
-            ...typeData,
-            weaknesses: abilityProfile?.weaknesses || typeData.weaknesses || [],
-            quadruple_weaknesses: abilityProfile?.quadruple_weaknesses || typeData.quadruple_weaknesses || [],
-            resistances: abilityProfile?.resistances || typeData.resistances || [],
-            ineffectives: abilityProfile?.ineffectives || typeData.ineffectives || [],
-            coverages: abilityProfile?.coverages || typeData.coverages || [],
-            damage_from_score: abilityProfile?.damage_from_score ?? typeData.damage_from_score,
-            damage_to_score: abilityProfile?.damage_to_score ?? typeData.damage_to_score
-        };
-    }
-
     function isCompatible(current: any, candidate: any): boolean {
-        const currentProfile = getEffectiveProfile(current);
-        const candidateProfile = getEffectiveProfile(candidate);
+        const currentProfile = getEffectiveTypeProfile(current);
+        const candidateProfile = getEffectiveTypeProfile(candidate);
 
         const passesSharedType = _teamComposition.allowSharedTypes || current.name.split("/").every((n: any) => !candidate.name.includes(n));
         const passesSharedWeakness = _teamComposition.allowSharedWeaknesses || 
@@ -534,7 +490,7 @@ export function generateTeams(options: any = {}): any[] {
                     normalized_damage_to_score: normalizeDamageToScore(abilityProfile?.damage_to_score ?? t.damage_to_score),
                     normalized_damage_from_score: normalizeDamageFromScore(abilityProfile?.damage_from_score ?? t.damage_from_score)
                 } : null,
-                profile: getEffectiveProfile(t, poke)
+                profile: getEffectiveTypeProfile(t, poke)
             };
         });
 
@@ -624,7 +580,7 @@ export function generateTeams(options: any = {}): any[] {
 
     function typePriorityScore(t: any): number {
         const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
-        const profile = getEffectiveProfile(t, poke);
+        const profile = getEffectiveTypeProfile(t, poke);
         const statsTotal = poke ? Object.values(poke.stats || {}).reduce((total: number, stat: any) => total + Number(stat || 0), 0) : 0;
         const damageToScore = normalizeDamageToScore(poke?.effective_damage_to_score ?? t.damage_to_score);
         const damageFromScore = normalizeDamageFromScore(poke?.effective_damage_from_score ?? t.damage_from_score);
