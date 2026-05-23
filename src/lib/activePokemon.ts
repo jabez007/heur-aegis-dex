@@ -1,35 +1,14 @@
-export interface AbilityProfileLike {
-  damage_relations?: unknown;
-  weaknesses?: string[];
-  quadruple_weaknesses?: string[];
-  resistances?: string[];
-  ineffectives?: string[];
-  coverages?: string[];
-  damage_from_score?: number;
-  damage_to_score?: number;
-}
-
-export interface PokemonLike {
-  pokemon?: { name?: string };
-  types?: Array<{ type: { name: string } }>;
-  sprite?: string;
-  stats?: Record<string, number>;
-  selected_ability_name?: string;
-  ability_profiles?: Record<string, AbilityProfileLike>;
-  effective_damage_relations?: unknown;
-  effective_weaknesses?: string[];
-  effective_quadruple_weaknesses?: string[];
-  effective_resistances?: string[];
-  effective_ineffectives?: string[];
-  effective_coverages?: string[];
-  effective_damage_from_score?: number;
-  effective_damage_to_score?: number;
-}
+import type {
+  AbilityProfile,
+  DamageRelations,
+  PokemonListEntry,
+  ResistantTypeResult
+} from './pokedexTypes';
 
 export interface TypeDataLike {
   name?: string;
-  pokemon?: PokemonLike[];
-  selectedPokemon?: PokemonLike | null;
+  pokemon?: PokemonListEntry[];
+  selectedPokemon?: PokemonListEntry | null;
   selected_pokemon_index?: number;
   selected_ability_name?: string;
   include_ability_immunities?: boolean;
@@ -44,11 +23,11 @@ export interface TypeDataLike {
 
 export interface ActiveTypeDataLike extends TypeDataLike {
   selected_pokemon_index: number;
-  selectedPokemon: PokemonLike | null;
+  selectedPokemon: PokemonListEntry | null;
   selected_ability_name: string;
 }
 
-export function getPokemonAbilityProfile(pokemon: PokemonLike | null | undefined, abilityName?: string): AbilityProfileLike | null {
+export function getPokemonAbilityProfile(pokemon: PokemonListEntry | null | undefined, abilityName?: string): AbilityProfile | null {
   if (!pokemon) return null;
 
   const selectedAbilityName = abilityName || pokemon.selected_ability_name;
@@ -67,7 +46,7 @@ export function getPokemonAbilityProfile(pokemon: PokemonLike | null | undefined
   }
 
   return {
-    damage_relations: pokemon.effective_damage_relations,
+    damage_relations: pokemon.effective_damage_relations as DamageRelations | undefined,
     weaknesses: pokemon.effective_weaknesses || [],
     quadruple_weaknesses: pokemon.effective_quadruple_weaknesses || [],
     resistances: pokemon.effective_resistances || [],
@@ -131,7 +110,7 @@ export function buildActiveTypeData(typeData: TypeDataLike, pokemonIndex: number
   };
 }
 
-export function getEffectiveTypeProfile(typeData: TypeDataLike, selectedPokemon?: PokemonLike | null) {
+export function getEffectiveTypeProfile(typeData: TypeDataLike, selectedPokemon?: PokemonListEntry | null): ResistantTypeResult | TypeDataLike {
   const activePokemon = selectedPokemon || typeData.selectedPokemon;
   if (!activePokemon) return typeData;
 

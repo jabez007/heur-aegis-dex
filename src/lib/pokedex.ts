@@ -10,7 +10,15 @@ import {
   createTypeSummary,
   filterUniqueBy
 } from './pokedexScoring';
-import type { NamedResource, DamageRelations, PokemonTypeData } from './pokedexTypes';
+import type {
+  DamageRelations,
+  NamedResource,
+  PokemonAbilitySlot,
+  PokemonListEntry,
+  PokemonStats,
+  PokemonTypeData,
+  ResistantTypeResult
+} from './pokedexTypes';
 
 const _lodash = _ as any;
 const BASESCORE = 18;
@@ -107,7 +115,24 @@ export async function getDualTypes(baseScore: number = BASESCORE): Promise<Pokem
     });
 }
 
-export async function getResistantTypes(options: any = {}): Promise<any[]> {
+export async function getResistantTypes(options: {
+  baseScore?: number;
+  typeFilters?: {
+    maxDamageFromScore?: boolean;
+    allowQuadrupleDamage?: boolean;
+    limitQuadrupleDamage?: boolean;
+  };
+  pokemonFilters?: {
+    inPokedex?: string;
+    allowMegas?: boolean;
+    includeAbilityImmunities?: boolean;
+  };
+  statsFilters?: {
+    minimumStatsTotal?: number;
+    minimumAttacks?: number;
+    minimumDefenses?: number;
+  };
+} = {}): Promise<ResistantTypeResult[]> {
   const {
     baseScore = BASESCORE,
     typeFilters = { maxDamageFromScore: true, allowQuadrupleDamage: true, limitQuadrupleDamage: true },
@@ -136,9 +161,9 @@ export async function getResistantTypes(options: any = {}): Promise<any[]> {
     return true;
   };
 
-  const processPokemon = async (t: PokemonTypeData) => {
+  const processPokemon = async (t: PokemonTypeData): Promise<PokemonListEntry[]> => {
     const pokemon = await Promise.all(
-      (t.pokemon || []).map(async (p: any) => {
+      (t.pokemon || []).map(async (p: PokemonListEntry) => {
         if (!_pokemonFilters.allowMegas && p.pokemon.name.includes('-mega')) return null;
 
         const id = Number(p.pokemon.url.split('/').slice(-2)[0]);
@@ -156,14 +181,21 @@ export async function getResistantTypes(options: any = {}): Promise<any[]> {
 
         p.types = poke.types;
         p.sprite = poke.sprites.front_default;
-        p.abilities = poke.abilities.map((abilityEntry: any) => ({
+        p.abilities = poke.abilities.map((abilityEntry: any): PokemonAbilitySlot => ({
           name: abilityEntry.ability.name,
           is_hidden: abilityEntry.is_hidden
         }));
-        p.stats = poke.stats.reduce((merged: any, curr: any) => {
+        p.stats = poke.stats.reduce((merged: PokemonStats, curr: any) => {
           merged[curr.stat.name] = curr.base_stat;
           return merged;
-        }, {});
+        }, {
+          hp: 0,
+          attack: 0,
+          defense: 0,
+          'special-attack': 0,
+          'special-defense': 0,
+          speed: 0
+        });
 
         if (p.stats.attack < _statsFilters.minimumAttacks && p.stats['special-attack'] < _statsFilters.minimumAttacks) return null;
         if ((p.stats.defense + p.stats['special-defense']) / 2 < _statsFilters.minimumDefenses) return null;
@@ -172,7 +204,7 @@ export async function getResistantTypes(options: any = {}): Promise<any[]> {
         if (p.stats_total < _statsFilters.minimumStatsTotal) return null;
 
         const baseDamageRelations = cloneDamageRelations(t.damage_relations);
-        const abilityNames = p.abilities.map((ability: any) => ability.name);
+        const abilityNames = p.abilities.map((ability) => ability.name);
         const { abilityProfiles, bestProfile } = _pokemonFilters.includeAbilityImmunities
           ? applyAbilityModifiers(baseDamageRelations, abilityNames, baseScore)
           : {
@@ -184,7 +216,7 @@ export async function getResistantTypes(options: any = {}): Promise<any[]> {
               : createAbilityProfile(baseDamageRelations, '', baseScore)
           };
 
-        p.ability_profiles = Object.fromEntries(abilityProfiles.map((profile: any) => [profile.ability_name, profile]));
+        p.ability_profiles = Object.fromEntries(abilityProfiles.map((profile) => [profile.ability_name || '', profile]));
         p.selected_ability_name = bestProfile.ability_name;
         p.effective_damage_relations = bestProfile.damage_relations;
         p.effective_weaknesses = bestProfile.weaknesses;
@@ -200,9 +232,9 @@ export async function getResistantTypes(options: any = {}): Promise<any[]> {
     );
 
     return pokemon
-      .filter((p: any) => !!p)
-      .filter((p: any) => t.name.includes('/') || p.types.length === 1)
-      .sort((p1: any, p2: any) => p2.stats_total - p1.stats_total);
+      .filter((p): p is PokemonListEntry => p !== null)
+      .filter((p) => t.name.includes('/') || (p.types?.length || 0) === 1)
+      .sort((p1, p2) => (p2.stats_total || 0) - (p1.stats_total || 0));
   };
 
   const baseAndDualTypes = (await getBaseTypes(baseScore)).concat(await getDualTypes(baseScore));
@@ -235,10 +267,10 @@ export async function getResistantTypes(options: any = {}): Promise<any[]> {
           include_ability_immunities: _pokemonFilters.includeAbilityImmunities,
           ...summary,
           pokemon
-        };
+        } satisfies ResistantTypeResult;
       })
   ))
-    .sort((t1: any, t2: any) => {
+    .sort((t1, t2) => {
       const t1Quotient = (t1.damage_from_score / t1.damage_to_score);
       const t2Quotient = (t2.damage_from_score / t2.damage_to_score);
       return t2Quotient === t1Quotient ? t1.damage_from_score - t2.damage_from_score : t1Quotient - t2Quotient;
