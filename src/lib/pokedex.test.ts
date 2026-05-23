@@ -4,6 +4,7 @@ import { __resetPokedexResourceCaches, generateTeams, getBaseTypes, getDualTypes
 const mockState = vi.hoisted(() => ({
   duplicateCharmanderAcrossTypes: false,
   expandFireRoster: false,
+  failPokemon4Once: false,
   detailDelayMs: 0,
   requestCounts: new Map<string, number>(),
   activeDetailRequests: 0,
@@ -114,6 +115,10 @@ vi.mock('pokedex-promise-v2', () => {
           };
         }
         if (url.startsWith('/api/v2/pokemon/4/')) {
+          if (mockState.failPokemon4Once) {
+            mockState.failPokemon4Once = false;
+            throw new Error('temporary pokemon fetch failure');
+          }
           return {
           types: [{ type: { name: 'fire' } }],
           sprites: { front_default: 'charmander.png' },
@@ -202,6 +207,7 @@ beforeEach(() => {
   __resetPokedexResourceCaches();
   mockState.duplicateCharmanderAcrossTypes = false;
   mockState.expandFireRoster = false;
+  mockState.failPokemon4Once = false;
   mockState.detailDelayMs = 0;
   mockState.requestCounts.clear();
   mockState.activeDetailRequests = 0;
@@ -319,6 +325,27 @@ describe('pokedex.js API integration logic', () => {
     });
 
     expect(mockState.maxActiveDetailRequests).toBeLessThanOrEqual(12);
+  });
+
+  it('getResistantTypes should evict failed detail fetches from cache so retries can succeed', async () => {
+    mockState.failPokemon4Once = true;
+
+    await expect(getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    })).rejects.toThrow('temporary pokemon fetch failure');
+
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(resistant.find((type) => type.name === 'fire')?.pokemon[0].pokemon.name).toBe('charmander');
+    expect(mockState.requestCounts.get('/api/v2/pokemon/4/')).toBe(2);
   });
 
   it('generateTeams should respect a selected pokemon ability profile', () => {
@@ -607,6 +634,45 @@ describe('pokedex.js - generateTeams', () => {
     expect(teams[0].score).toBeDefined();
     expect(Number.isNaN(teams[0].score)).toBe(false);
     expect(typeof teams[0].score).toBe('number');
+  });
+
+  it('should allow candidates when one side has no weaknesses to cover', () => {
+    const teams = generateTeams({
+      allowedTypes: [
+        {
+          name: 'steel',
+          damage_from_score: 15,
+          damage_to_score: 16,
+          weaknesses: [],
+          resistances: ['grass', 'electric'],
+          coverages: ['rock'],
+          ineffectives: [],
+          pokemon: [{
+            pokemon: { name: 'steelix' },
+            sprite: 'steelix.png',
+            stats: { hp: 75, attack: 85, defense: 200, 'special-attack': 55, 'special-defense': 65, speed: 30 }
+          }]
+        },
+        {
+          name: 'water',
+          damage_from_score: 17,
+          damage_to_score: 19,
+          weaknesses: ['electric'],
+          resistances: ['fire'],
+          coverages: ['electric'],
+          ineffectives: [],
+          pokemon: [{
+            pokemon: { name: 'blastoise' },
+            sprite: 'blastoise.png',
+            stats: { hp: 79, attack: 83, defense: 100, 'special-attack': 85, 'special-defense': 105, speed: 78 }
+          }]
+        }
+      ] as any,
+      teamSize: 2,
+      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: true }
+    });
+
+    expect(teams.some((team) => team.types.includes('steel') && team.types.includes('water'))).toBe(true);
   });
 
   it('should skip invalid types in seeded generation gracefully', () => {

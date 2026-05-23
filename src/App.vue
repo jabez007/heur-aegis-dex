@@ -32,7 +32,7 @@
               class="gba-btn"
               :class="{ active: loading }"
               :disabled="loading"
-              @click="fetchTypes"
+              @click="fetchTypesImmediate"
             >
               {{ loading ? 'Loading...' : (fetchError ? 'Retry Scan' : 'Scan Types') }}
             </button>
@@ -42,7 +42,7 @@
               <select
                 v-model="inPokedex"
                 class="gba-select"
-                @change="fetchTypes"
+                @change="fetchTypesImmediate"
               >
                 <option value="national">National</option>
                 <option value="kanto">Kanto</option>
@@ -60,9 +60,18 @@
                 v-model="includeAbilityImmunities"
                 type="checkbox"
                 class="gba-checkbox"
-                @change="fetchTypes"
+                @change="fetchTypesDebounced"
               >
               Include Ability Immunities
+            </label>
+            <label class="gba-label checkbox-label">
+              <input
+                v-model="allowMegas"
+                type="checkbox"
+                class="gba-checkbox"
+                @change="fetchTypesImmediate"
+              >
+              Include Mega Evolutions
             </label>
             <label class="gba-label">
               Min Total Stats:
@@ -71,7 +80,7 @@
                 type="number"
                 class="gba-input"
                 step="10"
-                @change="fetchTypes"
+                @change="fetchTypesImmediate"
               >
             </label>
             <label class="gba-label">
@@ -81,7 +90,7 @@
                 type="number"
                 class="gba-input"
                 step="5"
-                @change="fetchTypes"
+                @change="fetchTypesImmediate"
               >
             </label>
             <label class="gba-label">
@@ -91,7 +100,7 @@
                 type="number"
                 class="gba-input"
                 step="5"
-                @change="fetchTypes"
+                @change="fetchTypesImmediate"
               >
             </label>
           </div>
@@ -112,7 +121,7 @@
           <p>The Pokedex database could not be loaded.</p>
           <button
             class="gba-btn action-btn"
-            @click="fetchTypes"
+            @click="fetchTypesImmediate"
           >
             Retry Scan
           </button>
@@ -158,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onBeforeUnmount, onMounted } from 'vue';
 import lscache from 'lscache';
 import { getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
@@ -173,8 +182,10 @@ const inPokedex = ref('national');
 const minStatsTotal = ref(480);
 const minAttacks = ref(80);
 const minDefenses = ref(80);
+const allowMegas = ref(false);
 const includeAbilityImmunities = ref(true);
 const { notify } = useNotifications();
+let fetchTypesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 const fetchTypes = () => {
   loading.value = true;
@@ -192,11 +203,11 @@ const fetchTypes = () => {
   };
   const pokedexFilter = {
     inPokedex: inPokedex.value,
-    allowMegas: false,
+    allowMegas: allowMegas.value,
     includeAbilityImmunities: includeAbilityImmunities.value
   };
 
-  const key = `heur_aegis_dex_v3_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${includeAbilityImmunities.value}`;
+  const key = `heur_aegis_dex_v3_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}`;
 
   const cached = lscache.get(key);
   if (cached) {
@@ -221,8 +232,33 @@ const fetchTypes = () => {
   }
 };
 
+const fetchTypesImmediate = () => {
+  if (fetchTypesDebounceTimer) {
+    clearTimeout(fetchTypesDebounceTimer);
+    fetchTypesDebounceTimer = null;
+  }
+  fetchTypes();
+};
+
+const fetchTypesDebounced = () => {
+  if (fetchTypesDebounceTimer) {
+    clearTimeout(fetchTypesDebounceTimer);
+  }
+
+  fetchTypesDebounceTimer = setTimeout(() => {
+    fetchTypesDebounceTimer = null;
+    fetchTypes();
+  }, 400);
+};
+
 onMounted(() => {
   fetchTypes();
+});
+
+onBeforeUnmount(() => {
+  if (fetchTypesDebounceTimer) {
+    clearTimeout(fetchTypesDebounceTimer);
+  }
 });
 </script>
 

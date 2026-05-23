@@ -35,11 +35,13 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
     from: [...(acc.from || []), t.damage_from_score]
   }), { to: [], from: [] });
 
-  const maxDamageToScore = Math.max(...(damageScores.to.filter((s): s is number => s !== undefined) || [1]));
-  const minDamageToScore = Math.min(...(damageScores.to.filter((s): s is number => s !== undefined) || [0]));
+  const toScores = damageScores.to.filter((s): s is number => s !== undefined);
+  const fromScores = damageScores.from.filter((s): s is number => s !== undefined);
+  const maxDamageToScore = Math.max(...(toScores.length ? toScores : [1]));
+  const minDamageToScore = Math.min(...(toScores.length ? toScores : [0]));
 
-  const maxDamageFromScore = Math.max(...(damageScores.from.filter((s): s is number => s !== undefined) || [1]));
-  const minDamageFromScore = Math.min(...(damageScores.from.filter((s): s is number => s !== undefined) || [0]));
+  const maxDamageFromScore = Math.max(...(fromScores.length ? fromScores : [1]));
+  const minDamageFromScore = Math.min(...(fromScores.length ? fromScores : [0]));
 
   const normalizeDamageFromScore = (score: number | undefined): number =>
     (score === undefined || maxDamageFromScore === minDamageFromScore) ? 0.5 :
@@ -61,6 +63,8 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
     const currentIneffectives = currentProfile.ineffectives || [];
     const candidateWeaknesses = candidateProfile.weaknesses || [];
     const candidateIneffectives = candidateProfile.ineffectives || [];
+    const currentCoverages = currentProfile.coverages || [];
+    const currentResistances = currentProfile.resistances || [];
     const candidateCoverages = candidateProfile.coverages || [];
     const candidateResistances = candidateProfile.resistances || [];
 
@@ -68,10 +72,13 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
     const passesSharedWeakness = _teamComposition.allowSharedWeaknesses ||
       (currentWeaknesses.every((w) => !candidateWeaknesses.includes(w)) && currentIneffectives.every((i) => !candidateIneffectives.includes(i)));
 
-    const passesCoverage = !_teamComposition.coverWeaknesses ||
-      currentWeaknesses.some((w) => candidateCoverages.includes(w) || candidateResistances.includes(w)) ||
-      candidateCoverages.some((c) => currentWeaknesses.includes(c)) ||
-      candidateResistances.some((r) => currentWeaknesses.includes(r));
+    const coversWeaknesses = (coverages: string[], resistances: string[], weaknesses: string[]): boolean =>
+      weaknesses.length === 0 || weaknesses.some((weakness) => coverages.includes(weakness) || resistances.includes(weakness));
+
+    const passesCoverage = !_teamComposition.coverWeaknesses || (
+      coversWeaknesses(candidateCoverages, candidateResistances, currentWeaknesses) &&
+      coversWeaknesses(currentCoverages, currentResistances, candidateWeaknesses)
+    );
 
     return passesSharedType && passesSharedWeakness && passesCoverage;
   }

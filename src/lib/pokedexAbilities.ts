@@ -44,8 +44,13 @@ const pickBetterDamageRelations = (current: DamageRelations | null, candidate: D
   return candidateResistances > currentResistances ? candidate : current;
 };
 
-const applyAbilityModifier = (dr: DamageRelations, abilityName: string, baseScore: number): DamageRelations => {
-  const immunityType = ABILITY_IMMUNITIES[abilityName];
+const buildDamageRelations = (
+  dr: DamageRelations,
+  abilityName: string,
+  baseScore: number,
+  respectImmunities: boolean
+): DamageRelations => {
+  const immunityType = respectImmunities ? ABILITY_IMMUNITIES[abilityName] : undefined;
   const nextDamageRelations = cloneDamageRelations(dr);
 
   if (immunityType) {
@@ -65,7 +70,16 @@ const applyAbilityModifier = (dr: DamageRelations, abilityName: string, baseScor
 };
 
 export const createAbilityProfile = (dr: DamageRelations, abilityName: string, baseScore: number) => {
-  const damageRelations = applyAbilityModifier(dr, abilityName, baseScore);
+  const damageRelations = buildDamageRelations(dr, abilityName, baseScore, true);
+  return {
+    ability_name: abilityName,
+    damage_relations: damageRelations,
+    ...createTypeSummary(damageRelations)
+  };
+};
+
+export const createRawAbilityProfile = (dr: DamageRelations, abilityName: string, baseScore: number) => {
+  const damageRelations = buildDamageRelations(dr, abilityName, baseScore, false);
   return {
     ability_name: abilityName,
     damage_relations: damageRelations,

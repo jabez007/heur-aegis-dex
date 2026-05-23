@@ -59,9 +59,7 @@ watch([selectedPokemon, () => props.typeData.selected_ability_name], ([pokemon, 
 }, { immediate: true });
 
 watch(selectedAbilityName, (abilityName) => {
-  if (abilityName) {
-    emit('update:selected-ability-name', abilityName);
-  }
+  emit('update:selected-ability-name', abilityName);
 });
 
 const selectedAbilityProfile = computed(() => {

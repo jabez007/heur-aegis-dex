@@ -2,7 +2,7 @@
 import Pokedex from 'pokedex-promise-v2';
 import 'lodash.combinations';
 import _ from 'lodash';
-import { applyAbilityModifiers, createAbilityProfile } from './pokedexAbilities';
+import { applyAbilityModifiers, createRawAbilityProfile } from './pokedexAbilities';
 import {
   calculateDamageFromScore,
   calculateDamageToScore,
@@ -71,7 +71,10 @@ function fetchPokemonResource(id: number) {
   const cached = pokemonResourceCache.get(id);
   if (cached) return cached;
 
-  const request = pokedex.getResource(`/api/v2/pokemon/${id}/`);
+  const request = pokedex.getResource(`/api/v2/pokemon/${id}/`).catch((error) => {
+    pokemonResourceCache.delete(id);
+    throw error;
+  });
   pokemonResourceCache.set(id, request);
   return request;
 }
@@ -80,9 +83,46 @@ function fetchPokemonSpeciesResource(id: number) {
   const cached = pokemonSpeciesCache.get(id);
   if (cached) return cached;
 
-  const request = pokedex.getResource(`/api/v2/pokemon-species/${id}/`);
+  const request = pokedex.getResource(`/api/v2/pokemon-species/${id}/`).catch((error) => {
+    pokemonSpeciesCache.delete(id);
+    throw error;
+  });
   pokemonSpeciesCache.set(id, request);
   return request;
+}
+
+function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
+  const abilityProfiles = entry.ability_profiles
+    ? Object.fromEntries(
+        Object.entries(entry.ability_profiles).map(([abilityName, profile]) => [
+          abilityName,
+          {
+            ...profile,
+            damage_relations: profile.damage_relations ? cloneDamageRelations(profile.damage_relations) : undefined,
+            weaknesses: [...(profile.weaknesses || [])],
+            quadruple_weaknesses: [...(profile.quadruple_weaknesses || [])],
+            resistances: [...(profile.resistances || [])],
+            ineffectives: [...(profile.ineffectives || [])],
+            coverages: [...(profile.coverages || [])]
+          }
+        ])
+      )
+    : undefined;
+
+  return {
+    ...entry,
+    pokemon: { ...entry.pokemon },
+    types: entry.types ? entry.types.map((typeSlot) => ({ ...typeSlot, type: { ...typeSlot.type } })) : undefined,
+    abilities: entry.abilities ? entry.abilities.map((ability) => ({ ...ability })) : undefined,
+    stats: entry.stats ? { ...entry.stats } : undefined,
+    ability_profiles: abilityProfiles,
+    effective_damage_relations: entry.effective_damage_relations ? cloneDamageRelations(entry.effective_damage_relations) : undefined,
+    effective_weaknesses: [...(entry.effective_weaknesses || [])],
+    effective_quadruple_weaknesses: [...(entry.effective_quadruple_weaknesses || [])],
+    effective_resistances: [...(entry.effective_resistances || [])],
+    effective_ineffectives: [...(entry.effective_ineffectives || [])],
+    effective_coverages: [...(entry.effective_coverages || [])]
+  };
 }
 
 export async function getBaseTypes(baseScore: number = BASESCORE): Promise<PokemonTypeData[]> {
@@ -159,6 +199,7 @@ export async function getDualTypes(baseScore: number = BASESCORE): Promise<Pokem
           .filter((dt0_p: any) =>
             (dt[1].pokemon || []).some((dt1_p: any) => dt0_p.pokemon.name === dt1_p.pokemon.name)
           )
+          .map((pokemonEntry: PokemonListEntry) => clonePokemonEntry(pokemonEntry))
       };
 
       dualType.damage_relations.damage_from_score = calculateDamageFromScore(dualType.damage_relations, baseScore);
@@ -265,11 +306,11 @@ export async function getResistantTypes(options: {
           ? applyAbilityModifiers(baseDamageRelations, abilityNames, baseScore)
           : {
             abilityProfiles: abilityNames.length > 0
-              ? abilityNames.map((abilityName: string) => createAbilityProfile(baseDamageRelations, abilityName, baseScore))
-              : [createAbilityProfile(baseDamageRelations, '', baseScore)],
+              ? abilityNames.map((abilityName: string) => createRawAbilityProfile(baseDamageRelations, abilityName, baseScore))
+              : [createRawAbilityProfile(baseDamageRelations, '', baseScore)],
             bestProfile: abilityNames.length > 0
-              ? createAbilityProfile(baseDamageRelations, abilityNames[0], baseScore)
-              : createAbilityProfile(baseDamageRelations, '', baseScore)
+              ? createRawAbilityProfile(baseDamageRelations, abilityNames[0], baseScore)
+              : createRawAbilityProfile(baseDamageRelations, '', baseScore)
           };
 
         p.ability_profiles = Object.fromEntries(abilityProfiles.map((profile) => [profile.ability_name || '', profile]));
