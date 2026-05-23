@@ -1,15 +1,46 @@
-import { describe, it, expect, vi } from 'vitest';
-import { generateTeams, getBaseTypes, getDualTypes, getResistantTypes } from './pokedex';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { __resetPokedexResourceCaches, generateTeams, getBaseTypes, getDualTypes, getResistantTypes } from './pokedex';
+
+const mockState = vi.hoisted(() => ({
+  duplicateCharmanderAcrossTypes: false,
+  expandFireRoster: false,
+  detailDelayMs: 0,
+  requestCounts: new Map<string, number>(),
+  activeDetailRequests: 0,
+  maxActiveDetailRequests: 0
+}));
+
+const trackRequest = async <T>(url: string, factory: () => T | Promise<T>) => {
+  mockState.requestCounts.set(url, (mockState.requestCounts.get(url) || 0) + 1);
+
+  const isDetailRequest = url.startsWith('/api/v2/pokemon/') || url.startsWith('/api/v2/pokemon-species/');
+  if (!isDetailRequest) {
+    return await factory();
+  }
+
+  mockState.activeDetailRequests += 1;
+  mockState.maxActiveDetailRequests = Math.max(mockState.maxActiveDetailRequests, mockState.activeDetailRequests);
+
+  try {
+    if (mockState.detailDelayMs > 0) {
+      await new Promise(resolve => setTimeout(resolve, mockState.detailDelayMs));
+    }
+    return await factory();
+  } finally {
+    mockState.activeDetailRequests -= 1;
+  }
+};
 
 // Mock the pokedex-promise-v2 module to avoid hitting the actual PokeAPI
 vi.mock('pokedex-promise-v2', () => {
   class MockPokedex {
     async getResource(url: string) {
-      if (url === '/api/v2/type/') {
-        return { results: [{ name: 'fire' }, { name: 'water' }, { name: 'bug' }, { name: 'steel' }] };
-      }
-      if (url.startsWith('/api/v2/type/bug')) {
-        return {
+      return trackRequest(url, async () => {
+        if (url === '/api/v2/type/') {
+          return { results: [{ name: 'fire' }, { name: 'water' }, { name: 'bug' }, { name: 'steel' }] };
+        }
+        if (url.startsWith('/api/v2/type/bug')) {
+          return {
           id: 12,
           name: 'bug',
           damage_relations: {
@@ -21,10 +52,10 @@ vi.mock('pokedex-promise-v2', () => {
             no_damage_to: []
           },
           pokemon: []
-        };
-      }
-      if (url.startsWith('/api/v2/type/steel')) {
-        return {
+          };
+        }
+        if (url.startsWith('/api/v2/type/steel')) {
+          return {
           id: 13,
           name: 'steel',
           damage_relations: {
@@ -36,10 +67,16 @@ vi.mock('pokedex-promise-v2', () => {
             no_damage_to: []
           },
           pokemon: []
-        };
-      }
-      if (url.startsWith('/api/v2/type/fire')) {
-        return {
+          };
+        }
+        if (url.startsWith('/api/v2/type/fire')) {
+          const extraPokemon = mockState.expandFireRoster
+            ? Array.from({ length: 18 }, (_, index) => {
+                const id = 100 + index;
+                return { pokemon: { name: `firemon-${id}`, url: `https://pokeapi.co/api/v2/pokemon/${id}/` } };
+              })
+            : [];
+          return {
           id: 10,
           name: 'fire',
           damage_relations: {
@@ -51,12 +88,13 @@ vi.mock('pokedex-promise-v2', () => {
             no_damage_to: []
           },
           pokemon: [
-            { pokemon: { name: 'charmander', url: 'https://pokeapi.co/api/v2/pokemon/4/' } }
+            { pokemon: { name: 'charmander', url: 'https://pokeapi.co/api/v2/pokemon/4/' } },
+            ...extraPokemon
           ]
-        };
-      }
-      if (url.startsWith('/api/v2/type/water')) {
-        return {
+          };
+        }
+        if (url.startsWith('/api/v2/type/water')) {
+          return {
           id: 11,
           name: 'water',
           damage_relations: {
@@ -68,12 +106,15 @@ vi.mock('pokedex-promise-v2', () => {
             no_damage_to: []
           },
           pokemon: [
-            { pokemon: { name: 'squirtle', url: 'https://pokeapi.co/api/v2/pokemon/7/' } }
+            { pokemon: { name: 'squirtle', url: 'https://pokeapi.co/api/v2/pokemon/7/' } },
+            ...(mockState.duplicateCharmanderAcrossTypes
+              ? [{ pokemon: { name: 'charmander', url: 'https://pokeapi.co/api/v2/pokemon/4/' } }]
+              : [])
           ]
-        };
-      }
-      if (url.startsWith('/api/v2/pokemon/4/')) {
-        return {
+          };
+        }
+        if (url.startsWith('/api/v2/pokemon/4/')) {
+          return {
           types: [{ type: { name: 'fire' } }],
           sprites: { front_default: 'charmander.png' },
           stats: [
@@ -86,18 +127,18 @@ vi.mock('pokedex-promise-v2', () => {
           ],
           abilities: [{ ability: { name: 'blaze' }, is_hidden: false }, { ability: { name: 'levitate' }, is_hidden: true }],
           species: { url: 'https://pokeapi.co/api/v2/pokemon-species/4/' }
-        };
-      }
-      if (url.startsWith('/api/v2/pokemon-species/4/')) {
-        return {
+          };
+        }
+        if (url.startsWith('/api/v2/pokemon-species/4/')) {
+          return {
           is_legendary: false,
           is_mythical: false,
           egg_groups: [{ name: 'monster' }],
           pokedex_numbers: [{ pokedex: { name: 'national' } }]
-        };
-      }
-      if (url.startsWith('/api/v2/pokemon/7/')) {
-        return {
+          };
+        }
+        if (url.startsWith('/api/v2/pokemon/7/')) {
+          return {
           types: [{ type: { name: 'water' } }],
           sprites: { front_default: 'squirtle.png' },
           stats: [
@@ -110,20 +151,61 @@ vi.mock('pokedex-promise-v2', () => {
           ],
           abilities: [{ ability: { name: 'torrent' }, is_hidden: false }],
           species: { url: 'https://pokeapi.co/api/v2/pokemon-species/7/' }
-        };
-      }
-      if (url.startsWith('/api/v2/pokemon-species/7/')) {
-        return {
+          };
+        }
+        if (url.startsWith('/api/v2/pokemon-species/7/')) {
+          return {
           is_legendary: false,
           is_mythical: false,
           egg_groups: [{ name: 'monster' }],
           pokedex_numbers: [{ pokedex: { name: 'national' } }]
-        };
-      }
-      return {};
+          };
+        }
+
+        const pokemonMatch = url.match(/^\/api\/v2\/pokemon\/(\d+)\/$/);
+        if (pokemonMatch) {
+          const id = Number(pokemonMatch[1]);
+          return {
+            types: [{ type: { name: 'fire' } }],
+            sprites: { front_default: `firemon-${id}.png` },
+            stats: [
+              { base_stat: 80, stat: { name: 'hp' } },
+              { base_stat: 85, stat: { name: 'attack' } },
+              { base_stat: 75, stat: { name: 'defense' } },
+              { base_stat: 95, stat: { name: 'special-attack' } },
+              { base_stat: 80, stat: { name: 'special-defense' } },
+              { base_stat: 70, stat: { name: 'speed' } }
+            ],
+            abilities: [{ ability: { name: 'blaze' }, is_hidden: false }],
+            species: { url: `https://pokeapi.co/api/v2/pokemon-species/${id}/` }
+          };
+        }
+
+        const speciesMatch = url.match(/^\/api\/v2\/pokemon-species\/(\d+)\/$/);
+        if (speciesMatch) {
+          return {
+            is_legendary: false,
+            is_mythical: false,
+            egg_groups: [{ name: 'monster' }],
+            pokedex_numbers: [{ pokedex: { name: 'national' } }]
+          };
+        }
+
+        return {};
+      });
     }
   }
   return { default: MockPokedex };
+});
+
+beforeEach(() => {
+  __resetPokedexResourceCaches();
+  mockState.duplicateCharmanderAcrossTypes = false;
+  mockState.expandFireRoster = false;
+  mockState.detailDelayMs = 0;
+  mockState.requestCounts.clear();
+  mockState.activeDetailRequests = 0;
+  mockState.maxActiveDetailRequests = 0;
 });
 
 describe('pokedex.js API integration logic', () => {
@@ -209,6 +291,34 @@ describe('pokedex.js API integration logic', () => {
     expect(fireType!.pokemon[0].effective_weaknesses).toContain('ground');
     expect(fireType!.pokemon[0].effective_resistances).not.toContain('ground');
     expect(fireType!.damage_from_score).toBe(19.5);
+  });
+
+  it('getResistantTypes should dedupe repeated pokemon and species detail fetches', async () => {
+    mockState.duplicateCharmanderAcrossTypes = true;
+
+    await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(mockState.requestCounts.get('/api/v2/pokemon/4/')).toBe(1);
+    expect(mockState.requestCounts.get('/api/v2/pokemon-species/4/')).toBe(1);
+  });
+
+  it('getResistantTypes should cap concurrent detail fetches', async () => {
+    mockState.expandFireRoster = true;
+    mockState.detailDelayMs = 5;
+
+    await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(mockState.maxActiveDetailRequests).toBeLessThanOrEqual(12);
   });
 
   it('generateTeams should respect a selected pokemon ability profile', () => {

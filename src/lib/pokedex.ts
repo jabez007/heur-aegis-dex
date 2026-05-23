@@ -22,6 +22,10 @@ import type {
 
 const _lodash = _ as any;
 const BASESCORE = 18;
+const POKEMON_DETAIL_CONCURRENCY = 12;
+
+const pokemonResourceCache = new Map<number, Promise<any>>();
+const pokemonSpeciesCache = new Map<number, Promise<any>>();
 
 export const pokedex = new Pokedex({
   protocol: 'https',
@@ -31,6 +35,55 @@ export const pokedex = new Pokedex({
 
 export type { NamedResource, DamageRelations, PokemonTypeData } from './pokedexTypes';
 export { generateTeams } from './teamGeneration';
+
+export function __resetPokedexResourceCaches() {
+  pokemonResourceCache.clear();
+  pokemonSpeciesCache.clear();
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex++;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  }
+
+  const workerCount = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+
+function getPokemonIdFromUrl(url: string): number {
+  return Number(url.split('/').slice(-2)[0]);
+}
+
+function fetchPokemonResource(id: number) {
+  const cached = pokemonResourceCache.get(id);
+  if (cached) return cached;
+
+  const request = pokedex.getResource(`/api/v2/pokemon/${id}/`);
+  pokemonResourceCache.set(id, request);
+  return request;
+}
+
+function fetchPokemonSpeciesResource(id: number) {
+  const cached = pokemonSpeciesCache.get(id);
+  if (cached) return cached;
+
+  const request = pokedex.getResource(`/api/v2/pokemon-species/${id}/`);
+  pokemonSpeciesCache.set(id, request);
+  return request;
+}
 
 export async function getBaseTypes(baseScore: number = BASESCORE): Promise<PokemonTypeData[]> {
   const types: PokemonTypeData[] = await Promise.all(
@@ -167,10 +220,10 @@ export async function getResistantTypes(options: {
         if (!_pokemonFilters.allowMegas && p.pokemon.name.includes('-mega')) return null;
 
         if (!p.pokemon.url) return null;
-        const id = Number(p.pokemon.url.split('/').slice(-2)[0]);
-        const poke = await pokedex.getResource(`/api/v2/pokemon/${id}/`);
-        const speciesId = Number(poke.species.url.split('/').slice(-2)[0]);
-        const species = await pokedex.getResource(`/api/v2/pokemon-species/${speciesId}/`);
+        const id = getPokemonIdFromUrl(p.pokemon.url);
+        const poke = await fetchPokemonResource(id);
+        const speciesId = getPokemonIdFromUrl(poke.species.url);
+        const species = await fetchPokemonSpeciesResource(speciesId);
 
         if (!isBreedable(species, p.pokemon.name)) return null;
 
@@ -241,6 +294,22 @@ export async function getResistantTypes(options: {
   };
 
   const baseAndDualTypes = (await getBaseTypes(baseScore)).concat(await getDualTypes(baseScore));
+
+  const uniquePokemonEntries = Array.from(
+    new Map(
+      baseAndDualTypes
+        .flatMap((typeData) => typeData.pokemon || [])
+        .filter((pokemonEntry): pokemonEntry is PokemonListEntry => !!pokemonEntry.pokemon?.url)
+        .map((pokemonEntry) => [pokemonEntry.pokemon.url as string, pokemonEntry])
+    ).values()
+  );
+
+  await mapWithConcurrency(uniquePokemonEntries, POKEMON_DETAIL_CONCURRENCY, async (pokemonEntry) => {
+    const id = getPokemonIdFromUrl(pokemonEntry.pokemon.url!);
+    const poke = await fetchPokemonResource(id);
+    const speciesId = getPokemonIdFromUrl(poke.species.url);
+    await fetchPokemonSpeciesResource(speciesId);
+  });
 
   return (await Promise.all(
     baseAndDualTypes
