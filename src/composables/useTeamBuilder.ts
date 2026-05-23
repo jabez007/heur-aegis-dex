@@ -20,6 +20,26 @@ const currentParty = ref<PartyMember[]>([]);
 const isGenerating = ref(false);
 
 export function useTeamBuilder() {
+  const resolveSelectedPokemon = (typeData: any, pokemonIndex: number, abilityName?: string) => {
+    const selectedPokemon = typeData.selectedPokemon;
+    const indexedPokemon = typeData.pokemon?.[pokemonIndex];
+    const basePokemon = selectedPokemon?.pokemon?.name === indexedPokemon?.pokemon?.name
+      ? selectedPokemon
+      : (indexedPokemon || selectedPokemon);
+
+    if (!basePokemon) return null;
+
+    const nextAbilityName = abilityName || selectedPokemon?.selected_ability_name || basePokemon.selected_ability_name;
+    const abilityProfile = nextAbilityName ? basePokemon.ability_profiles?.[nextAbilityName] : null;
+
+    return {
+      ...basePokemon,
+      selected_ability_name: nextAbilityName,
+      effective_weaknesses: abilityProfile?.weaknesses || selectedPokemon?.effective_weaknesses || basePokemon.effective_weaknesses || typeData.weaknesses || [],
+      effective_resistances: abilityProfile?.resistances || selectedPokemon?.effective_resistances || basePokemon.effective_resistances || typeData.resistances || [],
+      effective_coverages: abilityProfile?.coverages || selectedPokemon?.effective_coverages || basePokemon.effective_coverages || typeData.coverages || []
+    };
+  };
 
   const teamWeaknessSummary = computed(() => {
     const summary: Record<string, number> = {};
@@ -53,10 +73,8 @@ export function useTeamBuilder() {
       return;
     }
     
-    const pokemon = typeData.pokemon[pokemonIndex];
-    if (abilityName) {
-      pokemon.selected_ability_name = abilityName;
-    }
+    const pokemon = resolveSelectedPokemon(typeData, pokemonIndex, abilityName);
+    if (!pokemon) return;
     currentParty.value.push({
       name: pokemon.pokemon.name,
       types: pokemon.types.map((p: any) => p.type.name),
@@ -129,15 +147,11 @@ export function useTeamBuilder() {
         // Use fullList for seed lookup because the member might not be in the current allowed list
         const typeData = fullList.find(t => t.name === member.typeName);
         if (!typeData) return null;
+        const pokemonIndex = typeData.pokemon.findIndex((p: any) => p.pokemon.name === member.name);
+        const selectedPokemon = resolveSelectedPokemon(typeData, pokemonIndex, member.abilityName);
         return {
           ...typeData,
-          selectedPokemon: (() => {
-            const pokemon = typeData.pokemon.find((p: any) => p.pokemon.name === member.name);
-            if (pokemon && member.abilityName) {
-              pokemon.selected_ability_name = member.abilityName;
-            }
-            return pokemon;
-          })()
+          selectedPokemon
         };
       }).filter(Boolean);
 
