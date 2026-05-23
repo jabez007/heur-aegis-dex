@@ -69,7 +69,7 @@
                 v-model="allowMegas"
                 type="checkbox"
                 class="gba-checkbox"
-                @change="fetchTypesImmediate"
+                @change="fetchTypesDebounced"
               >
               Include Mega Evolutions
             </label>

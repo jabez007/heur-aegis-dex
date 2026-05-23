@@ -91,7 +91,7 @@ export const applyAbilityModifiers = (dr: DamageRelations, abilityNames: string[
   const candidateAbilities = abilityNames.length > 0 ? abilityNames : [''];
   const abilityProfiles = candidateAbilities.map((abilityName) => createAbilityProfile(dr, abilityName, baseScore));
 
-  const bestProfile = abilityProfiles.reduce((best: any, profile: any) => {
+  const bestProfile = abilityProfiles.reduce<ReturnType<typeof createAbilityProfile> | null>((best, profile) => {
     if (!best) return profile;
     return pickBetterDamageRelations(best.damage_relations, profile.damage_relations) === profile.damage_relations ? profile : best;
   }, null);
