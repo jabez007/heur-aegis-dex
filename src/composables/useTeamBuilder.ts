@@ -22,6 +22,11 @@ export interface PartyMember {
 const currentParty = ref<PartyMember[]>([]);
 const isGenerating = ref(false);
 
+/**
+ * Provides shared party-building state and helpers for manual and generated teams.
+ *
+ * @returns Shared party state, summary computed values, and party management actions.
+ */
 export function useTeamBuilder() {
   const toPartyMember = (member: TeamMemberResult, typeName: string, typeData: TypeDataLike): PartyMember => ({
     name: member.name,
@@ -61,7 +66,6 @@ export function useTeamBuilder() {
   const addToParty = (typeData: ActiveTypeDataLike, pokemonIndex: number, abilityName?: string) => {
     if (currentParty.value.length >= 3) return;
 
-    // Check if the same type combo is already in the party
     if (currentParty.value.some(member => member.typeName === typeData.name)) {
       notify(`A ${typeData.name.toUpperCase()} type is already in your party.`, "error");
       return;
@@ -128,7 +132,8 @@ export function useTeamBuilder() {
     isGenerating.value = true;
     try {
       const seed = currentParty.value.map((member): ActiveTypeDataLike | null => {
-        // Use fullList for seed lookup because the member might not be in the current allowed list
+        // Seed members can be filtered out of the current view, but generation still
+        // needs to reconstruct their full type record to preserve the locked choice.
         const typeData = fullList.find(t => t.name === member.typeName);
         if (!typeData) return null;
         const pokemonIndex = typeData.pokemon.findIndex((p: any) => p.pokemon.name === member.name);

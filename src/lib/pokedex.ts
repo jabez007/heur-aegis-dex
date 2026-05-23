@@ -1,4 +1,3 @@
-//https://pokeapi.co/
 import Pokedex from 'pokedex-promise-v2';
 import 'lodash.combinations';
 import _ from 'lodash';
@@ -36,6 +35,11 @@ export const pokedex = new Pokedex({
 export type { NamedResource, DamageRelations, PokemonTypeData } from './pokedexTypes';
 export { generateTeams } from './teamGeneration';
 
+/**
+ * Clears internal Pokemon detail caches. Intended for tests.
+ *
+ * @returns Nothing.
+ */
 export function __resetPokedexResourceCaches() {
   pokemonResourceCache.clear();
   pokemonSpeciesCache.clear();
@@ -71,6 +75,8 @@ function fetchPokemonResource(id: number) {
   const cached = pokemonResourceCache.get(id);
   if (cached) return cached;
 
+  // Failed in-flight requests must be evicted so later scans can retry instead
+  // of reusing a permanently rejected promise from the cache.
   const request = pokedex.getResource(`/api/v2/pokemon/${id}/`).catch((error) => {
     pokemonResourceCache.delete(id);
     throw error;
@@ -83,6 +89,8 @@ function fetchPokemonSpeciesResource(id: number) {
   const cached = pokemonSpeciesCache.get(id);
   if (cached) return cached;
 
+  // Failed in-flight requests must be evicted so later scans can retry instead
+  // of reusing a permanently rejected promise from the cache.
   const request = pokedex.getResource(`/api/v2/pokemon-species/${id}/`).catch((error) => {
     pokemonSpeciesCache.delete(id);
     throw error;
@@ -125,6 +133,12 @@ function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
   };
 }
 
+/**
+ * Fetches and scores the base elemental types from PokeAPI.
+ *
+ * @param baseScore Baseline score used to normalize offensive and defensive damage values.
+ * @returns A list of base type entries with calculated damage scores.
+ */
 export async function getBaseTypes(baseScore: number = BASESCORE): Promise<PokemonTypeData[]> {
   const types: PokemonTypeData[] = await Promise.all(
     (await pokedex.getResource('/api/v2/type/')).results
@@ -140,6 +154,12 @@ export async function getBaseTypes(baseScore: number = BASESCORE): Promise<Pokem
     });
 }
 
+/**
+ * Builds combined dual-type damage profiles from the fetched base types.
+ *
+ * @param baseScore Baseline score used to normalize offensive and defensive damage values.
+ * @returns A list of synthesized dual-type entries with merged damage relations.
+ */
 export async function getDualTypes(baseScore: number = BASESCORE): Promise<PokemonTypeData[]> {
   const baseTypes = await getBaseTypes(baseScore);
 
@@ -199,6 +219,8 @@ export async function getDualTypes(baseScore: number = BASESCORE): Promise<Pokem
           .filter((dt0_p: any) =>
             (dt[1].pokemon || []).some((dt1_p: any) => dt0_p.pokemon.name === dt1_p.pokemon.name)
           )
+          // Dual-type processing mutates enriched Pokemon records later, so each
+          // synthesized type needs its own copy instead of sharing source objects.
           .map((pokemonEntry: PokemonListEntry) => clonePokemonEntry(pokemonEntry))
       };
 
@@ -209,6 +231,13 @@ export async function getDualTypes(baseScore: number = BASESCORE): Promise<Pokem
     });
 }
 
+/**
+ * Fetches, filters, and ranks eligible type groupings and Pokemon candidates
+ * for the current Pokedex, stats, and ability-immunity settings.
+ *
+ * @param options Scan options controlling scoring, Pokedex scope, ability-immunity handling, and stat floors.
+ * @returns Ranked type results with eligible Pokemon candidates and summarized matchup data.
+ */
 export async function getResistantTypes(options: {
   baseScore?: number;
   typeFilters?: {

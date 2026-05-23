@@ -13,6 +13,13 @@ type TeamCandidate = ResistantTypeResult & {
   normalized_damage_to_score?: number;
 };
 
+/**
+ * Generates ranked teams from the allowed type pool using compatibility and
+ * coverage constraints, optionally seeding the result with fixed members.
+ *
+ * @param options Team generation options including the allowed type pool, team size, composition rules, and optional seed members.
+ * @returns Ranked team results ordered by the internal scoring model.
+ */
 export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeamResult[] {
   const {
     allowedTypes = [],

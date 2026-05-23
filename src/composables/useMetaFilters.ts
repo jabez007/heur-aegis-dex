@@ -8,6 +8,11 @@ export const ALL_TYPES = [
 const selectedTypes = ref<string[]>([...ALL_TYPES]);
 const hideEmptyTypes = ref(true);
 
+/**
+ * Provides shared meta-analysis filters for visible type combinations.
+ *
+ * @returns Shared type-selection state and filter preset helpers.
+ */
 export function useMetaFilters() {
 
   const toggleType = (type: string) => {

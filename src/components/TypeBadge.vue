@@ -33,7 +33,6 @@ const props = defineProps<{
   font-family: var(--gba-font-body);
   transition: transform 0.1s;
   
-  // Sizes
   &.mini {
     font-size: 0.65rem;
     padding: 1px 4px;

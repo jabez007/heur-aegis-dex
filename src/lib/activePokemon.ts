@@ -19,6 +19,14 @@ export interface ActiveTypeDataLike extends TypeDataLike {
   selected_ability_name: string;
 }
 
+/**
+ * Resolves the currently active ability profile for a Pokemon, falling back to
+ * its effective profile fields when no named ability profile is available.
+ *
+ * @param pokemon Pokemon entry to inspect.
+ * @param abilityName Optional explicit ability name to resolve instead of the stored selection.
+ * @returns The matching ability profile, a profile synthesized from effective fields, or `null`.
+ */
 export function getPokemonAbilityProfile(pokemon: PokemonListEntry | null | undefined, abilityName?: string): AbilityProfile | null {
   if (!pokemon) return null;
 
@@ -49,6 +57,14 @@ export function getPokemonAbilityProfile(pokemon: PokemonListEntry | null | unde
   };
 }
 
+/**
+ * Resolves the active Pokemon entry for a type card using the selected slot and ability.
+ *
+ * @param typeData Type card data containing the available Pokemon list and fallback profile values.
+ * @param pokemonIndex Index of the selected Pokemon within `typeData.pokemon`.
+ * @param abilityName Optional ability override for the selected Pokemon.
+ * @returns The resolved Pokemon entry with effective profile fields applied, or `null`.
+ */
 export function resolveSelectedPokemon(typeData: TypeDataLike, pokemonIndex: number, abilityName?: string) {
   const selectedPokemon = typeData.selectedPokemon;
   const indexedPokemon = typeData.pokemon[pokemonIndex];
@@ -75,6 +91,14 @@ export function resolveSelectedPokemon(typeData: TypeDataLike, pokemonIndex: num
   };
 }
 
+/**
+ * Projects a type card into its active UI state for the selected Pokemon and ability.
+ *
+ * @param typeData Base type card data.
+ * @param pokemonIndex Index of the selected Pokemon within `typeData.pokemon`.
+ * @param abilityName Optional ability override for the selected Pokemon.
+ * @returns A type card snapshot with selected Pokemon state and effective profile values applied.
+ */
 export function buildActiveTypeData(typeData: TypeDataLike, pokemonIndex: number, abilityName?: string) {
   const activePokemon = resolveSelectedPokemon(typeData, pokemonIndex, abilityName);
 
@@ -102,6 +126,14 @@ export function buildActiveTypeData(typeData: TypeDataLike, pokemonIndex: number
   };
 }
 
+/**
+ * Returns the effective defensive and offensive profile for a type card, using
+ * the selected Pokemon profile when one is available.
+ *
+ * @param typeData Base type card data.
+ * @param selectedPokemon Optional explicit selected Pokemon override.
+ * @returns A profile object backed by the selected Pokemon when available, otherwise the raw type data.
+ */
 export function getEffectiveTypeProfile(typeData: TypeDataLike, selectedPokemon?: PokemonListEntry | null): ResistantTypeResult | TypeDataLike {
   const activePokemon = selectedPokemon || typeData.selectedPokemon;
   if (!activePokemon) return typeData;
