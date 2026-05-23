@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import PokemonCard from './PokemonCard.vue';
+import type { ActiveTypeDataLike } from '../lib/activePokemon';
 
 const props = defineProps<{
-  filteredTypes: any[];
+  filteredTypes: ActiveTypeDataLike[];
   selectedTypesCount: number;
 }>();
 

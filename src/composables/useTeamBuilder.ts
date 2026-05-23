@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import { generateTeams } from '../lib/pokedex';
 import { resolveSelectedPokemon } from '../lib/activePokemon';
+import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
 import { useNotifications } from './useNotifications';
 
 const { notify } = useNotifications();
@@ -44,7 +45,7 @@ export function useTeamBuilder() {
     return summary;
   });
 
-  const addToParty = (typeData: any, pokemonIndex: number, abilityName?: string) => {
+  const addToParty = (typeData: ActiveTypeDataLike, pokemonIndex: number, abilityName?: string) => {
     if (currentParty.value.length >= 3) return;
 
     // Check if the same type combo is already in the party
@@ -77,7 +78,7 @@ export function useTeamBuilder() {
     currentParty.value = [];
   };
 
-  const generateFullTeam = (allowedTypes: any[]) => {
+  const generateFullTeam = (allowedTypes: TypeDataLike[]) => {
     isGenerating.value = true;
     try {
       const teams = generateTeams({
@@ -114,7 +115,7 @@ export function useTeamBuilder() {
     }
   };
 
-  const fillRemainingSlots = (fullList: any[], allowedTypes: any[]) => {
+  const fillRemainingSlots = (fullList: TypeDataLike[], allowedTypes: ActiveTypeDataLike[]) => {
     if (currentParty.value.length === 3) return;
     if (currentParty.value.length === 0) {
       generateFullTeam(allowedTypes);

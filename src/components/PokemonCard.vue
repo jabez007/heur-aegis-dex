@@ -3,9 +3,10 @@ import { computed, ref, watch } from 'vue';
 import TypeBadge from './TypeBadge.vue';
 import StatBar from './StatBar.vue';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
+import type { ActiveTypeDataLike } from '../lib/activePokemon';
 
 const props = defineProps<{
-  typeData: any;
+  typeData: ActiveTypeDataLike;
 }>();
 
 const emit = defineEmits<{
@@ -66,6 +67,7 @@ const selectedAbilityProfile = computed(() => {
 });
 
 const selectedPokemonName = computed(() => selectedPokemon.value?.pokemon?.name || 'pokemon');
+const scoreSummary = computed(() => `Defense score ${displayDamageFromScore.value}, offense score ${props.typeData.damage_to_score}`);
 
 const displayWeaknesses = computed(() => selectedAbilityProfile.value?.weaknesses || selectedPokemon.value?.effective_weaknesses || props.typeData.weaknesses || []);
 const displayQuadrupleWeaknesses = computed(() => selectedAbilityProfile.value?.quadruple_weaknesses || selectedPokemon.value?.effective_quadruple_weaknesses || props.typeData.quadruple_weaknesses || []);
@@ -94,13 +96,20 @@ const handleAddToParty = () => {
     
     <div class="stats">
       <div class="score-grid">
-        <p class="score">
+        <p
+          class="score"
+          :aria-label="`Defense score ${displayDamageFromScore}`"
+        >
           Def: {{ displayDamageFromScore }}
         </p>
-        <p class="score">
+        <p
+          class="score"
+          :aria-label="`Offense score ${typeData.damage_to_score}`"
+        >
           Off: {{ typeData.damage_to_score }}
         </p>
       </div>
+      <span class="sr-only">{{ scoreSummary }}</span>
       
       <div
         v-if="displayWeaknesses.length - displayQuadrupleWeaknesses.length > 0"
@@ -248,6 +257,18 @@ const handleAddToParty = () => {
 </template>
 
 <style lang="scss" scoped>
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .type-card {
   border: 2px solid var(--gba-text-dark);
   padding: 8px;

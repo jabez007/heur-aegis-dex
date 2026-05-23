@@ -101,6 +101,32 @@
           v-if="types.length > 0"
           :all-data-types="types"
         />
+        <section
+          v-else-if="fetchError"
+          class="gba-container state-panel"
+          aria-labelledby="scan-error-title"
+        >
+          <h2 id="scan-error-title">
+            Scan Interrupted
+          </h2>
+          <p>The Pokedex database could not be loaded.</p>
+          <button
+            class="gba-btn action-btn"
+            @click="fetchTypes"
+          >
+            Retry Scan
+          </button>
+        </section>
+        <section
+          v-else-if="!loading"
+          class="gba-container state-panel"
+          aria-labelledby="scan-idle-title"
+        >
+          <h2 id="scan-idle-title">
+            Awaiting Scan
+          </h2>
+          <p>Run a scan to load available typings and team options.</p>
+        </section>
       </main>
 
       <GbaNotification />
@@ -138,9 +164,10 @@ import { getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
 import GbaNotification from './components/GbaNotification.vue';
 import { useNotifications } from './composables/useNotifications';
+import type { TypeDataLike } from './lib/activePokemon';
 
 const loading = ref(false);
-const types = ref<any[]>([]);
+const types = ref<TypeDataLike[]>([]);
 const fetchError = ref('');
 const inPokedex = ref('national');
 const minStatsTotal = ref(480);
@@ -229,6 +256,16 @@ onMounted(() => {
 .gba-main {
   width: 100%;
   max-width: 1200px;
+}
+
+.state-panel {
+  text-align: center;
+}
+
+.action-btn {
+  background-color: var(--gba-accent-magenta);
+  color: var(--gba-text-light);
+  border-color: var(--gba-text-dark);
 }
 
 .controls {

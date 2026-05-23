@@ -2,10 +2,11 @@
 import { computed } from 'vue';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
 import TypeBadge from './TypeBadge.vue';
+import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
 
 const props = defineProps<{
-  allDataTypes: any[];
-  filteredTypes: any[];
+  allDataTypes: TypeDataLike[];
+  filteredTypes: ActiveTypeDataLike[];
 }>();
 
 const includeAbilityImmunitiesActive = computed(() =>

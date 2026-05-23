@@ -1,4 +1,4 @@
-interface AbilityProfileLike {
+export interface AbilityProfileLike {
   damage_relations?: unknown;
   weaknesses?: string[];
   quadruple_weaknesses?: string[];
@@ -9,8 +9,11 @@ interface AbilityProfileLike {
   damage_to_score?: number;
 }
 
-interface PokemonLike {
+export interface PokemonLike {
   pokemon?: { name?: string };
+  types?: Array<{ type: { name: string } }>;
+  sprite?: string;
+  stats?: Record<string, number>;
   selected_ability_name?: string;
   ability_profiles?: Record<string, AbilityProfileLike>;
   effective_damage_relations?: unknown;
@@ -23,10 +26,13 @@ interface PokemonLike {
   effective_damage_to_score?: number;
 }
 
-interface TypeDataLike {
+export interface TypeDataLike {
   name?: string;
   pokemon?: PokemonLike[];
   selectedPokemon?: PokemonLike | null;
+  selected_pokemon_index?: number;
+  selected_ability_name?: string;
+  include_ability_immunities?: boolean;
   weaknesses?: string[];
   quadruple_weaknesses?: string[];
   resistances?: string[];
@@ -34,6 +40,12 @@ interface TypeDataLike {
   coverages?: string[];
   damage_from_score?: number;
   damage_to_score?: number;
+}
+
+export interface ActiveTypeDataLike extends TypeDataLike {
+  selected_pokemon_index: number;
+  selectedPokemon: PokemonLike | null;
+  selected_ability_name: string;
 }
 
 export function getPokemonAbilityProfile(pokemon: PokemonLike | null | undefined, abilityName?: string): AbilityProfileLike | null {

@@ -5,22 +5,23 @@ import TeamWorkbench from './TeamWorkbench.vue';
 import MetaAnalysisGrid from './MetaAnalysisGrid.vue';
 import { useMetaFilters } from '../composables/useMetaFilters';
 import { buildActiveTypeData } from '../lib/activePokemon';
+import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
 
 const props = defineProps<{
-  allDataTypes: any[]
+  allDataTypes: TypeDataLike[]
 }>();
 
 const { selectedTypes, hideEmptyTypes } = useMetaFilters();
 const selectedPokemonIndices = ref<Record<string, number>>({});
 const selectedAbilityNames = ref<Record<string, string>>({});
 
-const getSelectedPokemonIndex = (typeData: any) => {
+const getSelectedPokemonIndex = (typeData: TypeDataLike) => {
   const maxIndex = Math.max((typeData.pokemon?.length || 1) - 1, 0);
   return Math.min(selectedPokemonIndices.value[typeData.name] ?? 0, maxIndex);
 };
 
-const getActiveDamageFromScore = (typeData: any) => typeData.selectedPokemon?.effective_damage_from_score ?? typeData.damage_from_score ?? Number.POSITIVE_INFINITY;
-const getActiveDamageToScore = (typeData: any) => typeData.selectedPokemon?.effective_damage_to_score ?? typeData.damage_to_score ?? 1;
+const getActiveDamageFromScore = (typeData: ActiveTypeDataLike) => typeData.selectedPokemon?.effective_damage_from_score ?? typeData.damage_from_score ?? Number.POSITIVE_INFINITY;
+const getActiveDamageToScore = (typeData: ActiveTypeDataLike) => typeData.selectedPokemon?.effective_damage_to_score ?? typeData.damage_to_score ?? 1;
 
 const filteredTypes = computed(() => {
   if (selectedTypes.value.length === 0) return [];
