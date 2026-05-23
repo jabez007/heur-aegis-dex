@@ -14,6 +14,9 @@ describe('useTeamBuilder', () => {
       weaknesses: ['water', 'rock', 'ground'],
       resistances: ['fire', 'grass', 'bug'],
       coverages: ['grass', 'bug', 'ice'],
+      ineffectives: ['water', 'fire', 'rock'],
+      selected_pokemon_index: 0,
+      selected_ability_name: 'blaze',
       pokemon: [{
         pokemon: { name: 'charizard' },
         types: [{ type: { name: 'fire' } }],

@@ -57,15 +57,21 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
   function isCompatible(current: TeamCandidate, candidate: TeamCandidate): boolean {
     const currentProfile = getEffectiveTypeProfile(current);
     const candidateProfile = getEffectiveTypeProfile(candidate);
+    const currentWeaknesses = currentProfile.weaknesses || [];
+    const currentIneffectives = currentProfile.ineffectives || [];
+    const candidateWeaknesses = candidateProfile.weaknesses || [];
+    const candidateIneffectives = candidateProfile.ineffectives || [];
+    const candidateCoverages = candidateProfile.coverages || [];
+    const candidateResistances = candidateProfile.resistances || [];
 
     const passesSharedType = _teamComposition.allowSharedTypes || current.name.split('/').every((n) => !candidate.name.includes(n));
     const passesSharedWeakness = _teamComposition.allowSharedWeaknesses ||
-      (currentProfile.weaknesses.every((w) => !candidateProfile.weaknesses.includes(w)) && currentProfile.ineffectives.every((i) => !candidateProfile.ineffectives.includes(i)));
+      (currentWeaknesses.every((w) => !candidateWeaknesses.includes(w)) && currentIneffectives.every((i) => !candidateIneffectives.includes(i)));
 
     const passesCoverage = !_teamComposition.coverWeaknesses ||
-      currentProfile.weaknesses.some((w) => candidateProfile.coverages.includes(w) || candidateProfile.resistances.includes(w)) ||
-      candidateProfile.coverages.some((c) => currentProfile.weaknesses.includes(c)) ||
-      candidateProfile.resistances.some((r) => currentProfile.weaknesses.includes(r));
+      currentWeaknesses.some((w) => candidateCoverages.includes(w) || candidateResistances.includes(w)) ||
+      candidateCoverages.some((c) => currentWeaknesses.includes(c)) ||
+      candidateResistances.some((r) => currentWeaknesses.includes(r));
 
     return passesSharedType && passesSharedWeakness && passesCoverage;
   }

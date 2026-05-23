@@ -7,6 +7,15 @@ import {
 } from './activePokemon';
 
 describe('activePokemon helpers', () => {
+  const createDamageRelations = (id: string) => ({
+    double_damage_from: [{ name: `${id}-from` }],
+    half_damage_from: [],
+    no_damage_from: [],
+    double_damage_to: [{ name: `${id}-to` }],
+    half_damage_to: [],
+    no_damage_to: []
+  });
+
   const baseTypeData = {
     name: 'fire',
     weaknesses: ['water', 'rock', 'ground'],
@@ -24,7 +33,7 @@ describe('activePokemon helpers', () => {
       selected_ability_name: 'levitate',
       ability_profiles: {
         blaze: {
-          damage_relations: { id: 'blaze-profile' },
+          damage_relations: createDamageRelations('blaze-profile'),
           weaknesses: ['water', 'rock', 'ground'],
           quadruple_weaknesses: [],
           resistances: ['fire', 'grass', 'bug'],
@@ -34,7 +43,7 @@ describe('activePokemon helpers', () => {
           damage_to_score: 20
         },
         levitate: {
-          damage_relations: { id: 'levitate-profile' },
+          damage_relations: createDamageRelations('levitate-profile'),
           weaknesses: ['water', 'rock'],
           quadruple_weaknesses: [],
           resistances: ['fire', 'grass', 'bug', 'ground'],
@@ -44,7 +53,7 @@ describe('activePokemon helpers', () => {
           damage_to_score: 20
         }
       },
-      effective_damage_relations: { id: 'levitate-profile' },
+      effective_damage_relations: createDamageRelations('levitate-profile'),
       effective_weaknesses: ['water', 'rock'],
       effective_quadruple_weaknesses: [],
       effective_resistances: ['fire', 'grass', 'bug', 'ground'],
@@ -65,8 +74,9 @@ describe('activePokemon helpers', () => {
 
   it('falls back to effective profile data when no ability profile is available', () => {
     const pokemon = {
+      pokemon: { name: 'flareon' },
       selected_ability_name: 'flash-fire',
-      effective_damage_relations: { id: 'effective-profile' },
+      effective_damage_relations: createDamageRelations('effective-profile'),
       effective_weaknesses: ['water'],
       effective_quadruple_weaknesses: [],
       effective_resistances: ['fire', 'grass'],
@@ -77,7 +87,7 @@ describe('activePokemon helpers', () => {
     };
 
     expect(getPokemonAbilityProfile(pokemon)).toEqual({
-      damage_relations: { id: 'effective-profile' },
+      damage_relations: createDamageRelations('effective-profile'),
       weaknesses: ['water'],
       quadruple_weaknesses: [],
       resistances: ['fire', 'grass'],
@@ -94,7 +104,7 @@ describe('activePokemon helpers', () => {
       selectedPokemon: {
         ...baseTypeData.pokemon[0],
         selected_ability_name: 'blaze',
-        effective_damage_relations: { id: 'blaze-profile' },
+        effective_damage_relations: createDamageRelations('blaze-profile'),
         effective_weaknesses: ['water', 'rock', 'ground'],
         effective_resistances: ['fire', 'grass', 'bug'],
         effective_ineffectives: ['water', 'fire', 'rock'],
@@ -107,7 +117,7 @@ describe('activePokemon helpers', () => {
     const resolvedPokemon = resolveSelectedPokemon(typeData, 0, 'blaze');
 
     expect(resolvedPokemon?.selected_ability_name).toBe('blaze');
-    expect(resolvedPokemon?.effective_damage_relations).toEqual({ id: 'blaze-profile' });
+    expect(resolvedPokemon?.effective_damage_relations).toEqual(createDamageRelations('blaze-profile'));
     expect(resolvedPokemon?.effective_weaknesses).toEqual(['water', 'rock', 'ground']);
     expect(resolvedPokemon?.effective_resistances).toEqual(['fire', 'grass', 'bug']);
   });
@@ -131,7 +141,8 @@ describe('activePokemon helpers', () => {
       ineffectives: ['normal'],
       coverages: ['ghost', 'psychic'],
       damage_from_score: 16,
-      damage_to_score: 18
+      damage_to_score: 18,
+      pokemon: []
     });
 
     expect(typeProfile.weaknesses).toEqual(['ghost', 'dark']);

@@ -2,23 +2,15 @@ import type {
   AbilityProfile,
   DamageRelations,
   PokemonListEntry,
-  ResistantTypeResult
+  ResistantTypeResult,
+  TeamTypeData
 } from './pokedexTypes';
 
-export interface TypeDataLike {
-  name?: string;
-  pokemon?: PokemonListEntry[];
+export interface TypeDataLike extends TeamTypeData {
   selectedPokemon?: PokemonListEntry | null;
   selected_pokemon_index?: number;
   selected_ability_name?: string;
   include_ability_immunities?: boolean;
-  weaknesses?: string[];
-  quadruple_weaknesses?: string[];
-  resistances?: string[];
-  ineffectives?: string[];
-  coverages?: string[];
-  damage_from_score?: number;
-  damage_to_score?: number;
 }
 
 export interface ActiveTypeDataLike extends TypeDataLike {
@@ -59,7 +51,7 @@ export function getPokemonAbilityProfile(pokemon: PokemonListEntry | null | unde
 
 export function resolveSelectedPokemon(typeData: TypeDataLike, pokemonIndex: number, abilityName?: string) {
   const selectedPokemon = typeData.selectedPokemon;
-  const indexedPokemon = typeData.pokemon?.[pokemonIndex];
+  const indexedPokemon = typeData.pokemon[pokemonIndex];
   const basePokemon = selectedPokemon?.pokemon?.name === indexedPokemon?.pokemon?.name
     ? selectedPokemon
     : (indexedPokemon || selectedPokemon);

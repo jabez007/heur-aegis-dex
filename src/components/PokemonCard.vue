@@ -4,6 +4,7 @@ import TypeBadge from './TypeBadge.vue';
 import StatBar from './StatBar.vue';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
 import type { ActiveTypeDataLike } from '../lib/activePokemon';
+import type { PokemonListEntry } from '../lib/pokedexTypes';
 
 const props = defineProps<{
   typeData: ActiveTypeDataLike;
@@ -19,9 +20,12 @@ const { addToParty, currentParty } = useTeamBuilder();
 const selectedPokemonIndex = ref(0);
 const selectedAbilityName = ref('');
 const showStats = ref(false);
+const pokemonList = computed(() => props.typeData.pokemon);
+const currentPokemon = computed(() => pokemonList.value[selectedPokemonIndex.value] || null);
+const availableAbilities = computed(() => currentPokemon.value?.abilities || []);
 
-watch(() => [props.typeData.pokemon, props.typeData.selected_pokemon_index], ([newList, selectedIndex]) => {
-  const maxLength = newList?.length || 0;
+watch([pokemonList, () => props.typeData.selected_pokemon_index], ([newList, selectedIndex]) => {
+  const maxLength = newList.length;
   if (maxLength > 0) {
     selectedPokemonIndex.value = Math.min(Number(selectedIndex ?? 0), maxLength - 1);
   } else {
@@ -37,15 +41,15 @@ const prevPokemon = () => {
 };
 
 const nextPokemon = () => {
-  const maxLength = props.typeData.pokemon.length;
+  const maxLength = pokemonList.value.length;
   const nextIndex = (selectedPokemonIndex.value + 1) % maxLength;
   selectedPokemonIndex.value = nextIndex;
   emit('update:selected-pokemon-index', nextIndex);
 };
 
-const selectedPokemon = computed(() => props.typeData.pokemon[selectedPokemonIndex.value]);
+const selectedPokemon = computed<PokemonListEntry | null>(() => currentPokemon.value);
 
-watch(() => [selectedPokemon.value, props.typeData.selected_ability_name], ([pokemon, abilityName]) => {
+watch([selectedPokemon, () => props.typeData.selected_ability_name], ([pokemon, abilityName]) => {
   if (!pokemon) {
     selectedAbilityName.value = '';
     return;
@@ -149,13 +153,13 @@ const handleAddToParty = () => {
       </div>
     </div>
 
-    <div
-      v-if="typeData.pokemon.length > 0"
-      class="pokemon-list"
-    >
+      <div
+        v-if="pokemonList.length > 0 && currentPokemon"
+        class="pokemon-list"
+      >
       <div class="pokemon-selector">
         <button
-          v-if="typeData.pokemon.length > 1"
+          v-if="pokemonList.length > 1"
           class="arrow-btn"
           :aria-label="`Show previous ${typeData.name} Pokemon option`"
           @click="prevPokemon"
@@ -163,13 +167,13 @@ const handleAddToParty = () => {
           ◀
         </button>
         <img 
-          v-if="typeData.pokemon[selectedPokemonIndex].sprite" 
-          :src="typeData.pokemon[selectedPokemonIndex].sprite" 
-          :alt="typeData.pokemon[selectedPokemonIndex].pokemon.name" 
+          v-if="currentPokemon.sprite"
+          :src="currentPokemon.sprite || undefined"
+          :alt="currentPokemon.pokemon.name"
           class="pixel-sprite"
         >
         <button
-          v-if="typeData.pokemon.length > 1"
+          v-if="pokemonList.length > 1"
           class="arrow-btn"
           :aria-label="`Show next ${typeData.name} Pokemon option`"
           @click="nextPokemon"
@@ -180,17 +184,17 @@ const handleAddToParty = () => {
       
       <div class="poke-name-wrapper">
         <p class="poke-name">
-          {{ typeData.pokemon[selectedPokemonIndex].pokemon.name }}
+          {{ currentPokemon.pokemon.name }}
         </p>
       </div>
       
       <div
-        v-if="typeData.include_ability_immunities !== false && selectedPokemon?.abilities?.length > 1"
+        v-if="typeData.include_ability_immunities !== false && availableAbilities.length > 1"
         class="ability-panel"
       >
         <div class="ability-panel-header">
           <span class="ability-label">Ability Loadout</span>
-          <span class="ability-count">{{ selectedPokemon.abilities.length }} options</span>
+          <span class="ability-count">{{ availableAbilities.length }} options</span>
         </div>
         <label class="ability-row">
           <select
@@ -199,7 +203,7 @@ const handleAddToParty = () => {
             :aria-label="`Select ability for ${selectedPokemonName}`"
           >
             <option
-              v-for="ability in selectedPokemon.abilities"
+              v-for="ability in availableAbilities"
               :key="ability.name"
               :value="ability.name"
             >
@@ -228,10 +232,10 @@ const handleAddToParty = () => {
       </div>
       
       <p
-        v-if="typeData.pokemon.length > 1"
+        v-if="pokemonList.length > 1"
         class="poke-count"
       >
-        {{ selectedPokemonIndex + 1 }} / {{ typeData.pokemon.length }}
+        {{ selectedPokemonIndex + 1 }} / {{ pokemonList.length }}
       </p>
 
       <Transition name="wipe">
@@ -240,7 +244,7 @@ const handleAddToParty = () => {
           class="stat-bars"
         >
           <StatBar 
-            v-for="(val, stat) in typeData.pokemon[selectedPokemonIndex].stats" 
+            v-for="(val, stat) in currentPokemon.stats" 
             :key="stat"
             :label="(stat as string).replace('special-', 'S').substring(0, 3)"
             :value="val"

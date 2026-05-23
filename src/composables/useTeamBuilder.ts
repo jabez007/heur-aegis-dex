@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import { generateTeams } from '../lib/pokedex';
 import { resolveSelectedPokemon } from '../lib/activePokemon';
 import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
+import type { TeamMemberResult } from '../lib/pokedexTypes';
 import { useNotifications } from './useNotifications';
 
 const { notify } = useNotifications();
@@ -22,6 +23,18 @@ const currentParty = ref<PartyMember[]>([]);
 const isGenerating = ref(false);
 
 export function useTeamBuilder() {
+  const toPartyMember = (member: TeamMemberResult, typeName: string, typeData: TypeDataLike): PartyMember => ({
+    name: member.name,
+    types: member.types,
+    sprite: member.sprite || '',
+    stats: member.stats,
+    abilityName: member.selected_ability_name,
+    weaknesses: member.effective_weaknesses || typeData.weaknesses,
+    resistances: member.effective_resistances || typeData.resistances,
+    coverages: member.effective_coverages || typeData.coverages,
+    typeName
+  });
+
   const teamWeaknessSummary = computed(() => {
     const summary: Record<string, number> = {};
     currentParty.value.forEach(member => {
@@ -55,11 +68,11 @@ export function useTeamBuilder() {
     }
     
     const pokemon = resolveSelectedPokemon(typeData, pokemonIndex, abilityName);
-    if (!pokemon) return;
+    if (!pokemon || !pokemon.types || !pokemon.stats) return;
     currentParty.value.push({
       name: pokemon.pokemon.name,
-      types: pokemon.types.map((p: any) => p.type.name),
-      sprite: pokemon.sprite,
+      types: pokemon.types.map((p) => p.type.name),
+      sprite: pokemon.sprite || '',
       stats: pokemon.stats,
       abilityName: pokemon.selected_ability_name,
       weaknesses: pokemon.effective_weaknesses || typeData.weaknesses,
@@ -89,21 +102,11 @@ export function useTeamBuilder() {
       
       if (teams.length > 0) {
         const topTeam = teams[0];
-        currentParty.value = topTeam.pokemon.map((p: any, idx: number) => {
-            const typeData = allowedTypes.find(t => t.name === topTeam.types[idx]);
-            if (!typeData) return null;
-            return {
-                name: p.name,
-                types: p.types,
-                sprite: p.sprite,
-                stats: p.stats,
-                abilityName: p.selected_ability_name,
-                weaknesses: p.effective_weaknesses || typeData.weaknesses,
-                resistances: p.effective_resistances || typeData.resistances,
-                coverages: p.effective_coverages || typeData.coverages,
-                typeName: typeData.name
-            };
-        }).filter((m: any): m is PartyMember => m !== null);
+        currentParty.value = topTeam.pokemon.map((p, idx) => {
+          const typeName = topTeam.types[idx];
+          const typeData = allowedTypes.find(t => t.name === typeName);
+          return typeData ? toPartyMember(p, typeName, typeData) : null;
+        }).filter((m): m is PartyMember => m !== null);
         notify("Generated optimal team based on meta.", "success");
       } else {
         notify("No valid teams found with current filters.", "error");
@@ -124,42 +127,34 @@ export function useTeamBuilder() {
 
     isGenerating.value = true;
     try {
-      const seed = currentParty.value.map(member => {
+      const seed = currentParty.value.map((member): ActiveTypeDataLike | null => {
         // Use fullList for seed lookup because the member might not be in the current allowed list
         const typeData = fullList.find(t => t.name === member.typeName);
         if (!typeData) return null;
         const pokemonIndex = typeData.pokemon.findIndex((p: any) => p.pokemon.name === member.name);
         const selectedPokemon = resolveSelectedPokemon(typeData, pokemonIndex, member.abilityName);
+        if (!selectedPokemon) return null;
         return {
           ...typeData,
-          selectedPokemon
+          selectedPokemon,
+          selected_pokemon_index: pokemonIndex,
+          selected_ability_name: selectedPokemon.selected_ability_name || ''
         };
-      }).filter(Boolean);
+      }).filter((item): item is ActiveTypeDataLike => item !== null);
 
       const teams = generateTeams({
         allowedTypes: allowedTypes,
         teamSize: 3,
-        seed: seed as any[]
+        seed
       });
 
       if (teams.length > 0) {
         const topTeam = teams[0];
-        currentParty.value = topTeam.pokemon.map((p: any, idx: number) => {
-            // Re-hydrate using fullList so we can find types that might be outside the current 'allowed' filter (for the seed members)
-            const typeData = fullList.find(t => t.name === topTeam.types[idx]);
-            if (!typeData) return null;
-            return {
-                name: p.name,
-                types: p.types,
-                sprite: p.sprite,
-                stats: p.stats,
-                abilityName: p.selected_ability_name,
-                weaknesses: p.effective_weaknesses || typeData.weaknesses,
-                resistances: p.effective_resistances || typeData.resistances,
-                coverages: p.effective_coverages || typeData.coverages,
-                typeName: typeData.name
-            };
-        }).filter((m: any): m is PartyMember => m !== null);
+        currentParty.value = topTeam.pokemon.map((p, idx) => {
+          const typeName = topTeam.types[idx];
+          const typeData = fullList.find(t => t.name === typeName);
+          return typeData ? toPartyMember(p, typeName, typeData) : null;
+        }).filter((m): m is PartyMember => m !== null);
         notify("Found compatible partners for your team.", "success");
       } else {
         notify("No compatible partners found for this team.", "error");

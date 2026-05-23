@@ -188,8 +188,8 @@ describe('pokedex.js API integration logic', () => {
     const fireType = resistant.find(t => t.name === 'fire');
     expect(fireType).toBeDefined();
     expect(fireType!.pokemon[0].selected_ability_name).toBe('levitate');
-    expect(fireType!.pokemon[0].ability_profiles.blaze.weaknesses).toContain('ground');
-    expect(fireType!.pokemon[0].ability_profiles.levitate.weaknesses).toEqual(['water', 'rock']);
+    expect(fireType!.pokemon[0].ability_profiles!.blaze.weaknesses).toContain('ground');
+    expect(fireType!.pokemon[0].ability_profiles!.levitate.weaknesses).toEqual(['water', 'rock']);
     expect(fireType!.pokemon[0].effective_weaknesses).toEqual(['water', 'rock']);
     expect(fireType!.pokemon[0].effective_resistances).toContain('ground');
     expect(fireType!.damage_from_score).toBe(17.5);
@@ -464,10 +464,10 @@ describe('pokedex.js - generateTeams', () => {
     );
 
     expect(sharedQuadTeam).toBeDefined();
-    expect(sharedQuadTeam.sharedQuadrupleWeaknesses).toEqual(['fire']);
+    expect(sharedQuadTeam!.sharedQuadrupleWeaknesses).toEqual(['fire']);
     expect(safeTeam).toBeDefined();
-    expect(safeTeam.sharedQuadrupleWeaknesses).toEqual([]);
-    expect(sharedQuadTeam.score).toBeLessThan(safeTeam.score);
+    expect(safeTeam!.sharedQuadrupleWeaknesses).toEqual([]);
+    expect(sharedQuadTeam!.score).toBeLessThan(safeTeam!.score);
   });
 
   it('should handle missing normalized scores without producing NaN', () => {
@@ -537,7 +537,7 @@ describe('pokedex.js - generateTeams', () => {
     // Assert that 'fire' (charizard) IS in the team and it's the correct one from the seed
     const charizard = teams[0].pokemon.find((p: any) => p.name === 'charizard');
     expect(charizard).toBeDefined();
-    expect(charizard.sprite).toBe('charizard.png');
+    expect(charizard!.sprite).toBe('charizard.png');
   });
 
   it('should correctly map nested pokemon data to the team structure', () => {
@@ -558,4 +558,3 @@ describe('pokedex.js - generateTeams', () => {
     expect(Array.isArray(poke.types)).toBe(true);
   });
 });
-

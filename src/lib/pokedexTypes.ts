@@ -30,6 +30,18 @@ export interface PokemonTypeData {
   damage_to_score?: number;
 }
 
+export interface TeamTypeData {
+  name: string;
+  weaknesses: string[];
+  quadruple_weaknesses?: string[];
+  resistances: string[];
+  ineffectives: string[];
+  coverages: string[];
+  damage_from_score?: number;
+  damage_to_score?: number;
+  pokemon: PokemonListEntry[];
+}
+
 export interface PokemonRef {
   name: string;
   url?: string;
@@ -85,17 +97,8 @@ export interface PokemonListEntry {
   effective_damage_to_score?: number;
 }
 
-export interface ResistantTypeResult {
-  name: string;
+export interface ResistantTypeResult extends TeamTypeData {
   include_ability_immunities: boolean;
-  weaknesses: string[];
-  quadruple_weaknesses: string[];
-  resistances: string[];
-  ineffectives: string[];
-  coverages: string[];
-  damage_from_score?: number;
-  damage_to_score?: number;
-  pokemon: PokemonListEntry[];
 }
 
 export interface TeamMemberResult {
@@ -127,12 +130,12 @@ export interface GeneratedTeamResult {
 }
 
 export interface GenerateTeamsOptions {
-  allowedTypes?: Array<PokemonTypeData | ResistantTypeResult>;
+  allowedTypes?: Array<PokemonTypeData | ResistantTypeResult | TeamTypeData>;
   teamSize?: number;
   teamComposition?: {
     allowSharedTypes?: boolean;
     allowSharedWeaknesses?: boolean;
     coverWeaknesses?: boolean;
   };
-  seed?: Array<PokemonTypeData | ResistantTypeResult>;
+  seed?: Array<PokemonTypeData | ResistantTypeResult | TeamTypeData>;
 }

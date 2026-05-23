@@ -166,6 +166,7 @@ export async function getResistantTypes(options: {
       (t.pokemon || []).map(async (p: PokemonListEntry) => {
         if (!_pokemonFilters.allowMegas && p.pokemon.name.includes('-mega')) return null;
 
+        if (!p.pokemon.url) return null;
         const id = Number(p.pokemon.url.split('/').slice(-2)[0]);
         const poke = await pokedex.getResource(`/api/v2/pokemon/${id}/`);
         const speciesId = Number(poke.species.url.split('/').slice(-2)[0]);
@@ -185,7 +186,7 @@ export async function getResistantTypes(options: {
           name: abilityEntry.ability.name,
           is_hidden: abilityEntry.is_hidden
         }));
-        p.stats = poke.stats.reduce((merged: PokemonStats, curr: any) => {
+        const stats = poke.stats.reduce((merged: PokemonStats, curr: any) => {
           merged[curr.stat.name] = curr.base_stat;
           return merged;
         }, {
@@ -196,15 +197,17 @@ export async function getResistantTypes(options: {
           'special-defense': 0,
           speed: 0
         });
+        p.stats = stats;
 
-        if (p.stats.attack < _statsFilters.minimumAttacks && p.stats['special-attack'] < _statsFilters.minimumAttacks) return null;
-        if ((p.stats.defense + p.stats['special-defense']) / 2 < _statsFilters.minimumDefenses) return null;
+        if (stats.attack < _statsFilters.minimumAttacks && stats['special-attack'] < _statsFilters.minimumAttacks) return null;
+        if ((stats.defense + stats['special-defense']) / 2 < _statsFilters.minimumDefenses) return null;
 
-        p.stats_total = poke.stats.reduce((total: number, curr: any) => total + curr.base_stat, 0);
-        if (p.stats_total < _statsFilters.minimumStatsTotal) return null;
+        const statsTotal = poke.stats.reduce((total: number, curr: any) => total + curr.base_stat, 0);
+        p.stats_total = statsTotal;
+        if (statsTotal < _statsFilters.minimumStatsTotal) return null;
 
         const baseDamageRelations = cloneDamageRelations(t.damage_relations);
-        const abilityNames = p.abilities.map((ability) => ability.name);
+        const abilityNames = (p.abilities || []).map((ability) => ability.name);
         const { abilityProfiles, bestProfile } = _pokemonFilters.includeAbilityImmunities
           ? applyAbilityModifiers(baseDamageRelations, abilityNames, baseScore)
           : {
@@ -271,8 +274,12 @@ export async function getResistantTypes(options: {
       })
   ))
     .sort((t1, t2) => {
-      const t1Quotient = (t1.damage_from_score / t1.damage_to_score);
-      const t2Quotient = (t2.damage_from_score / t2.damage_to_score);
-      return t2Quotient === t1Quotient ? t1.damage_from_score - t2.damage_from_score : t1Quotient - t2Quotient;
+      const t1From = t1.damage_from_score ?? Number.POSITIVE_INFINITY;
+      const t1To = t1.damage_to_score ?? 1;
+      const t2From = t2.damage_from_score ?? Number.POSITIVE_INFINITY;
+      const t2To = t2.damage_to_score ?? 1;
+      const t1Quotient = (t1From / t1To);
+      const t2Quotient = (t2From / t2To);
+      return t2Quotient === t1Quotient ? t1From - t2From : t1Quotient - t2Quotient;
     });
 }

@@ -36,6 +36,7 @@
     "build:all": "npm run build && npm run build:lib",
     "preview": "vite preview",
     "test": "vitest",
+    "type-check": "vue-tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "predeploy": "npm run build",
