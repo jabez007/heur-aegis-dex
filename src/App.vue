@@ -15,6 +15,13 @@
         <p v-else>
           System Online // Waiting for Scan...
         </p>
+        <p
+          v-if="fetchError"
+          class="status-error"
+          role="alert"
+        >
+          {{ fetchError }}
+        </p>
       </header>
 
       <main class="gba-main">
@@ -24,9 +31,10 @@
             <button
               class="gba-btn"
               :class="{ active: loading }"
+              :disabled="loading"
               @click="fetchTypes"
             >
-              {{ loading ? 'Loading...' : 'Scan Types' }}
+              {{ loading ? 'Loading...' : (fetchError ? 'Retry Scan' : 'Scan Types') }}
             </button>
             
             <label class="gba-label">
@@ -129,17 +137,21 @@ import lscache from 'lscache';
 import { getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
 import GbaNotification from './components/GbaNotification.vue';
+import { useNotifications } from './composables/useNotifications';
 
 const loading = ref(false);
 const types = ref<any[]>([]);
+const fetchError = ref('');
 const inPokedex = ref('national');
 const minStatsTotal = ref(480);
 const minAttacks = ref(80);
 const minDefenses = ref(80);
 const includeAbilityImmunities = ref(true);
+const { notify } = useNotifications();
 
 const fetchTypes = () => {
   loading.value = true;
+  fetchError.value = '';
   
   const filters = {
     maxDamageFromScore: true,
@@ -174,6 +186,9 @@ const fetchTypes = () => {
       loading.value = false;
     }).catch(err => {
       console.error(err);
+      types.value = [];
+      fetchError.value = 'Pokedex scan failed. Check your connection and try again.';
+      notify(fetchError.value, 'error');
       loading.value = false;
     });
   }
@@ -205,6 +220,12 @@ onMounted(() => {
   }
 }
 
+.status-error {
+  margin-top: 12px;
+  color: #ffdce0;
+  font-family: var(--gba-font-heading);
+}
+
 .gba-main {
   width: 100%;
   max-width: 1200px;
@@ -216,6 +237,11 @@ onMounted(() => {
   align-items: center;
   flex-wrap: wrap;
   margin-bottom: 16px;
+}
+
+.controls .gba-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .stat-controls {

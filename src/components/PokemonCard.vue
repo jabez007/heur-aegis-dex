@@ -65,6 +65,8 @@ const selectedAbilityProfile = computed(() => {
   return pokemon.ability_profiles?.[selectedAbilityName.value] || null;
 });
 
+const selectedPokemonName = computed(() => selectedPokemon.value?.pokemon?.name || 'pokemon');
+
 const displayWeaknesses = computed(() => selectedAbilityProfile.value?.weaknesses || selectedPokemon.value?.effective_weaknesses || props.typeData.weaknesses || []);
 const displayQuadrupleWeaknesses = computed(() => selectedAbilityProfile.value?.quadruple_weaknesses || selectedPokemon.value?.effective_quadruple_weaknesses || props.typeData.quadruple_weaknesses || []);
 const displayCoverages = computed(() => selectedAbilityProfile.value?.coverages || selectedPokemon.value?.effective_coverages || props.typeData.coverages || []);
@@ -146,6 +148,7 @@ const handleAddToParty = () => {
         <button
           v-if="typeData.pokemon.length > 1"
           class="arrow-btn"
+          :aria-label="`Show previous ${typeData.name} Pokemon option`"
           @click="prevPokemon"
         >
           ◀
@@ -159,6 +162,7 @@ const handleAddToParty = () => {
         <button
           v-if="typeData.pokemon.length > 1"
           class="arrow-btn"
+          :aria-label="`Show next ${typeData.name} Pokemon option`"
           @click="nextPokemon"
         >
           ▶
@@ -183,6 +187,7 @@ const handleAddToParty = () => {
           <select
             v-model="selectedAbilityName"
             class="ability-select"
+            :aria-label="`Select ability for ${selectedPokemonName}`"
           >
             <option
               v-for="ability in selectedPokemon.abilities"
@@ -198,6 +203,7 @@ const handleAddToParty = () => {
       <div class="poke-actions">
         <button
           class="gba-btn mini-btn"
+          :aria-label="`${showStats ? 'Hide' : 'Show'} stats for ${selectedPokemonName}`"
           @click="toggleStats"
         >
           {{ showStats ? 'Hide' : 'Stats' }}
@@ -205,6 +211,7 @@ const handleAddToParty = () => {
         <button 
           class="gba-btn mini-btn party-btn" 
           :disabled="currentParty.length >= 3" 
+          :aria-label="`Add ${selectedPokemonName} to party`"
           @click="handleAddToParty"
         >
           + Party
