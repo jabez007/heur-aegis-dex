@@ -67,9 +67,7 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
     const currentProfile = getEffectiveTypeProfile(current);
     const candidateProfile = getEffectiveTypeProfile(candidate);
     const currentWeaknesses = currentProfile.weaknesses || [];
-    const currentIneffectives = currentProfile.ineffectives || [];
     const candidateWeaknesses = candidateProfile.weaknesses || [];
-    const candidateIneffectives = candidateProfile.ineffectives || [];
     const currentCoverages = currentProfile.coverages || [];
     const currentResistances = currentProfile.resistances || [];
     const candidateCoverages = candidateProfile.coverages || [];
@@ -77,7 +75,7 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
 
     const passesSharedType = _teamComposition.allowSharedTypes || current.name.split('/').every((n) => !candidate.name.includes(n));
     const passesSharedWeakness = _teamComposition.allowSharedWeaknesses ||
-      (currentWeaknesses.every((w) => !candidateWeaknesses.includes(w)) && currentIneffectives.every((i) => !candidateIneffectives.includes(i)));
+      currentWeaknesses.every((w) => !candidateWeaknesses.includes(w));
 
     const coversWeaknesses = (coverages: string[], resistances: string[], weaknesses: string[]): boolean =>
       weaknesses.length === 0 || weaknesses.some((weakness) => coverages.includes(weakness) || resistances.includes(weakness));

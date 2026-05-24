@@ -67,27 +67,28 @@ export function getPokemonAbilityProfile(pokemon: PokemonListEntry | null | unde
  */
 export function resolveSelectedPokemon(typeData: TypeDataLike, pokemonIndex: number, abilityName?: string) {
   const selectedPokemon = typeData.selectedPokemon;
+  const currentSelected = typeData.selected_pokemon_index === pokemonIndex ? selectedPokemon : undefined;
   const indexedPokemon = typeData.pokemon[pokemonIndex];
-  const basePokemon = selectedPokemon?.pokemon?.name === indexedPokemon?.pokemon?.name
-    ? selectedPokemon
-    : (indexedPokemon || selectedPokemon);
+  const basePokemon = currentSelected?.pokemon?.name === indexedPokemon?.pokemon?.name
+    ? currentSelected
+    : (indexedPokemon || currentSelected);
 
   if (!basePokemon) return null;
 
-  const nextAbilityName = abilityName || selectedPokemon?.selected_ability_name || basePokemon.selected_ability_name || '';
+  const nextAbilityName = abilityName || currentSelected?.selected_ability_name || basePokemon.selected_ability_name || '';
   const abilityProfile = getPokemonAbilityProfile(basePokemon, nextAbilityName);
 
   return {
     ...basePokemon,
     selected_ability_name: nextAbilityName,
-    effective_damage_relations: abilityProfile?.damage_relations || selectedPokemon?.effective_damage_relations || basePokemon.effective_damage_relations,
-    effective_weaknesses: abilityProfile?.weaknesses || selectedPokemon?.effective_weaknesses || basePokemon.effective_weaknesses || typeData.weaknesses || [],
-    effective_quadruple_weaknesses: abilityProfile?.quadruple_weaknesses || selectedPokemon?.effective_quadruple_weaknesses || basePokemon.effective_quadruple_weaknesses || typeData.quadruple_weaknesses || [],
-    effective_resistances: abilityProfile?.resistances || selectedPokemon?.effective_resistances || basePokemon.effective_resistances || typeData.resistances || [],
-    effective_ineffectives: abilityProfile?.ineffectives || selectedPokemon?.effective_ineffectives || basePokemon.effective_ineffectives || typeData.ineffectives || [],
-    effective_coverages: abilityProfile?.coverages || selectedPokemon?.effective_coverages || basePokemon.effective_coverages || typeData.coverages || [],
-    effective_damage_from_score: abilityProfile?.damage_from_score ?? selectedPokemon?.effective_damage_from_score ?? basePokemon.effective_damage_from_score ?? typeData.damage_from_score,
-    effective_damage_to_score: abilityProfile?.damage_to_score ?? selectedPokemon?.effective_damage_to_score ?? basePokemon.effective_damage_to_score ?? typeData.damage_to_score
+    effective_damage_relations: abilityProfile?.damage_relations || currentSelected?.effective_damage_relations || basePokemon.effective_damage_relations,
+    effective_weaknesses: abilityProfile?.weaknesses || currentSelected?.effective_weaknesses || basePokemon.effective_weaknesses || typeData.weaknesses || [],
+    effective_quadruple_weaknesses: abilityProfile?.quadruple_weaknesses || currentSelected?.effective_quadruple_weaknesses || basePokemon.effective_quadruple_weaknesses || typeData.quadruple_weaknesses || [],
+    effective_resistances: abilityProfile?.resistances || currentSelected?.effective_resistances || basePokemon.effective_resistances || typeData.resistances || [],
+    effective_ineffectives: abilityProfile?.ineffectives || currentSelected?.effective_ineffectives || basePokemon.effective_ineffectives || typeData.ineffectives || [],
+    effective_coverages: abilityProfile?.coverages || currentSelected?.effective_coverages || basePokemon.effective_coverages || typeData.coverages || [],
+    effective_damage_from_score: abilityProfile?.damage_from_score ?? currentSelected?.effective_damage_from_score ?? basePokemon.effective_damage_from_score ?? typeData.damage_from_score,
+    effective_damage_to_score: abilityProfile?.damage_to_score ?? currentSelected?.effective_damage_to_score ?? basePokemon.effective_damage_to_score ?? typeData.damage_to_score
   };
 }
 
