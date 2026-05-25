@@ -6,10 +6,10 @@ defineProps<{
 }>();
 
 const getStatColor = (val: number) => {
-  if (val < 60) return '#f34444'; // Red
-  if (val < 90) return '#ffdd57'; // Yellow
-  if (val < 120) return '#a0e515'; // Light Green
-  return '#23cd5e'; // Deep Green
+  if (val < 60) return '#f34444';
+  if (val < 90) return '#ffdd57';
+  if (val < 120) return '#a0e515';
+  return '#23cd5e';
 };
 </script>
 

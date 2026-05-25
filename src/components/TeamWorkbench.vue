@@ -1,11 +1,17 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
 import TypeBadge from './TypeBadge.vue';
+import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
 
-defineProps<{
-  allDataTypes: any[];
-  filteredTypes: any[];
+const props = defineProps<{
+  allDataTypes: TypeDataLike[];
+  filteredTypes: ActiveTypeDataLike[];
 }>();
+
+const includeAbilityImmunitiesActive = computed(() =>
+  props.allDataTypes.some(typeData => typeData.include_ability_immunities !== false)
+);
 
 const { 
   currentParty, 
@@ -73,6 +79,12 @@ const {
                     size="mini"
                   />
                 </div>
+                <p
+                  v-if="includeAbilityImmunitiesActive && currentParty[index].abilityName"
+                  class="slot-ability"
+                >
+                  Ability: {{ currentParty[index].abilityName }}
+                </p>
               </div>
             </div>
             <button
@@ -298,6 +310,13 @@ const {
 .slot-types {
   display: flex;
   gap: 4px;
+}
+
+.slot-ability {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: capitalize;
+  opacity: 0.8;
 }
 
 .remove-btn {

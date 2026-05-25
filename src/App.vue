@@ -15,6 +15,13 @@
         <p v-else>
           System Online // Waiting for Scan...
         </p>
+        <p
+          v-if="fetchError"
+          class="status-error"
+          role="alert"
+        >
+          {{ fetchError }}
+        </p>
       </header>
 
       <main class="gba-main">
@@ -24,9 +31,10 @@
             <button
               class="gba-btn"
               :class="{ active: loading }"
-              @click="fetchTypes"
+              :disabled="loading"
+              @click="fetchTypesImmediate"
             >
-              {{ loading ? 'Loading...' : 'Scan Types' }}
+              {{ loading ? 'Loading...' : (fetchError ? 'Retry Scan' : 'Scan Types') }}
             </button>
             
             <label class="gba-label">
@@ -34,7 +42,7 @@
               <select
                 v-model="inPokedex"
                 class="gba-select"
-                @change="fetchTypes"
+                @change="fetchTypesImmediate"
               >
                 <option value="national">National</option>
                 <option value="kanto">Kanto</option>
@@ -47,6 +55,24 @@
           </div>
 
           <div class="stat-controls">
+            <label class="gba-label checkbox-label">
+              <input
+                v-model="includeAbilityImmunities"
+                type="checkbox"
+                class="gba-checkbox"
+                @change="fetchTypesDebounced"
+              >
+              Include Ability Immunities
+            </label>
+            <label class="gba-label checkbox-label">
+              <input
+                v-model="allowMegas"
+                type="checkbox"
+                class="gba-checkbox"
+                @change="fetchTypesDebounced"
+              >
+              Include Mega Evolutions
+            </label>
             <label class="gba-label">
               Min Total Stats:
               <input
@@ -54,7 +80,7 @@
                 type="number"
                 class="gba-input"
                 step="10"
-                @change="fetchTypes"
+                @change="fetchTypesImmediate"
               >
             </label>
             <label class="gba-label">
@@ -64,7 +90,7 @@
                 type="number"
                 class="gba-input"
                 step="5"
-                @change="fetchTypes"
+                @change="fetchTypesImmediate"
               >
             </label>
             <label class="gba-label">
@@ -74,7 +100,7 @@
                 type="number"
                 class="gba-input"
                 step="5"
-                @change="fetchTypes"
+                @change="fetchTypesImmediate"
               >
             </label>
           </div>
@@ -84,6 +110,32 @@
           v-if="types.length > 0"
           :all-data-types="types"
         />
+        <section
+          v-else-if="fetchError"
+          class="gba-container state-panel"
+          aria-labelledby="scan-error-title"
+        >
+          <h2 id="scan-error-title">
+            Scan Interrupted
+          </h2>
+          <p>The Pokedex database could not be loaded.</p>
+          <button
+            class="gba-btn action-btn"
+            @click="fetchTypesImmediate"
+          >
+            Retry Scan
+          </button>
+        </section>
+        <section
+          v-else-if="!loading"
+          class="gba-container state-panel"
+          aria-labelledby="scan-idle-title"
+        >
+          <h2 id="scan-idle-title">
+            Awaiting Scan
+          </h2>
+          <p>Run a scan to load available typings and team options.</p>
+        </section>
       </main>
 
       <GbaNotification />
@@ -115,21 +167,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onBeforeUnmount, onMounted } from 'vue';
 import lscache from 'lscache';
 import { getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
 import GbaNotification from './components/GbaNotification.vue';
+import { useNotifications } from './composables/useNotifications';
+import type { TypeDataLike } from './lib/activePokemon';
 
 const loading = ref(false);
-const types = ref<any[]>([]);
+const types = ref<TypeDataLike[]>([]);
+const fetchError = ref('');
 const inPokedex = ref('national');
 const minStatsTotal = ref(480);
 const minAttacks = ref(80);
 const minDefenses = ref(80);
+const allowMegas = ref(false);
+const includeAbilityImmunities = ref(true);
+const { notify } = useNotifications();
+let fetchTypesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 const fetchTypes = () => {
   loading.value = true;
+  fetchError.value = '';
   
   const filters = {
     maxDamageFromScore: true,
@@ -143,10 +203,11 @@ const fetchTypes = () => {
   };
   const pokedexFilter = {
     inPokedex: inPokedex.value,
-    allowMegas: false
+    allowMegas: allowMegas.value,
+    includeAbilityImmunities: includeAbilityImmunities.value
   };
 
-  const key = `heur_aegis_dex_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}`;
+  const key = `heur_aegis_dex_v3_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}`;
 
   const cached = lscache.get(key);
   if (cached) {
@@ -163,13 +224,41 @@ const fetchTypes = () => {
       loading.value = false;
     }).catch(err => {
       console.error(err);
+      types.value = [];
+      fetchError.value = 'Pokedex scan failed. Check your connection and try again.';
+      notify(fetchError.value, 'error');
       loading.value = false;
     });
   }
 };
 
+const fetchTypesImmediate = () => {
+  if (fetchTypesDebounceTimer) {
+    clearTimeout(fetchTypesDebounceTimer);
+    fetchTypesDebounceTimer = null;
+  }
+  fetchTypes();
+};
+
+const fetchTypesDebounced = () => {
+  if (fetchTypesDebounceTimer) {
+    clearTimeout(fetchTypesDebounceTimer);
+  }
+
+  fetchTypesDebounceTimer = setTimeout(() => {
+    fetchTypesDebounceTimer = null;
+    fetchTypes();
+  }, 400);
+};
+
 onMounted(() => {
   fetchTypes();
+});
+
+onBeforeUnmount(() => {
+  if (fetchTypesDebounceTimer) {
+    clearTimeout(fetchTypesDebounceTimer);
+  }
 });
 </script>
 
@@ -194,9 +283,25 @@ onMounted(() => {
   }
 }
 
+.status-error {
+  margin-top: 12px;
+  color: #ffdce0;
+  font-family: var(--gba-font-heading);
+}
+
 .gba-main {
   width: 100%;
   max-width: 1200px;
+}
+
+.state-panel {
+  text-align: center;
+}
+
+.action-btn {
+  background-color: var(--gba-accent-magenta);
+  color: var(--gba-text-light);
+  border-color: var(--gba-text-dark);
 }
 
 .controls {
@@ -205,6 +310,11 @@ onMounted(() => {
   align-items: center;
   flex-wrap: wrap;
   margin-bottom: 16px;
+}
+
+.controls .gba-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .stat-controls {
@@ -224,6 +334,22 @@ onMounted(() => {
 .stat-controls .gba-input {
   width: 100%;
   box-sizing: border-box;
+}
+
+.stat-controls .checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  justify-self: start;
+  align-self: center;
+  grid-column: 1 / -1;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.gba-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--gba-accent-cyan);
 }
 
 @media (max-width: 600px) {

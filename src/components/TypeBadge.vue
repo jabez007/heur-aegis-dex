@@ -1,21 +1,24 @@
 <script setup lang="ts">
-defineProps<{
+const props = defineProps<{
   type: string;
   size?: 'mini' | 'normal' | 'header';
   isQuad?: boolean;
+  ariaLabel?: string;
 }>();
 </script>
 
 <template>
   <span 
-    class="type-badge" 
+    class="type-badge"
     :class="[
-      'bg-' + type.toLowerCase(),
-      size || 'normal',
-      { quad: isQuad }
+      'bg-' + props.type.toLowerCase(),
+      props.size || 'normal',
+      { quad: props.isQuad }
     ]"
+    role="img"
+    :aria-label="props.ariaLabel || `${props.type} type${props.isQuad ? ' quadruple weakness' : ''}`"
   >
-    <slot>{{ type }}</slot>
+    <slot>{{ props.type }}</slot>
   </span>
 </template>
 
@@ -30,7 +33,6 @@ defineProps<{
   font-family: var(--gba-font-body);
   transition: transform 0.1s;
   
-  // Sizes
   &.mini {
     font-size: 0.65rem;
     padding: 1px 4px;

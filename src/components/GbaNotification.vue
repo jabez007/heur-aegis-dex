@@ -59,7 +59,6 @@ const { notifications, remove } = useNotifications();
     outline-offset: 4px;
   }
   
-  // Custom double-border look
   &::before {
     content: '';
     position: absolute;
@@ -105,7 +104,6 @@ const { notifications, remove } = useNotifications();
   to { transform: translateY(4px); }
 }
 
-// Retro Transitions
 .gba-msg-enter-active,
 .gba-msg-leave-active {
   transition: all 0.3s steps(5);
