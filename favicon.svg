@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- Outer Shield Border -->
+  <path fill="#0f380f" d="M1 0h14v1H1zM0 1h1v10H0zM15 1h1v10h-1zM1 11h1v1H1zM14 11h1v1h-1zM2 12h1v1H2zM13 12h1v1h-1zM3 13h1v1H3zM12 13h1v1h-1zM4 14h8v1H4zM7 15h2v1H7z"/>
+  
+  <!-- Red Top (Shield Curve) -->
+  <path fill="#e0185d" d="M1 1h14v6H1z"/>
+  
+  <!-- Light Green Bottom (Shield Point) -->
+  <path fill="#e0f8cf" d="M1 8h14v3H1zM2 11h12v1H2zM3 12h10v1H3zM4 13h8v1H4zM7 14h2v1H7z"/>
+  
+  <!-- Center Horizontal Belt -->
+  <path fill="#0f380f" d="M0 7h16v1H0z"/>
+  
+  <!-- Center Button -->
+  <path fill="#0f380f" d="M6 6h4v3H6z"/>
+  <path fill="#e0f8cf" d="M7 7h2v1H7z"/>
+</svg>
