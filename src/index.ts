@@ -51,6 +51,13 @@ export {
 } from './lib/rosterScoring'
 export type { RosterMember, RosterEvaluation, BringOption } from './lib/rosterScoring'
 
+export {
+  flattenToPokemon,
+  groupByTypeName,
+  toPokemonEntry
+} from './lib/pokemonEntry'
+export type { PokemonEntry, FlattenOptions } from './lib/pokemonEntry'
+
 export { analyzeTeamCoverage } from './lib/teamCoverage'
 export type { TeamCoverageProfile, TeamCoverageAnalysis } from './lib/teamCoverage'
 export {
