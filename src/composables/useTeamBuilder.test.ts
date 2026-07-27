@@ -17,9 +17,10 @@ const abilityProfiles = {
 const stats = { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 };
 
 /** Builds a type card whose single Pokemon carries both ability profiles. */
-const typeCard = (typeName: string, pokemonName: string) => {
+const typeCard = (typeName: string, pokemonName: string, speciesName = pokemonName) => {
   const pokemon = {
     pokemon: { name: pokemonName },
+    species_name: speciesName,
     types: [{ type: { name: typeName } }],
     sprite: `${pokemonName}.png`,
     stats,
@@ -78,6 +79,24 @@ describe('useTeamBuilder', () => {
     expect(builder.bringIndices.value).toHaveLength(4);
     // Every member shares the blaze profile, so nothing resists their weaknesses.
     expect(teamWeaknessSummary.value).toEqual({ water: 4, rock: 4, ground: 4 });
+  });
+
+  it('accepts two Pokemon sharing a typing', () => {
+    // The roster is keyed by species, not by type combination. Two different
+    // Water/Flying Pokemon are a legal pair and used to be rejected only
+    // because typings were the primary entity.
+    addToParty(typeCard('water/flying', 'pelipper') as never, 0, 'blaze');
+    addToParty(typeCard('water/flying', 'gyarados') as never, 0, 'blaze');
+
+    expect(roster.value.map((member) => member.name)).toEqual(['pelipper', 'gyarados']);
+  });
+
+  it('refuses the same species twice', () => {
+    addToParty(typeCard('fire', 'charizard') as never, 0, 'blaze');
+    addToParty(typeCard('fire/flying', 'charizard-mega-x', 'charizard') as never, 0, 'blaze');
+
+    expect(roster.value).toHaveLength(1);
+    expect(roster.value[0].name).toBe('charizard');
   });
 
   it('registers up to six and brings only four in doubles', () => {

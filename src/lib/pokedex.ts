@@ -150,6 +150,7 @@ function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
   return {
     ...entry,
     pokemon: { ...entry.pokemon },
+    species_name: entry.species_name,
     types: entry.types ? entry.types.map((typeSlot) => ({ ...typeSlot, type: { ...typeSlot.type } })) : undefined,
     abilities: entry.abilities ? entry.abilities.map((ability) => ({ ...ability })) : undefined,
     stats: entry.stats ? { ...entry.stats } : undefined,
@@ -361,6 +362,7 @@ export async function getResistantTypes(options: {
           return null;
         }
 
+        p.species_name = species.name;
         p.types = poke.types;
         p.sprite = poke.sprites.front_default;
         p.abilities = poke.abilities.map((abilityEntry: any): PokemonAbilitySlot => ({

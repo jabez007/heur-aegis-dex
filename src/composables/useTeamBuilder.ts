@@ -17,7 +17,10 @@ import { useNotifications } from './useNotifications';
 import { createInjectableState } from './injectableState';
 
 export interface PartyMember {
+  /** PokeAPI variety name, unique within the roster. */
   name: string;
+  /** PokeAPI species name. Regional forms and Megas share their base species. */
+  speciesName: string;
   types: string[];
   sprite: string;
   stats: Record<string, number>;
@@ -164,6 +167,7 @@ export function useTeamBuilder() {
 
   const toPartyMember = (member: TeamMemberResult, typeName: string, typeData: TypeDataLike): PartyMember => ({
     name: member.name,
+    speciesName: member.species_name || member.name,
     types: member.types,
     sprite: member.sprite || '',
     stats: member.stats,
@@ -184,15 +188,22 @@ export function useTeamBuilder() {
       return;
     }
 
-    if (roster.value.some(member => member.typeName === typeData.name)) {
-      notify(`A ${typeData.name.toUpperCase()} type is already in your roster.`, "error");
+    const pokemon = resolveSelectedPokemon(typeData, pokemonIndex, abilityName);
+    if (!pokemon || !pokemon.types || !pokemon.stats) return;
+
+    // Champions forbids duplicate Pokedex numbers, so the roster is keyed by
+    // species. It is deliberately *not* keyed by type combination: two
+    // different Water/Flying Pokemon are a legal and often sensible pair, and
+    // the old rule rejected them only because typings were the entities.
+    const speciesName = pokemon.species_name || pokemon.pokemon.name;
+    if (roster.value.some(member => member.speciesName === speciesName)) {
+      notify(`${speciesName.toUpperCase()} is already in your roster.`, "error");
       return;
     }
 
-    const pokemon = resolveSelectedPokemon(typeData, pokemonIndex, abilityName);
-    if (!pokemon || !pokemon.types || !pokemon.stats) return;
     roster.value.push({
       name: pokemon.pokemon.name,
+      speciesName,
       types: pokemon.types.map((p) => p.type.name),
       sprite: pokemon.sprite || '',
       stats: pokemon.stats,

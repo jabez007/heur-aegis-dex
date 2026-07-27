@@ -87,6 +87,8 @@ export interface AbilityProfile {
 
 export interface PokemonListEntry {
   pokemon: PokemonRef;
+  /** PokeAPI species name. Regional forms and Megas share their base species. */
+  species_name?: string;
   types?: PokemonTypeSlot[];
   sprite?: string | null;
   abilities?: PokemonAbilitySlot[];
@@ -114,6 +116,8 @@ export interface ResistantTypeResult extends TeamTypeData {
 export interface TeamMemberResult {
   types: string[];
   name: string;
+  /** PokeAPI species name, used to enforce the no-duplicate-species rule. */
+  species_name?: string;
   sprite?: string | null;
   stats: PokemonStats;
   selected_ability_name?: string;

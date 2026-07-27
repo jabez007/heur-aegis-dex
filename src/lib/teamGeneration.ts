@@ -123,6 +123,7 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
       const teamMember: TeamMemberResult | null = poke && poke.stats ? {
           types: t.name.split('/'),
           name: poke.pokemon.name,
+          species_name: poke.species_name,
           sprite: poke.sprite,
           stats: poke.stats,
           selected_ability_name: poke.selected_ability_name,
