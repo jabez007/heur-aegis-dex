@@ -280,7 +280,12 @@ describe('pokedex.js API integration logic', () => {
     expect(fireType!.pokemon[0].ability_profiles!.levitate.weaknesses).toEqual(['water', 'rock']);
     expect(fireType!.pokemon[0].effective_weaknesses).toEqual(['water', 'rock']);
     expect(fireType!.pokemon[0].effective_resistances).toContain('ground');
-    expect(fireType!.damage_from_score).toBe(17.5);
+
+    // The type row describes the typing, not its highest-stat member, so
+    // Charmander's Levitate must not remove ground from the fire type summary.
+    expect(fireType!.damage_from_score).toBe(19.5);
+    expect(fireType!.weaknesses).toContain('ground');
+    expect(fireType!.resistances).not.toContain('ground');
   });
 
   it('getResistantTypes should allow disabling ability immunities', async () => {

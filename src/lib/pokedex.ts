@@ -401,7 +401,12 @@ export async function getResistantTypes(options: {
       })
       .map(async (t: PokemonTypeData) => {
         const pokemon = await processPokemon(t);
-        const summarySource: DamageRelations = pokemon[0]?.effective_damage_relations || t.damage_relations;
+        // The summary describes the typing itself, so it must come from the type's
+        // own damage relations. Deriving it from the highest-stat Pokemon leaked
+        // that Pokemon's ability immunities into a row presented as a property of
+        // the type. Per-Pokemon adjustments live on each entry's effective_* fields
+        // and are overlaid by the UI when a specific Pokemon is selected.
+        const summarySource: DamageRelations = t.damage_relations;
         const summary = createTypeSummary(summarySource);
 
         return {
