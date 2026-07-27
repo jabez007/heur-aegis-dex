@@ -138,7 +138,6 @@ export const COVERAGE_MOVE_TYPES: Readonly<Record<string, CoverageMoveTypes>> = 
   'feraligatr-mega': { physical: ['dark', 'dragon', 'fighting', 'flying', 'ghost', 'ground', 'ice', 'normal', 'psychic', 'rock', 'steel', 'water'], special: ['dragon', 'fighting', 'ice', 'normal', 'rock', 'water'] },
   'flapple': { physical: ['bug', 'dark', 'dragon', 'flying', 'grass', 'normal'], special: ['dragon', 'flying', 'grass', 'normal'] },
   'flareon': { physical: ['dark', 'fighting', 'fire', 'ground', 'normal'], special: ['fairy', 'fire', 'ghost', 'ground', 'normal'] },
-  'floette-eternal': { physical: ['grass', 'normal'], special: ['bug', 'fairy', 'grass', 'normal', 'psychic'] },
   'floette-mega': { physical: ['grass', 'normal'], special: ['bug', 'fairy', 'grass', 'normal', 'psychic'] },
   'florges': { physical: ['grass', 'normal'], special: ['bug', 'fairy', 'grass', 'normal', 'psychic'] },
   'forretress': { physical: ['bug', 'fighting', 'grass', 'ground', 'ice', 'normal', 'poison', 'rock', 'steel'], special: ['bug', 'electric', 'grass', 'ground', 'normal', 'poison', 'steel'] },

@@ -118,6 +118,25 @@ export const BATTLE_FORMS: readonly BattleFormRule[] = [
 /** Date the table was enumerated from PokeAPI and checked against the mechanics. */
 export const VERIFIED_ON = '2026-07-27';
 
+/**
+ * Distinct species across every regulation at the time of that walk.
+ *
+ * A whitelist built by enumeration is correct on the day it is written and
+ * quietly wrong afterwards: a later regulation adds species, those species carry
+ * battle-only forms, and a form that should have been weighed is instead simply
+ * absent — indistinguishable from one that was considered and rejected, which is
+ * precisely the distinction this table exists to preserve. The count is what
+ * makes that drift loud. See `rosterStaleness.fixture.ts` for the assertions.
+ *
+ * Re-walked on 2026-07-27: the roster carries nine battle-only non-Mega forms
+ * across six species, and all six are recorded. The three varieties without
+ * their own entry are covered by the reasoning of one that has it — Castform's
+ * entry names Rainy and Snowy explicitly, and Mimikyu-Totem-Busted is a Totem
+ * form, which `collapseIndistinctVarieties` handles. That is the sense in which
+ * this table is complete: one rule per species, not per variety.
+ */
+export const VERIFIED_SPECIES_COUNT = 208;
+
 export const SOURCES: readonly string[] = [
   'https://pokeapi.co/api/v2/pokemon-form/',
   'https://bulbapedia.bulbagarden.net/wiki/List_of_Pok%C3%A9mon_with_form_differences'

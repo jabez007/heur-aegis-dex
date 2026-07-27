@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { BATTLE_FORMS, getMergedBattleForm, hasBattleFormRule, sharesTyping } from './battleForms';
+import {
+  BATTLE_FORMS,
+  VERIFIED_ON,
+  VERIFIED_SPECIES_COUNT,
+  getMergedBattleForm,
+  hasBattleFormRule,
+  sharesTyping
+} from './battleForms';
 import { REGULATIONS } from './regulations';
+import { describeRosterStaleness } from './rosterStaleness.fixture';
+
+describeRosterStaleness({
+  table: 'BATTLE_FORMS',
+  verifiedOn: VERIFIED_ON,
+  speciesCount: VERIFIED_SPECIES_COUNT,
+  rewalk: 'Re-walk the roster for varieties whose form resource reports is_battle_only without is_mega, '
+    + 'and record each one as merged or not with its reasoning.'
+});
 
 describe('BATTLE_FORMS', () => {
   it('records a reason for every entry, merged or not', () => {

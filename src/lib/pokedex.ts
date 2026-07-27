@@ -3,6 +3,7 @@ import { applyAbilityModifiers, createRawAbilityProfile } from './pokedexAbiliti
 import { getRegulation, isSpeciesLegal } from './regulations';
 import { buildOffensiveTypeChart, getMoveCoverage } from './coverageMoves';
 import { getMergedBattleForm, sharesTyping } from './battleForms';
+import { isVarietyBreedable } from './unbreedableForms';
 import { getEffectiveStats, getStatAbilityName, totalStats } from './statAbilities';
 import { collapseIndistinctVarieties } from './pokemonEntry';
 import { getAbilityEffect } from './abilityRoles';
@@ -509,12 +510,24 @@ export async function getResistantTypes(options: {
     paldea: ['paldea', 'kitakami', 'blueberry']
   };
 
+  /**
+   * Two questions, asked at two levels, because breedability lives at both.
+   *
+   * The species answers for almost everything: egg groups and the legendary and
+   * mythical flags cover the Paradox Pokemon, Gholdengo and the box legendaries
+   * outright, all of which PokeAPI reports as `no-eggs`. A hardcoded list of
+   * those names used to sit here as a third check; it was redundant on every one
+   * of its 21 entries, which is presumably why nobody noticed it was also the
+   * wrong tool for the case it looked like it should catch.
+   *
+   * That case is the variety level. Floette-Eternal belongs to a species with a
+   * perfectly ordinary Fairy egg group, so no species-level question can reject
+   * it. `unbreedableForms.ts` records those by variety name, with reasoning.
+   */
   const isBreedable = (species: any, pokeName: string) => {
     if (species.is_legendary || species.is_mythical) return false;
     if (species.egg_groups.length > 0 && species.egg_groups.every((eg: any) => eg.name === 'no-eggs')) return false;
-    const paradoxPokemon = ['koraidon', 'miraidon', 'roaring-moon', 'iron-valiant', 'great-tusk', 'brute-bonnet', 'sandy-shocks', 'scream-tail', 'flutter-mane', 'slither-wing', 'iron-treads', 'iron-moth', 'iron-hands', 'iron-jugulis', 'iron-thorns', 'iron-bundle', 'ting-lu', 'chien-pao', 'wo-chien', 'chi-yu', 'gholdengo'];
-    if (paradoxPokemon.includes(pokeName)) return false;
-    return true;
+    return isVarietyBreedable(pokeName);
   };
 
   const processPokemon = async (t: PokemonTypeData, offensiveChart: OffensiveTypeChart): Promise<PokemonListEntry[]> => {

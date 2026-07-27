@@ -64,6 +64,14 @@ export {
 export type { BattleFormRule } from './lib/battleForms'
 
 export {
+  UNBREEDABLE_FORMS,
+  UNBREEDABLE_VARIETIES,
+  isVarietyBreedable,
+  hasUnbreedableFormRule
+} from './lib/unbreedableForms'
+export type { UnbreedableFormRule } from './lib/unbreedableForms'
+
+export {
   STAT_ABILITIES,
   getEffectiveStats,
   getStatAbility,

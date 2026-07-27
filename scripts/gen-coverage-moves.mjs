@@ -16,6 +16,21 @@ const grab = (label) => {
 const species = [...new Set([...grab('M_A_SPECIES'), ...grab('M_B_ADDITIONS')])].sort();
 console.log(`legal species: ${species.length}`);
 
+// Varieties the scan drops for being unbreedable. Emitting rows for them would
+// be harmless — the table is looked up by name and a row nothing asks for costs
+// nothing — but a generated file that disagrees with what the app can show is
+// the kind of quiet inconsistency that gets mistaken for a bug later. Throwing
+// on a failed parse is deliberate: a silently empty exclusion set would restore
+// the rows without saying so.
+const forms = readFileSync(new URL('../src/lib/unbreedableForms.ts', import.meta.url), 'utf8');
+const unbreedable = new Set(
+  [...forms.matchAll(/variety:\s*'([^']+)',\s*species:\s*'[^']+',\s*breedable:\s*false/g)].map((m) => m[1])
+);
+if (unbreedable.size === 0) {
+  throw new Error('parsed no entries out of UNBREEDABLE_FORMS — the table shape changed, fix this regex');
+}
+console.log(`unbreedable varieties excluded: ${[...unbreedable].sort().join(', ')}`);
+
 const mapLimit = async (items, limit, fn) => {
   const out = new Array(items.length);
   let i = 0;
@@ -43,7 +58,7 @@ const varietyLists = await mapLimit(species, CONCURRENCY, async (name) => {
   const data = await getJson(`https://pokeapi.co/api/v2/pokemon-species/${name}/`);
   return (data?.varieties || []).map((v) => v.pokemon.name);
 });
-const varieties = [...new Set(varietyLists.flat())].sort();
+const varieties = [...new Set(varietyLists.flat())].filter((v) => !unbreedable.has(v)).sort();
 console.log(`varieties: ${varieties.length}`);
 
 // 2. variety -> champions-legal move names

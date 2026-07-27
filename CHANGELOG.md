@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Breedability is asked at the variety level, not only the species level.** The scan's breedable-only rule read `/pokemon-species` — egg groups plus the legendary and mythical flags — which is the right place for almost every Pokemon. It is the wrong place for Floette-Eternal, a variety of a perfectly ordinary Fairy-egg-group species that has never been obtainable in any released game. Nothing upstream rejected it either: the form is neither battle-only nor Mega, the regulation filter is species-keyed and `floette` is on the M-B roster, and its 551 base stat total clears the floors easily.
+
+  **The symptom was worse than a spurious extra entry.** Base Floette is 371 BST and fails the 440 total floor, so the browser showed exactly one Floette — the one nobody can have.
+
+  `src/lib/unbreedableForms.ts` records these by variety name in the `battleForms.ts` idiom: each entry carries its reasoning, and the varieties considered and *kept* are recorded alongside the excluded ones, because a bare absence cannot be told apart from an oversight. Two are excluded. Floette-Eternal, and Greninja-Battle-Bond — distribution-only, and the ability does not pass to offspring, so a player can receive one but never produce one. It survives variety collapsing because its lone ability differs from the registered Greninja's pair. Basculegion-F, Meowstic-F and Lycanroc-Dusk are recorded as deliberately kept.
+
+  PokeAPI models no variety-level breedability, so this has to be recorded data rather than derived. The one available proxy — "has no moves in the `champions` version group" — was already considered and rejected when varieties were collapsed, because it conflates a form that does not exist with a form PokeAPI has not filled in yet.
+
+  **The audit behind it:** all 208 M-B legal species were walked, yielding 34 non-default varieties that survive every filter, 30 of them distinct enough to survive collapsing. The other 28 are ordinary — regional forms, the five Rotom appliances, Gourgeist sizes, gender forms — and stay. The four Totem forms were already correctly collapsed.
+
+  **A whitelist of exclusions goes stale quietly**, which is the weakness of this fix: a future regulation adding a species with an event-only form brings it into the browser with nothing to announce it, exactly as Floette-Eternal arrived. Two assertions convert that silence into a failing build rather than leaving it to be remembered. `VERIFIED_ON` must be no earlier than any regulation's own `verifiedOn`, and `VERIFIED_SPECIES_COUNT` must match the species the regulations actually cover.
+
+  They are separate because they fail on different mistakes and either alone leaves a way through: the count catches species added without anyone touching dates, which is the common case; the date catches a roster re-verified against a PokeAPI that may have gained varieties for species already on it, which the count cannot see. Both failure messages name the drift and say what to re-walk, so the alarm is actionable rather than a number to bump — and both were verified by simulating the change they exist to catch.
+
+  Removed with it: the hardcoded `paradoxPokemon` array that sat inside the breedable check. All 21 of its entries — the Paradox Pokemon, the box legendaries, Gholdengo — are reported by PokeAPI as `no-eggs` and were already caught by the egg-group check one line above. It was redundant on every entry, which is presumably why nobody noticed it was also the wrong level to catch Floette-Eternal.
+
+  Cache key bumped to v14. The dead `floette-eternal` row is dropped from `coverageMoveData.ts`, and the generator now excludes unbreedable varieties so the table cannot drift back. `floette-mega` stays — Floette is on the M-B Mega-capable list, so that entry is real.
+
 ### Added
 
 - **Unconditional stat abilities are applied.** `src/lib/statAbilities.ts` applies Huge Power, Pure Power, Fur Coat, Ice Scales and Hustle — the abilities that change a stat with no setup at all. The other twelve carried by a Regulation M-B legal species (Chlorophyll, Swift Swim, Guts, Solar Power, Plus/Minus and the rest) are recorded with the condition that rules them out, so their absence reads as a decision rather than an oversight. Each ability profile carries its own stat line, so switching ability moves the numbers and the coverage list, not just the resistances. Cards disclose which ability changed the stats and by how much.

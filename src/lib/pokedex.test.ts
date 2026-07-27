@@ -15,6 +15,8 @@ const mockState = vi.hoisted(() => ({
   includeAlternateForms: false,
   /** Add a cosmetic variety indistinguishable from the base Pokemon. */
   includeCosmeticVarieties: false,
+  /** Add a variety recorded as unbreedable, on a species that breeds normally. */
+  includeUnbreedableVariety: false,
   /** Present the fire-type entry as Palafin, which registers as one form and fights as another. */
   usePalafin: false,
   /** Give the registered Palafin an ability that cannot reach its battle form. */
@@ -125,6 +127,12 @@ vi.mock('pokedex-promise-v2', () => {
             ...(mockState.includeCosmeticVarieties
               // Same species, same stats, same typing, same abilities — a cap.
               ? [{ pokemon: { name: 'charmander-world-cap', url: 'https://pokeapi.co/api/v2/pokemon/10500/' } }]
+              : []),
+            ...(mockState.includeUnbreedableVariety
+              // Floette-Eternal's shape: a permanent, non-Mega variety whose
+              // species breeds normally and whose stats are its own, so nothing
+              // upstream of the variety-level check has grounds to drop it.
+              ? [{ pokemon: { name: 'floette-eternal', url: 'https://pokeapi.co/api/v2/pokemon/10600/' } }]
               : []),
             ...extraPokemon
           ]
@@ -335,6 +343,7 @@ beforeEach(() => {
   mockState.useCoverageTableName = false;
   mockState.includeAlternateForms = false;
   mockState.includeCosmeticVarieties = false;
+  mockState.includeUnbreedableVariety = false;
   mockState.usePalafin = false;
   mockState.breakPalafinTrigger = false;
   mockState.useHugePower = false;
@@ -541,6 +550,23 @@ describe('pokedex.js API integration logic', () => {
     const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
     // A cap changes nothing this tool models, so it is not a second Pokemon.
     expect(names).toEqual(['charmander']);
+  });
+
+  it('getResistantTypes should drop varieties recorded as unbreedable', async () => {
+    mockState.includeUnbreedableVariety = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+    // Every species-level check passes here — the egg group is ordinary and the
+    // form is neither battle-only nor Mega — so only the variety-level rule can
+    // reject it. This is the case the species-keyed filter could never catch.
+    expect(names).not.toContain('floette-eternal');
+    expect(names).toContain('charmander');
   });
 
   it('getResistantTypes should drop battle-only forms but keep permanent ones', async () => {
