@@ -5,6 +5,7 @@ import { buildOffensiveTypeChart, getMoveCoverage } from './coverageMoves';
 import { getMergedBattleForm, sharesTyping } from './battleForms';
 import { getEffectiveStats, getStatAbility, getStatAbilityName, totalStats } from './statAbilities';
 import { collapseIndistinctVarieties } from './pokemonEntry';
+import { getAbilityEffect } from './abilityRoles';
 import {
   DEFAULT_BASE_SCORE,
   calculateDamageFromScore,
@@ -564,12 +565,24 @@ export async function getResistantTypes(options: {
           };
         });
 
-        // The default selection is otherwise made on defensive merit alone,
-        // which would hand Azumarill Sap Sipper — a Grass immunity — in place of
-        // the ability that doubles its Attack. A stat ability outweighs any one
-        // type immunity for the Pokemon that have one, so it wins the default.
+        // Ability selection ranks by defensive merit alone unless told otherwise,
+        // and that reads badly for the abilities a Pokemon is actually brought
+        // for. It handed Azumarill Sap Sipper over the ability that doubles its
+        // Attack, and Torkoal White Smoke over Drought — the entire reason
+        // Torkoal is on a team. So two kinds of ability take precedence:
+        //
+        //   1. a stat ability, the largest single swing available to a Pokemon;
+        //   2. a support role, which shapes the whole team rather than one matchup.
+        //
+        // Support beating a type immunity is a deliberate call, and the roster
+        // bears it out: Intimidate over Flash Fire on Arcanine, Drought over
+        // Flash Fire on Ninetales, Drizzle over Water Absorb on Politoed. In
+        // each case the immunity is situational and the role is the reason the
+        // Pokemon gets brought.
         const statAbilityProfile = profilesWithStats.find((profile) => getStatAbility(profile.ability_name));
+        const supportProfile = profilesWithStats.find((profile) => getAbilityEffect(profile.ability_name));
         const selectedProfile = statAbilityProfile
+          ?? supportProfile
           ?? profilesWithStats.find((profile) => profile.ability_name === bestProfile.ability_name)
           ?? profilesWithStats[0];
 

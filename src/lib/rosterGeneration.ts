@@ -24,6 +24,7 @@
 
 import { evaluateRoster, scoreBring, type RosterEvaluation, type RosterMember } from './rosterScoring';
 import { DEFAULT_BASE_SCORE } from './pokedexScoring';
+import { getAbilityEffect, getApplicableRoles } from './abilityRoles';
 import type { BattleFormat } from './battleFormats';
 import type { PokemonEntry } from './pokemonEntry';
 
@@ -33,7 +34,22 @@ export const ROSTER_BEAM_WIDTH = 128;
 /** How many individually-strongest Pokemon the search will consider. */
 export const DEFAULT_CANDIDATE_LIMIT = 160;
 
-/** Weights for ranking a single Pokemon before the search begins. */
+/**
+ * Weights for ranking a single Pokemon before the search begins.
+ *
+ * `supportRole` is the odd one out: every other term measures typing or stats,
+ * which is why the ranking used to be blind to Intimidate, Drizzle and
+ * redirection entirely. That blindness had teeth — this ranking decides which
+ * DEFAULT_CANDIDATE_LIMIT Pokemon the search ever looks at, so a support
+ * Pokemon could be cut before team synergy, which does weigh roles, had any
+ * chance to see it.
+ *
+ * The value is reasoned rather than validated: at 12 a role is worth three
+ * resistances and well under a quadruple weakness, which puts Intimidate in the
+ * right neighbourhood without letting a single ability outrank a typing.
+ * All roles are weighted equally here — the team-level scoring is where their
+ * differences and their interactions get resolved.
+ */
 export const CANDIDATE_WEIGHTS = {
   offensiveTyping: 30,
   defensiveTyping: 30,
@@ -41,6 +57,7 @@ export const CANDIDATE_WEIGHTS = {
   moveCoverage: 1,
   resistance: 4,
   statsTotal: 0.06,
+  supportRole: 12,
   weakness: 5,
   quadrupleWeakness: 30
 } as const;
@@ -85,17 +102,29 @@ const toRosterMember = (entry: PokemonEntry): RosterMember => ({
 /**
  * Ranks one Pokemon on its own merits, to decide what the search looks at.
  *
+ * Scores the role of the ability *currently selected*, not every role the
+ * Pokemon could theoretically fill. Choosing Blaze over Intimidate on an
+ * Incineroar should cost it the credit, and the browser applies the user's
+ * ability override before ranking so the order responds to that choice.
+ *
  * @param entry Pokemon to rank.
+ * @param options Format traits. Redirection and ally protection do nothing without an ally, so singles must not credit them.
  * @returns A score on an arbitrary scale; only the ordering matters.
  */
-export function candidatePriority(entry: PokemonEntry): number {
+export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: boolean } = {}): number {
+  const { hasAlly = true } = options;
   const w = CANDIDATE_WEIGHTS;
+
+  const effect = getAbilityEffect(entry.abilityName);
+  const hasApplicableRole = !!effect && getApplicableRoles(hasAlly).includes(effect.role);
+
   return (entry.normalizedDamageToScore * w.offensiveTyping) +
     ((1 - entry.normalizedDamageFromScore) * w.defensiveTyping) +
     (entry.coverages.length * w.coverage) +
     (entry.moveCoverages.length * w.moveCoverage) +
     (entry.resistances.length * w.resistance) +
-    (entry.statsTotal * w.statsTotal) -
+    (entry.statsTotal * w.statsTotal) +
+    ((hasApplicableRole ? 1 : 0) * w.supportRole) -
     (entry.weaknesses.length * w.weakness) -
     (entry.quadrupleWeaknesses.length * w.quadrupleWeakness);
 }
@@ -126,7 +155,10 @@ export function generateRosters(options: GenerateRostersOptions): GeneratedRoste
   const candidates = pokemon
     .filter((entry) => !seedNames.has(entry.name))
     .filter((entry) => allowDuplicateSpecies || !seedSpecies.has(entry.speciesName))
-    .sort((a, b) => candidatePriority(b) - candidatePriority(a))
+    // Pre-pruning is where a support Pokemon is most easily lost, so the format
+    // has to reach it: crediting redirection in singles would be as wrong as
+    // ignoring it in doubles.
+    .sort((a, b) => candidatePriority(b, { hasAlly: format.hasAlly }) - candidatePriority(a, { hasAlly: format.hasAlly }))
     .slice(0, Math.max(candidateLimit, rosterSize));
 
   if (seed.length + candidates.length < rosterSize) return [];

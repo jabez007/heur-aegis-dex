@@ -262,7 +262,7 @@ const fetchTypes = () => {
   // Every filter that changes the result must appear in the key, or switching it
   // serves a cached scan from different settings. The version prefix is bumped
   // whenever the stored shape changes.
-  const key = `heur_aegis_dex_v11_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
+  const key = `heur_aegis_dex_v12_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
 
   const cached = lscache.get(key);
   if (cached) {

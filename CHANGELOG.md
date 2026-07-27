@@ -22,6 +22,12 @@
 
 ### Changed
 
+- **Candidate ranking credits support roles, and ability selection stops hiding them.** `candidatePriority` — which orders the Pokemon Browser and, more consequentially, picks the `DEFAULT_CANDIDATE_LIMIT` Pokemon the roster search ever looks at — scored only typing and stats. It was blind to Intimidate, Drizzle, redirection and ally protection, so a support Pokemon could be pruned before team synergy, which *does* weigh roles, had any chance to see it. A role is now worth `CANDIDATE_WEIGHTS.supportRole` (12), about three resistances and well under a quadruple weakness. Reasoned, not validated.
+
+  Redirection and ally protection are worth nothing without a partner, so ranking takes the format: 55 of 261 breedable Regulation M-B varieties gain the credit in doubles, 28 in singles. The browser passes the format the workbench is set to, so switching format re-orders it.
+
+  **The term alone would have been half a fix.** Ability selection ranked on defensive merit, so **23 of 64 support Pokemon defaulted to an ability they are never brought for** — Torkoal chose White Smoke over Drought, Pelipper chose Keen Eye over Drizzle, Incineroar chose Blaze over Intimidate. A support ability now takes precedence over a purely defensive one, behind a stat ability. That ordering is deliberate and the roster bears it out: Intimidate over Flash Fire on Arcanine, Drought over Flash Fire on Ninetales, Drizzle over Water Absorb on Politoed. Every ability is still offered; only the default changed.
+
 - **The stat floors are an either/or, and the defaults are recalibrated.** `minimumAttacks` and `minimumDefenses` were applied together, so a Pokemon had to clear both — which asked it to be unremarkable at nothing rather than good at something. That excluded Toxapex for its 63 Attack and Excadrill for its 62 bulk: two Pokemon that are strong *because* they specialise. A Pokemon is now kept when it reaches **either** floor. The total remains a separate requirement.
 
   Defaults move from `480 / 80 / 80` to **`440 / 80 / 80`**. The two stat numbers are unchanged; what changed is that they no longer have to be satisfied simultaneously. The total drops because the old figure cut Pelipper (440) and Torkoal (470) — weather setters are low-total by design, which is what makes them affordable — along with Azumarill and Medicham at 470.
@@ -40,7 +46,7 @@
   Deliberately not keyed on move coverage: it is looked up by variety name, so the cosmetic variants have none, and including it would make them look distinct and defeat the rule. The survivor preference guards that instead.
 - **Form controls look the same everywhere.** `.gba-label` / `.gba-select` / `.gba-input` were defined in `App.vue`'s scoped style block, so the Team Workbench's Format select rendered unstyled. They now live in `assets/scss/main.scss`.
 
-The scan cache key moved to `v11`, so stored results containing battle-only forms — or rating Palafin as its registered form — are discarded rather than served.
+The scan cache key moved to `v12`, so stored results containing battle-only forms — or rating Palafin as its registered form — are discarded rather than served.
 
 ## 0.3.0
 

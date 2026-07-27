@@ -21,6 +21,8 @@ const mockState = vi.hoisted(() => ({
   breakPalafinTrigger: false,
   /** Give the fire-type entry Azumarill's ability pair: Huge Power plus a defensive immunity. */
   useHugePower: false,
+  /** Give the fire-type entry a support ability alongside a filler and a type immunity. */
+  useSupportAbility: false,
   detailDelayMs: 0,
   requestCounts: new Map<string, number>(),
   /** Every request in the order it was issued, for checking which phase made it. */
@@ -184,7 +186,15 @@ vi.mock('pokedex-promise-v2', () => {
           ],
           abilities: mockState.usePalafin
             ? [{ ability: { name: mockState.breakPalafinTrigger ? 'torrent' : 'zero-to-hero' }, is_hidden: false }]
-            : mockState.useHugePower
+            : mockState.useSupportAbility
+              // Ninetales' real trio: a filler, the weather ability it is
+              // brought for, and a type immunity that wins on defence alone.
+              ? [
+                { ability: { name: 'white-smoke' }, is_hidden: false },
+                { ability: { name: 'drought' }, is_hidden: false },
+                { ability: { name: 'flash-fire' }, is_hidden: true }
+              ]
+              : mockState.useHugePower
               // Azumarill's real pair: the stat ability, and a type immunity that
               // wins on defensive merit alone.
               ? [{ ability: { name: 'huge-power' }, is_hidden: false }, { ability: { name: 'sap-sipper' }, is_hidden: true }]
@@ -319,6 +329,7 @@ beforeEach(() => {
   mockState.usePalafin = false;
   mockState.breakPalafinTrigger = false;
   mockState.useHugePower = false;
+  mockState.useSupportAbility = false;
   mockState.detailDelayMs = 0;
   mockState.requestCounts.clear();
   mockState.requestOrder = [];
@@ -714,6 +725,23 @@ describe('pokedex.js API integration logic', () => {
 
     expect(entry.stats!.attack).toBe(52);
     expect(entry.stat_ability_name).toBeUndefined();
+  });
+
+  it('getResistantTypes should select a support ability over a type immunity', async () => {
+    mockState.useSupportAbility = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+    const entry = resistant.find(t => t.name === 'fire')!.pokemon[0];
+
+    // Flash Fire wins on defensive merit, which was the only thing weighed.
+    // Drought is the reason the Pokemon gets brought at all.
+    expect(entry.selected_ability_name).toBe('drought');
+    // Every ability is still offered; only the default changed.
+    expect(Object.keys(entry.ability_profiles!).sort()).toEqual(['drought', 'flash-fire', 'white-smoke']);
   });
 
   it('getResistantTypes should fetch a battle form inside the concurrency budget', async () => {
