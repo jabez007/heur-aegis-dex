@@ -64,6 +64,14 @@ export {
 export type { BattleFormRule } from './lib/battleForms'
 
 export {
+  STAT_ABILITIES,
+  getEffectiveStats,
+  getStatAbility,
+  hasStatAbilityRule
+} from './lib/statAbilities'
+export type { StatAbilityRule, ModifiableStat } from './lib/statAbilities'
+
+export {
   BATTLE_FORMATS,
   BATTLE_FORMAT_LIST,
   DEFAULT_BATTLE_FORMAT,

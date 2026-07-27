@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Unconditional stat abilities are applied.** `src/lib/statAbilities.ts` applies Huge Power, Pure Power, Fur Coat, Ice Scales and Hustle — the abilities that change a stat with no setup at all. The other twelve carried by a Regulation M-B legal species (Chlorophyll, Swift Swim, Guts, Solar Power, Plus/Minus and the rest) are recorded with the condition that rules them out, so their absence reads as a decision rather than an oversight. Each ability profile carries its own stat line, so switching ability moves the numbers and the coverage list, not just the resistances. Cards disclose which ability changed the stats and by how much.
+
+  **Ability selection changed with it.** The default ability was previously chosen on defensive merit alone, which handed Azumarill Sap Sipper over the ability that doubles its Attack. A stat ability now wins the default.
+
+  **The stat floors see the ability**, which admits Furfrou — 60 Defense doubled by Fur Coat, failing both the defense and total floors before. Azumarill, Medicham and Diggersby now clear the attack floor they used to fail, but sit at 470–479 against the default 480 total, so surfacing them is a deliberate choice about that floor rather than an accident of modelling.
+
+  Caveat recorded in the table: Hustle's ×1.5 Attack comes with an 80% physical accuracy penalty that a stat line cannot express, so Hustle Pokemon read slightly stronger here than they play.
+
 - **Move coverage is split by damage class and read against the attacker's stats.** The generator already fetched each move's physical/special class and used it only to drop status moves; the emitted table flattened the two together. That credited Pelipper with Dark, Steel, Bug, Grass and Poison coverage it can never use at 50 Attack against 95 Special Attack. Measured across the Regulation M-B roster, 16% of the coverage types credited to a clearly one-sided attacker were reachable only through the wrong stat, and the tail was far worse than the average — Sceptile went from 12 usable move types to 5.
 
   `COVERAGE_MOVE_TYPES` entries are now `{ physical, special }`, and `getCoverageMoveTypes` / `getMoveCoverage` take optional stats. Pokemon whose attacking stats sit within `MIXED_ATTACKER_RATIO` (15%) keep both classes, because they genuinely run either; omitting stats also returns both, which is the honest answer for an unknown bias and matches the previous behaviour. Moves that pick their class at use time, like Shell Side Arm, count for both.
@@ -17,7 +25,7 @@
 - **Battle-only forms no longer appear as their own Pokemon.** Gigantamax, Mimikyu-Busted, Eiscue-Noice and the like are states a Pokemon enters mid-battle, so listing them beside their base form invented team slots. Detected via `is_battle_only` on PokeAPI's form resource rather than by name suffix. Megas are battle-only by the same flag but remain a real pre-battle choice, so `allowMegas` still governs them — via `is_mega` now, replacing the `-mega` substring check. Where dropping a form would have understated the Pokemon, the battle-form rating above covers it.
 - **Form controls look the same everywhere.** `.gba-label` / `.gba-select` / `.gba-input` were defined in `App.vue`'s scoped style block, so the Team Workbench's Format select rendered unstyled. They now live in `assets/scss/main.scss`.
 
-The scan cache key moved to `v8`, so stored results containing battle-only forms — or rating Palafin as its registered form — are discarded rather than served.
+The scan cache key moved to `v9`, so stored results containing battle-only forms — or rating Palafin as its registered form — are discarded rather than served.
 
 ## 0.3.0
 
