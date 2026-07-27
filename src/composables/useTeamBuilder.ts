@@ -104,7 +104,9 @@ export function useTeamBuilder() {
           const typeData = allowedTypes.find(t => t.name === typeName);
           return typeData ? toPartyMember(p, typeName, typeData) : null;
         }).filter((m): m is PartyMember => m !== null);
-        notify("Generated optimal team based on meta.", "success");
+        // Deliberately not "optimal": generateTeams is a beam search, so this is
+        // the best team it found, not the best team that exists.
+        notify(`Best team found — score ${Math.round(topTeam.score)}/100.`, "success");
       } else {
         notify("No valid teams found with current filters.", "error");
       }
@@ -153,7 +155,7 @@ export function useTeamBuilder() {
           const typeData = fullList.find(t => t.name === typeName);
           return typeData ? toPartyMember(p, typeName, typeData) : null;
         }).filter((m): m is PartyMember => m !== null);
-        notify("Found compatible partners for your team.", "success");
+        notify(`Best partners found — score ${Math.round(topTeam.score)}/100.`, "success");
       } else {
         notify("No compatible partners found for this team.", "error");
       }

@@ -19,6 +19,12 @@ import type {
   TeamMemberResult
 } from './pokedexTypes';
 
+/**
+ * Partial teams kept per team member at each beam expansion. Higher values
+ * search more thoroughly at a proportional cost in runtime.
+ */
+const BEAM_WIDTH_PER_MEMBER = 96;
+
 type TeamCandidate = ResistantTypeResult & {
   selectedPokemon?: PokemonListEntry | null;
   normalized_damage_from_score?: number;
@@ -29,8 +35,14 @@ type TeamCandidate = ResistantTypeResult & {
  * Generates ranked teams from the allowed type pool using compatibility and
  * coverage constraints, optionally seeding the result with fixed members.
  *
+ * This is a beam search, not an exhaustive one. Candidate typings are ordered
+ * by typePriorityScore and only the highest scoring partial teams survive each
+ * expansion, so the results are the best teams the search *found* — a better
+ * team may exist outside the beam. Callers must not describe the top result as
+ * optimal. Widening BEAM_WIDTH_PER_MEMBER trades runtime for thoroughness.
+ *
  * @param options Team generation options including the allowed type pool, team size, composition rules, and optional seed members.
- * @returns Ranked team results ordered by the internal scoring model.
+ * @returns Team results ordered by score, best first. May be empty.
  */
 export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeamResult[] {
   const {
@@ -199,7 +211,7 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
   );
 
   const prioritizedTypes = [...seedCompatibleTypes].sort((t1, t2) => typePriorityScore(t2) - typePriorityScore(t1));
-  const beamWidth = Math.max(96, teamSize * 96);
+  const beamWidth = Math.max(BEAM_WIDTH_PER_MEMBER, teamSize * BEAM_WIDTH_PER_MEMBER);
 
   let partialTeams: TeamCandidate[][] = [validSeed];
   prioritizedTypes.forEach((candidate, index: number) => {
