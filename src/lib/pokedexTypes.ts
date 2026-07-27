@@ -138,4 +138,9 @@ export interface GenerateTeamsOptions {
     coverWeaknesses?: boolean;
   };
   seed?: Array<PokemonTypeData | ResistantTypeResult | TeamTypeData>;
+  /**
+   * Baseline the supplied damage scores were calculated with. Also the number
+   * of elemental types in play, used to scale coverage breadth and gap counts.
+   */
+  baseScore?: number;
 }

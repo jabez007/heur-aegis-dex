@@ -1,5 +1,16 @@
 import { getEffectiveTypeProfile, getPokemonAbilityProfile } from './activePokemon';
 import { analyzeTeamCoverage } from './teamCoverage';
+import {
+  DEFAULT_BASE_SCORE,
+  normalizeDamageFromScore,
+  normalizeDamageToScore
+} from './pokedexScoring';
+import {
+  CANDIDATE_PRIORITY_WEIGHTS,
+  composeTeamScore,
+  scoreMemberQuality,
+  scoreTeamSynergy
+} from './teamScoring';
 import type {
   GenerateTeamsOptions,
   GeneratedTeamResult,
@@ -26,7 +37,8 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
     allowedTypes = [],
     teamSize = 3,
     teamComposition = { allowSharedTypes: true, allowSharedWeaknesses: false, coverWeaknesses: true },
-    seed = []
+    seed = [],
+    baseScore = DEFAULT_BASE_SCORE
   } = options;
 
   const _teamComposition = {
@@ -38,30 +50,17 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
 
   const validAllowedTypes = allowedTypes.filter((t): t is ResistantTypeResult => !!t.pokemon && t.pokemon.length > 0);
 
-  const damageScores = validAllowedTypes.reduce((acc: { to: Array<number | undefined>; from: Array<number | undefined> }, t) => ({
-    to: [...(acc.to || []), t.damage_to_score],
-    from: [...(acc.from || []), t.damage_from_score]
-  }), { to: [], from: [] });
-
-  const toScores = damageScores.to.filter((s): s is number => s !== undefined);
-  const fromScores = damageScores.from.filter((s): s is number => s !== undefined);
-  const maxDamageToScore = Math.max(...(toScores.length ? toScores : [1]));
-  const minDamageToScore = Math.min(...(toScores.length ? toScores : [0]));
-
-  const maxDamageFromScore = Math.max(...(fromScores.length ? fromScores : [1]));
-  const minDamageFromScore = Math.min(...(fromScores.length ? fromScores : [0]));
-
-  const normalizeDamageFromScore = (score: number | undefined): number =>
-    (score === undefined || maxDamageFromScore === minDamageFromScore) ? 0.5 :
-      (score - minDamageFromScore) / (maxDamageFromScore - minDamageFromScore);
-  const normalizeDamageToScore = (score: number | undefined): number =>
-    (score === undefined || maxDamageToScore === minDamageToScore) ? 0.5 :
-      (score - minDamageToScore) / (maxDamageToScore - minDamageToScore);
+  // Normalization uses the absolute bounds of the scoring formulas rather than
+  // the range observed in the current pool. Min-maxing against the pool meant
+  // the same Pokemon normalized differently depending on which filters were
+  // active, so scores were not comparable between two runs of the tool.
+  const normalizeFrom = (score: number | undefined) => normalizeDamageFromScore(score, baseScore);
+  const normalizeTo = (score: number | undefined) => normalizeDamageToScore(score, baseScore);
 
   const normalizedTypes: TeamCandidate[] = validAllowedTypes.map((t) => ({
     ...t,
-    normalized_damage_from_score: normalizeDamageFromScore(t.damage_from_score),
-    normalized_damage_to_score: normalizeDamageToScore(t.damage_to_score)
+    normalized_damage_from_score: normalizeFrom(t.damage_from_score),
+    normalized_damage_to_score: normalizeTo(t.damage_to_score)
   }));
 
   function isCompatible(current: TeamCandidate, candidate: TeamCandidate): boolean {
@@ -114,8 +113,8 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
           effective_resistances: abilityProfile?.resistances || t.resistances || [],
           effective_ineffectives: abilityProfile?.ineffectives || t.ineffectives || [],
           effective_coverages: abilityProfile?.coverages || t.coverages || [],
-          normalized_damage_to_score: normalizeDamageToScore(abilityProfile?.damage_to_score ?? t.damage_to_score),
-          normalized_damage_from_score: normalizeDamageFromScore(abilityProfile?.damage_from_score ?? t.damage_from_score)
+          normalized_damage_to_score: normalizeTo(abilityProfile?.damage_to_score ?? t.damage_to_score),
+          normalized_damage_from_score: normalizeFrom(abilityProfile?.damage_from_score ?? t.damage_from_score)
         } : null;
       return {
         pokemon: teamMember,
@@ -125,39 +124,33 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
 
     const pokemon = teamProfiles.map(entry => entry.pokemon).filter((p): p is TeamMemberResult => p !== null);
 
+    const coverage = analyzeTeamCoverage(teamProfiles.map((entry) => entry.profile));
     const {
-      weaknessCounts,
-      quadrupleWeaknessCounts,
       uncoveredWeaknesses,
       uncoveredQuadrupleWeaknesses,
       sharedWeaknesses,
       sharedQuadrupleWeaknesses,
       uniqueResistances,
       uniqueCoverages
-    } = analyzeTeamCoverage(teamProfiles.map((entry) => entry.profile));
+    } = coverage;
 
     const typesTotal = (new Set(tm.flatMap((t) => t.name.split('/')))).size;
 
-    const pokemonScore = teamProfiles.map((entry) => {
-      const poke = entry.pokemon;
-      if (!poke) return 0;
-      const offScore = poke.normalized_damage_to_score ?? 0;
-      const defScore = poke.normalized_damage_from_score ?? 0;
-      return poke.stats.hp +
-        ((poke.stats.attack + poke.stats['special-attack']) * offScore) +
-        ((poke.stats.defense + poke.stats['special-defense']) / (1 + defScore)) +
-        poke.stats.speed;
-    }).reduce((a: number, b: number) => a + b, 0);
+    const memberQualities = teamProfiles
+      .map((entry) => entry.pokemon)
+      .filter((poke): poke is TeamMemberResult => poke !== null)
+      .map((poke) => scoreMemberQuality({
+        stats: poke.stats,
+        normalizedDamageToScore: poke.normalized_damage_to_score,
+        normalizedDamageFromScore: poke.normalized_damage_from_score
+      }));
 
-    const teamSynergyScore =
-      (uniqueCoverages * 20) +
-      (uniqueResistances * 12) +
-      (typesTotal * 10) -
-      (uncoveredWeaknesses.length * 30) -
-      (uncoveredQuadrupleWeaknesses.length * 90) -
-      sharedWeaknesses.reduce((total, weakness) => total + ((weaknessCounts[weakness] - 1) * 18), 0) -
-      Object.values(quadrupleWeaknessCounts).reduce((total, count) => total + (count * 80), 0) -
-      sharedQuadrupleWeaknesses.reduce((total, weakness) => total + ((quadrupleWeaknessCounts[weakness] - 1) * 220), 0);
+    const synergy = scoreTeamSynergy({
+      coverage,
+      typesTotal,
+      teamSize: tm.length,
+      typeCount: baseScore
+    });
 
     const result = {
       types: tm.map((t: any) => t.name),
@@ -169,26 +162,30 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
       sharedQuadrupleWeaknesses,
       uniqueResistances,
       uniqueCoverages,
-      score: pokemonScore + teamSynergyScore
+      score: composeTeamScore(memberQualities, synergy)
     };
 
     teamResultCache.set(cacheKey, result);
     return result;
   }
 
+  // Orders candidates so the beam explores promising typings first. This only
+  // affects which teams survive pruning, not their final score, so it stays a
+  // cheap single-candidate heuristic.
   function typePriorityScore(t: TeamCandidate): number {
     const poke = t.selectedPokemon || (t.pokemon && t.pokemon[0]);
     const profile = getEffectiveTypeProfile(t, poke);
     const statsTotal = poke ? Object.values(poke.stats || {}).reduce((total: number, stat) => total + Number(stat || 0), 0) : 0;
-    const damageToScore = normalizeDamageToScore(poke?.effective_damage_to_score ?? t.damage_to_score);
-    const damageFromScore = normalizeDamageFromScore(poke?.effective_damage_from_score ?? t.damage_from_score);
-    return (damageToScore * 40) +
-      ((1 - damageFromScore) * 32) +
-      ((profile.coverages || []).length * 8) +
-      ((profile.resistances || []).length * 5) +
-      (statsTotal * 0.08) -
-      ((profile.weaknesses || []).length * 6) -
-      ((profile.quadruple_weaknesses || []).length * 40);
+    const damageToScore = normalizeTo(poke?.effective_damage_to_score ?? t.damage_to_score);
+    const damageFromScore = normalizeFrom(poke?.effective_damage_from_score ?? t.damage_from_score);
+    const w = CANDIDATE_PRIORITY_WEIGHTS;
+    return (damageToScore * w.offensiveTyping) +
+      ((1 - damageFromScore) * w.defensiveTyping) +
+      ((profile.coverages || []).length * w.coverage) +
+      ((profile.resistances || []).length * w.resistance) +
+      (statsTotal * w.statsTotal) -
+      ((profile.weaknesses || []).length * w.weakness) -
+      ((profile.quadruple_weaknesses || []).length * w.quadrupleWeakness);
   }
 
   const validSeed = seed.filter((s): s is TeamCandidate => !!s.name && !!s.weaknesses && (!!(s as TeamCandidate).selectedPokemon || !!s.pokemon?.length));
