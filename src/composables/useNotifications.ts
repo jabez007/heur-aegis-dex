@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { createInjectableState } from './injectableState';
 
 export interface Notification {
   id: number;
@@ -6,17 +7,25 @@ export interface Notification {
   type: 'info' | 'error' | 'success';
 }
 
-const notifications = ref<Notification[]>([]);
-let nextId = 0;
+const notificationState = createInjectableState('heur-aegis-dex:notifications', () => ({
+  notifications: ref<Notification[]>([]),
+  nextId: { value: 0 }
+}));
+
+export const provideNotifications = notificationState.provideState;
+export const __resetNotificationsState = notificationState.resetFallbackState;
 
 /**
- * Provides shared notification state and helpers for transient UI messages.
+ * Provides notification state and helpers for transient UI messages, scoped to
+ * the current Vue app.
  *
- * @returns Shared notifications state and methods to add or remove messages.
+ * @returns Notifications state and methods to add or remove messages.
  */
 export function useNotifications() {
+  const { notifications, nextId } = notificationState.useState();
+
   const notify = (message: string, type: Notification['type'] = 'info', duration = 4000) => {
-    const id = nextId++;
+    const id = nextId.value++;
     notifications.value.push({ id, message, type });
 
     if (duration > 0) {

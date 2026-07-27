@@ -1,19 +1,27 @@
 import { ref } from 'vue';
+import { createInjectableState } from './injectableState';
 
 export const ALL_TYPES = [
   'normal', 'fighting', 'flying', 'poison', 'ground', 'rock', 'bug', 'ghost', 'steel',
   'fire', 'water', 'grass', 'electric', 'psychic', 'ice', 'dragon', 'dark', 'fairy'
 ];
 
-const selectedTypes = ref<string[]>([...ALL_TYPES]);
-const hideEmptyTypes = ref(true);
+const metaFilterState = createInjectableState('heur-aegis-dex:meta-filters', () => ({
+  selectedTypes: ref<string[]>([...ALL_TYPES]),
+  hideEmptyTypes: ref(true)
+}));
+
+export const provideMetaFilters = metaFilterState.provideState;
+export const __resetMetaFiltersState = metaFilterState.resetFallbackState;
 
 /**
- * Provides shared meta-analysis filters for visible type combinations.
+ * Provides meta-analysis filters for visible type combinations, scoped to the
+ * current Vue app.
  *
- * @returns Shared type-selection state and filter preset helpers.
+ * @returns Type-selection state and filter preset helpers.
  */
 export function useMetaFilters() {
+  const { selectedTypes, hideEmptyTypes } = metaFilterState.useState();
 
   const toggleType = (type: string) => {
     const index = selectedTypes.value.indexOf(type);

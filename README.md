@@ -74,6 +74,21 @@ import '@jabez007/heur-aegis-dex/style.css'
 > </div>
 > ```
 
+### State Scoping
+
+Party, filter and notification state is provided per Vue app. Registering the plugin with `app.use(HeurAegisDex)` scopes that state automatically, so two mounted instances never share a party and server-side rendering does not carry state between requests.
+
+If you import individual components without the plugin, they fall back to a shared module-level store. Call the provider functions during app setup to opt into isolation:
+
+```typescript
+import { provideTeamBuilder, provideMetaFilters, provideNotifications } from '@jabez007/heur-aegis-dex'
+
+const app = createApp(App)
+provideTeamBuilder(app)
+provideMetaFilters(app)
+provideNotifications(app)
+```
+
 ## 🚀 Development
 
 ```bash

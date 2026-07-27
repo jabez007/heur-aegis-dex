@@ -1,4 +1,7 @@
 import type { App } from 'vue'
+import { provideTeamBuilder } from './composables/useTeamBuilder'
+import { provideMetaFilters } from './composables/useMetaFilters'
+import { provideNotifications } from './composables/useNotifications'
 import './assets/scss/main.scss'
 import HeurAegisDexMain from './App.vue'
 import CustomCupBuilder from './components/CustomCupBuilder.vue'
@@ -24,9 +27,9 @@ export {
   TypeBadge
 }
 
-export { useTeamBuilder } from './composables/useTeamBuilder'
-export { useMetaFilters, ALL_TYPES } from './composables/useMetaFilters'
-export { useNotifications } from './composables/useNotifications'
+export { useTeamBuilder, provideTeamBuilder } from './composables/useTeamBuilder'
+export { useMetaFilters, provideMetaFilters, ALL_TYPES } from './composables/useMetaFilters'
+export { useNotifications, provideNotifications } from './composables/useNotifications'
 
 export type { PartyMember } from './composables/useTeamBuilder'
 export type { Notification } from './composables/useNotifications'
@@ -34,6 +37,14 @@ export type { PokemonTypeData, DamageRelations, NamedResource } from './lib/poke
 
 export default {
   install: (app: App) => {
+    // Each app gets its own party, filters and notifications. Without this the
+    // components would fall back to shared module state, so two mounted
+    // instances would fight over one party and SSR would leak state between
+    // requests.
+    provideTeamBuilder(app)
+    provideMetaFilters(app)
+    provideNotifications(app)
+
     app.component('HeurAegisDexMain', HeurAegisDexMain)
     app.component('CustomCupBuilder', CustomCupBuilder)
     app.component('GbaNotification', GbaNotification)

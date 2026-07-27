@@ -5,8 +5,7 @@ import { analyzeTeamCoverage } from '../lib/teamCoverage';
 import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
 import type { TeamMemberResult } from '../lib/pokedexTypes';
 import { useNotifications } from './useNotifications';
-
-const { notify } = useNotifications();
+import { createInjectableState } from './injectableState';
 
 export interface PartyMember {
   name: string;
@@ -20,15 +19,24 @@ export interface PartyMember {
   typeName: string;
 }
 
-const currentParty = ref<PartyMember[]>([]);
-const isGenerating = ref(false);
+const teamBuilderState = createInjectableState('heur-aegis-dex:team-builder', () => ({
+  currentParty: ref<PartyMember[]>([]),
+  isGenerating: ref(false)
+}));
+
+export const provideTeamBuilder = teamBuilderState.provideState;
+export const __resetTeamBuilderState = teamBuilderState.resetFallbackState;
 
 /**
- * Provides shared party-building state and helpers for manual and generated teams.
+ * Provides party-building state and helpers for manual and generated teams,
+ * scoped to the current Vue app.
  *
- * @returns Shared party state, summary computed values, and party management actions.
+ * @returns Party state, summary computed values, and party management actions.
  */
 export function useTeamBuilder() {
+  const { currentParty, isGenerating } = teamBuilderState.useState();
+  const { notify } = useNotifications();
+
   const toPartyMember = (member: TeamMemberResult, typeName: string, typeData: TypeDataLike): PartyMember => ({
     name: member.name,
     types: member.types,
