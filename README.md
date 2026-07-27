@@ -22,6 +22,14 @@ Legality is kept **independent** of the breedable-only rule the scan also applie
 
 To add a regulation, append an entry to `REGULATION_LIST` with its roster, dates and sources. Anything not recovered from a published source belongs in `incompleteFields` so an empty set reads as "not recorded" rather than "none".
 
+### Domain Model
+
+Pokémon are the primary entity. `src/lib/pokemonEntry.ts` flattens the scan — which is organised around 171 type combinations — into flat Pokémon records carrying their own typing, stats, abilities and coverage. `groupByTypeName` is the inverse for views that browse by typing.
+
+Both shapes coexist on purpose: the meta grid still consumes the type-keyed view, while team building works from Pokémon. A typing is one of a Pokémon's attributes and a way to group them, not a stand-in for one.
+
+The practical consequence is that identity is a **species**, not a typing. Two different Water/Flying Pokémon can share a roster; a species and its Mega form cannot, matching the no-duplicate-Pokédex-number rule.
+
 ### Formats and Rosters
 
 Play! Pokémon registers up to six Pokémon and brings a subset — three in singles, four in doubles. Those are separate concepts in the code: `roster` is what you register, `bringIndices` is what enters the battle, and all team analysis describes the brought team, since the benched members never share a field.

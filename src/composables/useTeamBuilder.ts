@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
-import { generateTeams } from '../lib/pokedex';
+import { flattenToPokemon, type PokemonEntry } from '../lib/pokemonEntry';
+import { generateRosters } from '../lib/rosterGeneration';
 import { resolveSelectedPokemon } from '../lib/activePokemon';
 import { analyzeTeamCoverage } from '../lib/teamCoverage';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from '../lib/abilityRoles';
@@ -12,7 +13,6 @@ import {
 } from '../lib/battleFormats';
 import { DEFAULT_BASE_SCORE, normalizeDamageFromScore, normalizeDamageToScore } from '../lib/pokedexScoring';
 import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
-import type { TeamMemberResult } from '../lib/pokedexTypes';
 import { useNotifications } from './useNotifications';
 import { createInjectableState } from './injectableState';
 
@@ -165,23 +165,6 @@ export function useTeamBuilder() {
     manualBringIndices.value = null;
   };
 
-  const toPartyMember = (member: TeamMemberResult, typeName: string, typeData: TypeDataLike): PartyMember => ({
-    name: member.name,
-    speciesName: member.species_name || member.name,
-    types: member.types,
-    sprite: member.sprite || '',
-    stats: member.stats,
-    abilityName: member.selected_ability_name,
-    weaknesses: member.effective_weaknesses || typeData.weaknesses,
-    resistances: member.effective_resistances || typeData.resistances,
-    immunities: member.effective_immunities || typeData.immunities || [],
-    coverages: member.effective_coverages || typeData.coverages,
-    moveCoverages: member.effective_move_coverages || [],
-    normalizedDamageToScore: member.normalized_damage_to_score,
-    normalizedDamageFromScore: member.normalized_damage_from_score,
-    typeName
-  });
-
   const addToParty = (typeData: ActiveTypeDataLike, pokemonIndex: number, abilityName?: string) => {
     if (roster.value.length >= maxRosterSize.value) {
       notify(`Roster is full at ${maxRosterSize.value}.`, 'error');
@@ -232,34 +215,54 @@ export function useTeamBuilder() {
     manualBringIndices.value = null;
   };
 
-  const applyGeneratedRoster = (
-    members: TeamMemberResult[],
-    typeNames: string[],
-    lookup: TypeDataLike[]
-  ): PartyMember[] =>
-    members.map((member, index) => {
-      const typeName = typeNames[index];
-      const typeData = lookup.find(t => t.name === typeName);
-      return typeData ? toPartyMember(member, typeName, typeData) : null;
-    }).filter((member): member is PartyMember => member !== null);
+  const fromPokemonEntry = (entry: PokemonEntry): PartyMember => ({
+    name: entry.name,
+    speciesName: entry.speciesName,
+    types: entry.types,
+    sprite: entry.sprite,
+    stats: entry.stats,
+    abilityName: entry.abilityName,
+    weaknesses: entry.weaknesses,
+    resistances: entry.resistances,
+    immunities: entry.immunities,
+    coverages: entry.coverages,
+    moveCoverages: entry.moveCoverages,
+    normalizedDamageToScore: entry.normalizedDamageToScore,
+    normalizedDamageFromScore: entry.normalizedDamageFromScore,
+    typeName: entry.typeName
+  });
+
+  /**
+   * Rebuilds the roster from a generated result.
+   *
+   * @param pool Pokemon the search was allowed to draw from.
+   * @param seed Pokemon that must survive into the result.
+   * @param successMessage Prefix for the success notification.
+   * @returns Whether a roster was produced.
+   */
+  const runGeneration = (pool: PokemonEntry[], seed: PokemonEntry[], successMessage: string): boolean => {
+    const rosters = generateRosters({
+      pokemon: pool,
+      format: format.value,
+      rosterSize: maxRosterSize.value,
+      seed
+    });
+
+    if (rosters.length === 0) return false;
+
+    roster.value = rosters[0].members.map(fromPokemonEntry);
+    manualBringIndices.value = null;
+    // Deliberately not "optimal": generateRosters prunes twice, so this is the
+    // best roster the search found, not the best that exists.
+    notify(`${successMessage} — ${Math.round(rosters[0].score)}/100.`, "success");
+    return true;
+  };
 
   const generateFullTeam = (allowedTypes: TypeDataLike[]) => {
     isGenerating.value = true;
     try {
-      const teams = generateTeams({
-        allowedTypes: allowedTypes,
-        teamSize: maxRosterSize.value,
-        seed: []
-      });
-
-      if (teams.length > 0) {
-        const topTeam = teams[0];
-        roster.value = applyGeneratedRoster(topTeam.pokemon, topTeam.types, allowedTypes);
-        manualBringIndices.value = null;
-        // Deliberately not "optimal": generateTeams is a beam search, so this is
-        // the best roster it found, not the best roster that exists.
-        notify(`Best roster found — bring scores ${Math.round(rosterEvaluation.value.score)}/100.`, "success");
-      } else {
+      const pool = flattenToPokemon(allowedTypes);
+      if (!runGeneration(pool, [], 'Best roster found')) {
         notify("No valid rosters found with current filters.", "error");
       }
     } catch (e: any) {
@@ -278,34 +281,16 @@ export function useTeamBuilder() {
 
     isGenerating.value = true;
     try {
-      const seed = roster.value.map((member): ActiveTypeDataLike | null => {
-        // Seed members can be filtered out of the current view, but generation still
-        // needs to reconstruct their full type record to preserve the locked choice.
-        const typeData = fullList.find(t => t.name === member.typeName);
-        if (!typeData) return null;
-        const pokemonIndex = typeData.pokemon.findIndex((p: any) => p.pokemon.name === member.name);
-        const selectedPokemon = resolveSelectedPokemon(typeData, pokemonIndex, member.abilityName);
-        if (!selectedPokemon) return null;
-        return {
-          ...typeData,
-          selectedPokemon,
-          selected_pokemon_index: pokemonIndex,
-          selected_ability_name: selectedPokemon.selected_ability_name || ''
-        };
-      }).filter((item): item is ActiveTypeDataLike => item !== null);
+      // Locked members can sit outside the current filters, so the seed is
+      // resolved against the full list rather than the filtered pool.
+      const everything = flattenToPokemon(fullList);
+      const byName = new Map(everything.map((entry) => [entry.name, entry]));
+      const seed = roster.value
+        .map((member) => byName.get(member.name))
+        .filter((entry): entry is PokemonEntry => entry !== undefined);
 
-      const teams = generateTeams({
-        allowedTypes: allowedTypes,
-        teamSize: maxRosterSize.value,
-        seed
-      });
-
-      if (teams.length > 0) {
-        const topTeam = teams[0];
-        roster.value = applyGeneratedRoster(topTeam.pokemon, topTeam.types, fullList);
-        manualBringIndices.value = null;
-        notify(`Roster filled — bring scores ${Math.round(rosterEvaluation.value.score)}/100.`, "success");
-      } else {
+      const pool = flattenToPokemon(allowedTypes);
+      if (!runGeneration(pool, seed, 'Roster filled')) {
         notify("No compatible partners found for this roster.", "error");
       }
     } catch (e: any) {

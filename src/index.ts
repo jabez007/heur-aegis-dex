@@ -58,6 +58,15 @@ export {
 } from './lib/pokemonEntry'
 export type { PokemonEntry, FlattenOptions } from './lib/pokemonEntry'
 
+export {
+  ROSTER_BEAM_WIDTH,
+  DEFAULT_CANDIDATE_LIMIT,
+  CANDIDATE_WEIGHTS,
+  candidatePriority,
+  generateRosters
+} from './lib/rosterGeneration'
+export type { GenerateRostersOptions, GeneratedRoster } from './lib/rosterGeneration'
+
 export { analyzeTeamCoverage } from './lib/teamCoverage'
 export type { TeamCoverageProfile, TeamCoverageAnalysis } from './lib/teamCoverage'
 export {
