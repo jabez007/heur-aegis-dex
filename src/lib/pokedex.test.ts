@@ -19,12 +19,15 @@ const mockState = vi.hoisted(() => ({
   breakPalafinTrigger: false,
   detailDelayMs: 0,
   requestCounts: new Map<string, number>(),
+  /** Every request in the order it was issued, for checking which phase made it. */
+  requestOrder: [] as string[],
   activeDetailRequests: 0,
   maxActiveDetailRequests: 0
 }));
 
 const trackRequest = async <T>(url: string, factory: () => T | Promise<T>) => {
   mockState.requestCounts.set(url, (mockState.requestCounts.get(url) || 0) + 1);
+  mockState.requestOrder.push(url);
 
   const isDetailRequest = url.startsWith('/api/v2/pokemon/')
     || url.startsWith('/api/v2/pokemon-species/')
@@ -284,6 +287,7 @@ beforeEach(() => {
   mockState.breakPalafinTrigger = false;
   mockState.detailDelayMs = 0;
   mockState.requestCounts.clear();
+  mockState.requestOrder = [];
   mockState.activeDetailRequests = 0;
   mockState.maxActiveDetailRequests = 0;
 });
@@ -551,6 +555,36 @@ describe('pokedex.js API integration logic', () => {
     });
 
     expect(resistant.find(t => t.name === 'fire')!.pokemon[0].battle_form_name).toBeUndefined();
+  });
+
+  it('getResistantTypes should fetch a battle form inside the concurrency budget', async () => {
+    // Enough entries that the prefetch cannot drain in a single wave, so there
+    // are provably later requests to compare against.
+    mockState.expandFireRoster = true;
+    await scanPalafin();
+
+    const order = mockState.requestOrder;
+    const battleFormIndex = order.indexOf('/api/v2/pokemon/9000/');
+    expect(battleFormIndex).toBeGreaterThanOrEqual(0);
+
+    // The prefetch warms every detail request under mapWithConcurrency, and
+    // processPokemon then issues none of its own. A battle form resolved lazily
+    // instead would be the *last* detail request of the whole scan, since by
+    // then everything else is cached — so the presence of later ones is the
+    // signal that this fetch happened inside the budget.
+    const laterDetailRequests = order
+      .slice(battleFormIndex + 1)
+      .filter((url) => url.startsWith('/api/v2/pokemon'));
+
+    expect(laterDetailRequests.length).toBeGreaterThan(0);
+    expect(mockState.maxActiveDetailRequests).toBeLessThanOrEqual(12);
+  });
+
+  it('getResistantTypes should fetch a battle form once across every typing', async () => {
+    mockState.duplicateCharmanderAcrossTypes = true;
+    await scanPalafin();
+
+    expect(mockState.requestCounts.get('/api/v2/pokemon/9000/')).toBe(1);
   });
 
   it('getResistantTypes should dedupe repeated pokemon and species detail fetches', async () => {

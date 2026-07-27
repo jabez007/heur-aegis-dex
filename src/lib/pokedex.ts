@@ -185,21 +185,25 @@ async function isRegisterableForm(poke: any, allowMegas: boolean): Promise<boole
  * direction: understating one Pokemon is a worse outcome than silently filing
  * it under a typing it does not have.
  *
+ * Resolution is driven entirely by the two fetched resources so the prefetch
+ * pass can call it to warm the cache. Sharing the call rather than duplicating
+ * the decision is what keeps the two from drifting: the prefetch cannot warm
+ * the wrong resource, because it asks the same question.
+ *
  * @param poke Fetched `/pokemon` resource for the registered form.
  * @param species Fetched `/pokemon-species` resource, used to locate the variety.
- * @param abilities Abilities the registered form has.
  * @returns The resource to take stats from, and the form name to disclose. The
  *          name comes from the table rather than the fetched resource, so the
  *          disclosure cannot go missing if the response shape shifts.
  */
 async function resolveCombatantForm(
   poke: any,
-  species: any,
-  abilities: readonly PokemonAbilitySlot[]
+  species: any
 ): Promise<{ resource: any; battleFormName?: string }> {
   const asRegistered = { resource: poke };
 
-  const rule = getMergedBattleForm(species.name, abilities.map((ability) => ability.name));
+  const abilityNames = (poke.abilities || []).map((entry: any) => entry.ability.name);
+  const rule = getMergedBattleForm(species.name, abilityNames);
   if (!rule) return asRegistered;
 
   const variety = (species.varieties || [])
@@ -462,7 +466,7 @@ export async function getResistantTypes(options: {
         // Identity stays with the registered form; only the numbers move. A
         // Palafin on your team list is a Palafin, but every turn it takes is
         // taken as Hero, so that is what the stat filters and scoring see.
-        const combatant = await resolveCombatantForm(poke, species, p.abilities ?? []);
+        const combatant = await resolveCombatantForm(poke, species);
         p.battle_form_name = combatant.battleFormName;
 
         const stats = combatant.resource.stats.reduce((merged: PokemonStats, curr: any) => {
@@ -544,11 +548,19 @@ export async function getResistantTypes(options: {
     const id = getPokemonIdFromUrl(pokemonEntry.pokemon.url!);
     const poke = await fetchPokemonResource(id);
     const speciesId = getPokemonIdFromUrl(poke.species.url);
-    await fetchPokemonSpeciesResource(speciesId);
-    // Warm the form cache here too, so the battle-only check in processPokemon
-    // stays inside this concurrency budget instead of fanning out per typing.
+    const species = await fetchPokemonSpeciesResource(speciesId);
+
+    // Every detail request a scan makes is warmed here, under this concurrency
+    // limit. processPokemon then runs against a hot cache and issues none of
+    // its own — which matters because it fans out across all type groupings at
+    // once, so anything left to resolve lazily escapes the budget entirely and
+    // its request count scales with the number of typings a Pokemon appears in.
     const formUrl = poke.is_default ? undefined : poke.forms?.[0]?.url;
     if (formUrl) await fetchPokemonFormResource(getPokemonIdFromUrl(formUrl));
+
+    // Asks the same question processPokemon will ask, rather than reimplementing
+    // it, so the prefetch cannot warm the wrong resource as the table grows.
+    await resolveCombatantForm(poke, species);
   });
 
   return (await Promise.all(
