@@ -408,35 +408,14 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.gba-checkbox {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--gba-accent-cyan);
-}
-
 @media (max-width: 600px) {
   .stat-controls {
     grid-template-columns: 1fr;
   }
 }
 
-.gba-label {
-  font-family: var(--gba-font-heading);
-  font-size: 1.2rem;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.gba-select, .gba-input {
-  font-family: var(--gba-font-body);
-  background: var(--gba-text-light);
-  border: 2px solid var(--gba-text-dark);
-  padding: 4px 8px;
-  text-transform: uppercase;
-  width: 100px;
-}
-
+// The shared control styles live in assets/scss/main.scss so every component
+// gets them. Only the App-specific overrides stay here.
 .regulation-select {
   width: auto;
   min-width: 100px;

@@ -595,11 +595,10 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
   text-transform: uppercase;
 }
 
-.format-label {
-  font-family: var(--gba-font-heading);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+// Format names are longer than the shared 100px control width.
+.format-label .gba-select {
+  width: auto;
+  min-width: 100px;
 }
 
 /* Benched members stay visible but recede, so the brought team reads first. */

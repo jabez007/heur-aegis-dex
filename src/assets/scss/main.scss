@@ -84,6 +84,33 @@
     }
   }
 
+  // Retro Form Controls
+  // Global rather than scoped to App.vue: any component that renders a control
+  // has to look like the rest of the app, and a scoped rule silently skips them.
+  .gba-label {
+    font-family: var(--gba-font-heading);
+    font-size: 1.2rem;
+    display: flex;
+    gap: $spacing-sm;
+    align-items: center;
+  }
+
+  .gba-select,
+  .gba-input {
+    font-family: var(--gba-font-body);
+    background: var(--gba-text-light);
+    border: 2px solid var(--gba-text-dark);
+    padding: 4px $spacing-sm;
+    text-transform: uppercase;
+    width: 100px;
+  }
+
+  .gba-checkbox {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--gba-accent-cyan);
+  }
+
   // Pokemon Type Colors
   @each $type, $color in $type-colors {
     .bg-#{$type} {
