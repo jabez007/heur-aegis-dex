@@ -3,137 +3,124 @@ import { computed, ref, watch } from 'vue';
 import TypeBadge from './TypeBadge.vue';
 import StatBar from './StatBar.vue';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
-import type { ActiveTypeDataLike } from '../lib/activePokemon';
-import type { PokemonListEntry } from '../lib/pokedexTypes';
+import type { PokemonEntry } from '../lib/pokemonEntry';
 
 const props = defineProps<{
-  typeData: ActiveTypeDataLike;
+  pokemon: PokemonEntry;
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:selected-pokemon-index', nextIndex: number): void;
   (e: 'update:selected-ability-name', abilityName: string): void;
 }>();
 
-const { addToParty, currentParty } = useTeamBuilder();
+const { addPokemon, hasSpecies, roster, maxRosterSize } = useTeamBuilder();
 
-const selectedPokemonIndex = ref(0);
-const selectedAbilityName = ref('');
+const selectedAbilityName = ref(props.pokemon.abilityName);
 const showStats = ref(false);
-const pokemonList = computed(() => props.typeData.pokemon);
-const currentPokemon = computed(() => pokemonList.value[selectedPokemonIndex.value] || null);
-const availableAbilities = computed(() => currentPokemon.value?.abilities || []);
 
-watch([pokemonList, () => props.typeData.selected_pokemon_index], ([newList, selectedIndex]) => {
-  const maxLength = newList.length;
-  if (maxLength > 0) {
-    selectedPokemonIndex.value = Math.min(Number(selectedIndex ?? 0), maxLength - 1);
-  } else {
-    selectedPokemonIndex.value = 0;
-  }
-}, { immediate: true });
-
-const prevPokemon = () => {
-  const maxLength = props.typeData.pokemon.length;
-  const nextIndex = (selectedPokemonIndex.value - 1 + maxLength) % maxLength;
-  selectedPokemonIndex.value = nextIndex;
-  emit('update:selected-pokemon-index', nextIndex);
-};
-
-const nextPokemon = () => {
-  const maxLength = pokemonList.value.length;
-  const nextIndex = (selectedPokemonIndex.value + 1) % maxLength;
-  selectedPokemonIndex.value = nextIndex;
-  emit('update:selected-pokemon-index', nextIndex);
-};
-
-const selectedPokemon = computed<PokemonListEntry | null>(() => currentPokemon.value);
-
-watch([selectedPokemon, () => props.typeData.selected_ability_name], ([pokemon, abilityName]) => {
-  if (!pokemon) {
-    selectedAbilityName.value = '';
-    return;
-  }
-
-  selectedAbilityName.value = String(abilityName || pokemon.selected_ability_name || pokemon.abilities?.[0]?.name || '');
+// The card is keyed by Pokemon name in the grid, but a filter change can swap
+// the entry under a reused card, so the ability follows the current Pokemon.
+watch(() => props.pokemon, (pokemon) => {
+  selectedAbilityName.value = pokemon.abilityName || pokemon.abilities[0]?.name || '';
 }, { immediate: true });
 
 watch(selectedAbilityName, (abilityName) => {
-  emit('update:selected-ability-name', abilityName);
+  if (abilityName && abilityName !== props.pokemon.abilityName) {
+    emit('update:selected-ability-name', abilityName);
+  }
 });
 
-const selectedAbilityProfile = computed(() => {
-  const pokemon = selectedPokemon.value;
-  if (!pokemon) return null;
-  return pokemon.ability_profiles?.[selectedAbilityName.value] || null;
-});
+const availableAbilities = computed(() => props.pokemon.abilities);
+const isOnRoster = computed(() => hasSpecies(props.pokemon.speciesName));
+const rosterIsFull = computed(() => roster.value.length >= maxRosterSize.value);
 
-const selectedPokemonName = computed(() => selectedPokemon.value?.pokemon?.name || 'pokemon');
-const scoreSummary = computed(() => `Defense score ${displayDamageFromScore.value}, offense score ${props.typeData.damage_to_score}`);
+const displayWeaknesses = computed(() => props.pokemon.weaknesses);
+const displayQuadrupleWeaknesses = computed(() => props.pokemon.quadrupleWeaknesses);
+const displayCoverages = computed(() => props.pokemon.coverages);
+const displayMoveCoverages = computed(() =>
+  props.pokemon.moveCoverages.filter((type) => !props.pokemon.coverages.includes(type))
+);
 
-const displayWeaknesses = computed(() => selectedAbilityProfile.value?.weaknesses || selectedPokemon.value?.effective_weaknesses || props.typeData.weaknesses || []);
-const displayQuadrupleWeaknesses = computed(() => selectedAbilityProfile.value?.quadruple_weaknesses || selectedPokemon.value?.effective_quadruple_weaknesses || props.typeData.quadruple_weaknesses || []);
-const displayCoverages = computed(() => selectedAbilityProfile.value?.coverages || selectedPokemon.value?.effective_coverages || props.typeData.coverages || []);
-const displayDamageFromScore = computed(() => selectedAbilityProfile.value?.damage_from_score ?? selectedPokemon.value?.effective_damage_from_score ?? props.typeData.damage_from_score);
+const defenseScore = computed(() => props.pokemon.normalizedDamageFromScore.toFixed(2));
+const offenseScore = computed(() => props.pokemon.normalizedDamageToScore.toFixed(2));
+const scoreSummary = computed(() =>
+  `Defense score ${defenseScore.value}, offense score ${offenseScore.value}, lower defense is better`
+);
 
 const toggleStats = () => {
   showStats.value = !showStats.value;
 };
 
-const handleAddToParty = () => {
-  addToParty(props.typeData, selectedPokemonIndex.value, selectedAbilityName.value);
+const handleAddToRoster = () => {
+  addPokemon(props.pokemon, selectedAbilityName.value);
 };
 </script>
 
 <template>
-  <div class="type-card">
-    <h3 class="type-header">
-      <TypeBadge 
-        v-for="part in typeData.name.split('/')" 
-        :key="part" 
-        :type="part" 
-        size="header"
-      />
-    </h3>
-    
+  <div
+    class="type-card"
+    :class="{ rostered: isOnRoster }"
+  >
+    <div class="card-header">
+      <img
+        v-if="pokemon.sprite"
+        :src="pokemon.sprite"
+        :alt="pokemon.name"
+        class="pixel-sprite"
+      >
+      <div class="card-title">
+        <p class="poke-name">
+          {{ pokemon.name }}
+        </p>
+        <h3 class="type-header">
+          <TypeBadge
+            v-for="part in pokemon.types"
+            :key="part"
+            :type="part"
+            size="header"
+          />
+        </h3>
+      </div>
+    </div>
+
     <div class="stats">
       <div class="score-grid">
         <p
           class="score"
-          :aria-label="`Defense score ${displayDamageFromScore}`"
+          :aria-label="`Defense score ${defenseScore}, lower is better`"
         >
-          Def: {{ displayDamageFromScore }}
+          Def: {{ defenseScore }}
         </p>
         <p
           class="score"
-          :aria-label="`Offense score ${typeData.damage_to_score}`"
+          :aria-label="`Offense score ${offenseScore}`"
         >
-          Off: {{ typeData.damage_to_score }}
+          Off: {{ offenseScore }}
         </p>
       </div>
       <span class="sr-only">{{ scoreSummary }}</span>
-      
+
       <div
         v-if="displayWeaknesses.length - displayQuadrupleWeaknesses.length > 0"
         class="weakness-list"
       >
         <p>Weaknesses:</p>
-        <TypeBadge 
-          v-for="w in displayWeaknesses.filter((w: string) => !displayQuadrupleWeaknesses.includes(w))" 
-          :key="w" 
-          :type="w" 
+        <TypeBadge
+          v-for="w in displayWeaknesses.filter((w: string) => !displayQuadrupleWeaknesses.includes(w))"
+          :key="w"
+          :type="w"
         />
       </div>
-      
+
       <div
         v-if="displayQuadrupleWeaknesses.length > 0"
         class="weakness-list"
       >
         <p>Quad Weaknesses:</p>
-        <TypeBadge 
-          v-for="w in displayQuadrupleWeaknesses" 
-          :key="w" 
-          :type="w" 
+        <TypeBadge
+          v-for="w in displayQuadrupleWeaknesses"
+          :key="w"
+          :type="w"
           is-quad
         />
       </div>
@@ -142,52 +129,30 @@ const handleAddToParty = () => {
         v-if="displayCoverages.length > 0"
         class="weakness-list"
       >
-        <p>Coverage:</p>
-        <TypeBadge 
-          v-for="c in displayCoverages" 
-          :key="c" 
-          :type="c" 
+        <p>STAB Coverage:</p>
+        <TypeBadge
+          v-for="c in displayCoverages"
+          :key="c"
+          :type="c"
+        />
+      </div>
+
+      <div
+        v-if="displayMoveCoverages.length > 0"
+        class="weakness-list move-coverage"
+      >
+        <p>Reachable:</p>
+        <TypeBadge
+          v-for="c in displayMoveCoverages"
+          :key="c"
+          :type="c"
         />
       </div>
     </div>
 
+    <div class="pokemon-list">
       <div
-        v-if="pokemonList.length > 0 && currentPokemon"
-        class="pokemon-list"
-      >
-      <div class="pokemon-selector">
-        <button
-          v-if="pokemonList.length > 1"
-          class="arrow-btn"
-          :aria-label="`Show previous ${typeData.name} Pokemon option`"
-          @click="prevPokemon"
-        >
-          ◀
-        </button>
-        <img 
-          v-if="currentPokemon.sprite"
-          :src="currentPokemon.sprite || undefined"
-          :alt="currentPokemon.pokemon.name"
-          class="pixel-sprite"
-        >
-        <button
-          v-if="pokemonList.length > 1"
-          class="arrow-btn"
-          :aria-label="`Show next ${typeData.name} Pokemon option`"
-          @click="nextPokemon"
-        >
-          ▶
-        </button>
-      </div>
-      
-      <div class="poke-name-wrapper">
-        <p class="poke-name">
-          {{ currentPokemon.pokemon.name }}
-        </p>
-      </div>
-      
-      <div
-        v-if="typeData.include_ability_immunities !== false && availableAbilities.length > 1"
+        v-if="availableAbilities.length > 1"
         class="ability-panel"
       >
         <div class="ability-panel-header">
@@ -198,7 +163,7 @@ const handleAddToParty = () => {
           <select
             v-model="selectedAbilityName"
             class="ability-select"
-            :aria-label="`Select ability for ${selectedPokemonName}`"
+            :aria-label="`Select ability for ${pokemon.name}`"
           >
             <option
               v-for="ability in availableAbilities"
@@ -210,39 +175,38 @@ const handleAddToParty = () => {
           </select>
         </label>
       </div>
-      
+      <p
+        v-else-if="pokemon.abilityName"
+        class="ability-single"
+      >
+        Ability: {{ pokemon.abilityName }}
+      </p>
+
       <div class="poke-actions">
         <button
           class="gba-btn mini-btn"
-          :aria-label="`${showStats ? 'Hide' : 'Show'} stats for ${selectedPokemonName}`"
+          :aria-label="`${showStats ? 'Hide' : 'Show'} stats for ${pokemon.name}`"
           @click="toggleStats"
         >
           {{ showStats ? 'Hide' : 'Stats' }}
         </button>
-        <button 
-          class="gba-btn mini-btn party-btn" 
-          :disabled="currentParty.length >= 3" 
-          :aria-label="`Add ${selectedPokemonName} to party`"
-          @click="handleAddToParty"
+        <button
+          class="gba-btn mini-btn party-btn"
+          :disabled="rosterIsFull || isOnRoster"
+          :aria-label="isOnRoster ? `${pokemon.name} is already on the roster` : `Add ${pokemon.name} to roster`"
+          @click="handleAddToRoster"
         >
-          + Party
+          {{ isOnRoster ? 'On Roster' : '+ Roster' }}
         </button>
       </div>
-      
-      <p
-        v-if="pokemonList.length > 1"
-        class="poke-count"
-      >
-        {{ selectedPokemonIndex + 1 }} / {{ pokemonList.length }}
-      </p>
 
       <Transition name="wipe">
         <div
           v-if="showStats"
           class="stat-bars"
         >
-          <StatBar 
-            v-for="(val, stat) in currentPokemon.stats" 
+          <StatBar
+            v-for="(val, stat) in pokemon.stats"
             :key="stat"
             :label="(stat as string).replace('special-', 'S').substring(0, 3)"
             :value="val"
@@ -250,15 +214,47 @@ const handleAddToParty = () => {
         </div>
       </Transition>
     </div>
-    <div v-else>
-      <p class="poke-name">
-        No Pokemon found
-      </p>
-    </div>
   </div>
 </template>
 
 <style lang="scss" scoped>
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.card-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.card-title .poke-name {
+  margin: 0;
+  word-break: break-word;
+}
+
+/* Reachable coverage recedes: it is what the Pokemon *can* do with a moveslot,
+   not what it threatens off STAB. */
+.move-coverage {
+  opacity: 0.7;
+}
+
+.type-card.rostered {
+  outline: 3px solid var(--gba-accent-cyan);
+  outline-offset: 2px;
+}
+
+.ability-single {
+  font-family: var(--gba-font-body);
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin: 4px 0;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

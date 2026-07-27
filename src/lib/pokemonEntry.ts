@@ -149,6 +149,41 @@ export function flattenToPokemon(
 }
 
 /**
+ * Applies an ability choice to a Pokemon, re-deriving its defensive profile.
+ *
+ * The scan picks each Pokemon's best ability defensively. When the user picks a
+ * different one, the weaknesses, resistances and scores all have to follow —
+ * that is the whole point of ability immunities.
+ *
+ * @param entry Pokemon to adjust.
+ * @param abilityName Ability to select. Unknown names leave the entry unchanged.
+ * @param baseScore Baseline the damage scores were calculated with.
+ * @returns A new entry with the chosen ability applied.
+ */
+export function withAbility(
+  entry: PokemonEntry,
+  abilityName: string | undefined | null,
+  baseScore: number = DEFAULT_BASE_SCORE
+): PokemonEntry {
+  if (!abilityName || abilityName === entry.abilityName) return entry;
+
+  const profile = entry.abilityProfiles[abilityName];
+  if (!profile) return entry;
+
+  return {
+    ...entry,
+    abilityName,
+    weaknesses: profile.weaknesses ?? entry.weaknesses,
+    quadrupleWeaknesses: profile.quadruple_weaknesses ?? entry.quadrupleWeaknesses,
+    resistances: profile.resistances ?? entry.resistances,
+    immunities: profile.immunities ?? entry.immunities,
+    coverages: profile.coverages ?? entry.coverages,
+    normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, baseScore),
+    normalizedDamageFromScore: normalizeDamageFromScore(profile.damage_from_score, baseScore)
+  };
+}
+
+/**
  * Groups Pokemon back under their type combination.
  *
  * The inverse of flattening, for views that still browse by typing.

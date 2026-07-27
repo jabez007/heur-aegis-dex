@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { flattenToPokemon, type PokemonEntry } from '../lib/pokemonEntry';
+import { withAbility, type PokemonEntry } from '../lib/pokemonEntry';
 import { generateRosters } from '../lib/rosterGeneration';
 import { resolveSelectedPokemon } from '../lib/activePokemon';
 import { analyzeTeamCoverage } from '../lib/teamCoverage';
@@ -12,7 +12,7 @@ import {
   type BattleFormatId
 } from '../lib/battleFormats';
 import { DEFAULT_BASE_SCORE, normalizeDamageFromScore, normalizeDamageToScore } from '../lib/pokedexScoring';
-import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
+import type { ActiveTypeDataLike } from '../lib/activePokemon';
 import { useNotifications } from './useNotifications';
 import { createInjectableState } from './injectableState';
 
@@ -139,6 +139,23 @@ export function useTeamBuilder() {
     conflictingAbilities: roleAnalysis.value.conflictingAbilities
   }));
 
+  const fromPokemonEntry = (entry: PokemonEntry): PartyMember => ({
+    name: entry.name,
+    speciesName: entry.speciesName,
+    types: entry.types,
+    sprite: entry.sprite,
+    stats: entry.stats,
+    abilityName: entry.abilityName,
+    weaknesses: entry.weaknesses,
+    resistances: entry.resistances,
+    immunities: entry.immunities,
+    coverages: entry.coverages,
+    moveCoverages: entry.moveCoverages,
+    normalizedDamageToScore: entry.normalizedDamageToScore,
+    normalizedDamageFromScore: entry.normalizedDamageFromScore,
+    typeName: entry.typeName
+  });
+
   const setFormat = (nextFormatId: BattleFormatId) => {
     if (!(nextFormatId in BATTLE_FORMATS)) return;
     formatId.value = nextFormatId;
@@ -164,6 +181,37 @@ export function useTeamBuilder() {
   const useSuggestedBring = () => {
     manualBringIndices.value = null;
   };
+
+  /**
+   * Registers a Pokemon on the roster.
+   *
+   * The Pokemon-native entry point. addToParty remains for callers still
+   * holding a type card.
+   *
+   * @param entry Pokemon to register.
+   * @param abilityName Optional ability override.
+   * @returns Whether the Pokemon was added.
+   */
+  const addPokemon = (entry: PokemonEntry, abilityName?: string): boolean => {
+    if (roster.value.length >= maxRosterSize.value) {
+      notify(`Roster is full at ${maxRosterSize.value}.`, 'error');
+      return false;
+    }
+
+    // Champions forbids duplicate Pokedex numbers, so identity is the species.
+    if (roster.value.some(member => member.speciesName === entry.speciesName)) {
+      notify(`${entry.speciesName.toUpperCase()} is already in your roster.`, 'error');
+      return false;
+    }
+
+    roster.value.push(fromPokemonEntry(withAbility(entry, abilityName)));
+    manualBringIndices.value = null;
+    notify(`Added ${entry.name.toUpperCase()} to roster.`, 'success');
+    return true;
+  };
+
+  const hasSpecies = (speciesName: string) =>
+    roster.value.some((member) => member.speciesName === speciesName);
 
   const addToParty = (typeData: ActiveTypeDataLike, pokemonIndex: number, abilityName?: string) => {
     if (roster.value.length >= maxRosterSize.value) {
@@ -215,23 +263,6 @@ export function useTeamBuilder() {
     manualBringIndices.value = null;
   };
 
-  const fromPokemonEntry = (entry: PokemonEntry): PartyMember => ({
-    name: entry.name,
-    speciesName: entry.speciesName,
-    types: entry.types,
-    sprite: entry.sprite,
-    stats: entry.stats,
-    abilityName: entry.abilityName,
-    weaknesses: entry.weaknesses,
-    resistances: entry.resistances,
-    immunities: entry.immunities,
-    coverages: entry.coverages,
-    moveCoverages: entry.moveCoverages,
-    normalizedDamageToScore: entry.normalizedDamageToScore,
-    normalizedDamageFromScore: entry.normalizedDamageFromScore,
-    typeName: entry.typeName
-  });
-
   /**
    * Rebuilds the roster from a generated result.
    *
@@ -258,10 +289,15 @@ export function useTeamBuilder() {
     return true;
   };
 
-  const generateFullTeam = (allowedTypes: TypeDataLike[]) => {
+  /**
+   * Builds a fresh roster from a Pokemon pool.
+   *
+   * @param pool Pokemon the search may draw from.
+   * @returns Nothing.
+   */
+  const generateFullTeam = (pool: PokemonEntry[]) => {
     isGenerating.value = true;
     try {
-      const pool = flattenToPokemon(allowedTypes);
       if (!runGeneration(pool, [], 'Best roster found')) {
         notify("No valid rosters found with current filters.", "error");
       }
@@ -272,24 +308,29 @@ export function useTeamBuilder() {
     }
   };
 
-  const fillRemainingSlots = (fullList: TypeDataLike[], allowedTypes: ActiveTypeDataLike[]) => {
+  /**
+   * Completes the current roster, keeping everything already registered.
+   *
+   * @param allPokemon Every scanned Pokemon, used to resolve locked members that sit outside the filters.
+   * @param pool Pokemon the search may draw new members from.
+   * @returns Nothing.
+   */
+  const fillRemainingSlots = (allPokemon: PokemonEntry[], pool: PokemonEntry[]) => {
     if (roster.value.length >= maxRosterSize.value) return;
     if (roster.value.length === 0) {
-      generateFullTeam(allowedTypes);
+      generateFullTeam(pool);
       return;
     }
 
     isGenerating.value = true;
     try {
       // Locked members can sit outside the current filters, so the seed is
-      // resolved against the full list rather than the filtered pool.
-      const everything = flattenToPokemon(fullList);
-      const byName = new Map(everything.map((entry) => [entry.name, entry]));
+      // resolved against everything rather than the filtered pool.
+      const byName = new Map(allPokemon.map((entry) => [entry.name, entry]));
       const seed = roster.value
         .map((member) => byName.get(member.name))
         .filter((entry): entry is PokemonEntry => entry !== undefined);
 
-      const pool = flattenToPokemon(allowedTypes);
       if (!runGeneration(pool, seed, 'Roster filled')) {
         notify("No compatible partners found for this roster.", "error");
       }
@@ -316,6 +357,8 @@ export function useTeamBuilder() {
     rosterEvaluation,
     setFormat,
     toggleBring,
+    addPokemon,
+    hasSpecies,
     useSuggestedBring,
     teamWeaknessSummary,
     teamCoverageSummary,

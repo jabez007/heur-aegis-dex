@@ -3,7 +3,7 @@ import { ALL_TYPES, useMetaFilters } from '../composables/useMetaFilters';
 
 const { 
   selectedTypes, 
-  hideEmptyTypes, 
+  requireAllTypes, 
   toggleType, 
   clearTypes, 
   selectAll, 
@@ -62,10 +62,10 @@ const {
       
       <label class="gba-checkbox">
         <input
-          v-model="hideEmptyTypes"
+          v-model="requireAllTypes"
           type="checkbox"
         >
-        Hide Empty Types
+        Require All Types
       </label>
     </div>
   </section>

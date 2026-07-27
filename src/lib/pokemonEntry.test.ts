@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { flattenToPokemon, groupByTypeName, toPokemonEntry } from './pokemonEntry';
+import { flattenToPokemon, groupByTypeName, toPokemonEntry, withAbility } from './pokemonEntry';
 import type { PokemonListEntry } from './pokedexTypes';
 
 const stats = { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 };
@@ -134,5 +134,52 @@ describe('groupByTypeName', () => {
 
   it('returns an empty map for no Pokemon', () => {
     expect(groupByTypeName([]).size).toBe(0);
+  });
+});
+
+describe('withAbility', () => {
+  const base = toPokemonEntry(scanEntry('pelipper', {
+    selected_ability_name: 'keen-eye',
+    ability_profiles: {
+      'keen-eye': {
+        weaknesses: ['electric', 'rock'],
+        resistances: ['fighting'],
+        immunities: [],
+        coverages: ['fire'],
+        damage_from_score: 20,
+        damage_to_score: 20
+      },
+      'storm-drain': {
+        weaknesses: ['electric'],
+        resistances: ['fighting', 'water'],
+        immunities: ['water'],
+        coverages: ['fire'],
+        damage_from_score: 17,
+        damage_to_score: 20
+      }
+    }
+  }), 'water/flying')!;
+
+  it('re-derives the defensive profile for the chosen ability', () => {
+    const withStormDrain = withAbility(base, 'storm-drain');
+
+    expect(withStormDrain.abilityName).toBe('storm-drain');
+    expect(withStormDrain.immunities).toEqual(['water']);
+    expect(withStormDrain.weaknesses).toEqual(['electric']);
+    expect(withStormDrain.normalizedDamageFromScore)
+      .toBeLessThan(base.normalizedDamageFromScore);
+  });
+
+  it('leaves the entry untouched for the current or an unknown ability', () => {
+    expect(withAbility(base, 'keen-eye')).toBe(base);
+    expect(withAbility(base, 'not-an-ability')).toBe(base);
+    expect(withAbility(base, undefined)).toBe(base);
+    expect(withAbility(base, '')).toBe(base);
+  });
+
+  it('does not mutate the original entry', () => {
+    withAbility(base, 'storm-drain');
+    expect(base.abilityName).toBe('keen-eye');
+    expect(base.immunities).toEqual([]);
   });
 });

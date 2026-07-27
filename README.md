@@ -9,7 +9,7 @@ An advanced Pokémon meta-analysis and team building engine designed with a retr
 - **Regulation Legality:** Filter the roster to a published Pokémon Champions regulation set (M-A, M-B). Defaults to whichever regulation is in force today.
 - **Move Coverage:** Offensive answers account for what a Pokémon can actually learn, not just its STAB, using the Champions movepool.
 - **Dynamic Cup Builder:** Define custom meta-games by selecting specific type pools and region constraints.
-- **Meta-Analysis Grid:** Real-time ranking of type combinations based on offensive coverage and defensive vulnerability.
+- **Pokémon Browser:** Every eligible Pokémon, ranked by balance of coverage against vulnerability, filtered by type and with a per-Pokémon ability selector.
 - **Team Workbench:** Register a roster of up to six, then bring three (singles) or four (doubles). The workbench suggests the strongest bring and analyses the team that actually takes the field.
 - **Retro Aesthetic:** Fully themed GBA-style UI with pixel-perfect sprites and custom components.
 - **High Performance:** Client-side caching and optimized recursive team generation algorithms.
@@ -26,7 +26,7 @@ To add a regulation, append an entry to `REGULATION_LIST` with its roster, dates
 
 Pokémon are the primary entity. `src/lib/pokemonEntry.ts` flattens the scan — which is organised around 171 type combinations — into flat Pokémon records carrying their own typing, stats, abilities and coverage. `groupByTypeName` is the inverse for views that browse by typing.
 
-Both shapes coexist on purpose: the meta grid still consumes the type-keyed view, while team building works from Pokémon. A typing is one of a Pokémon's attributes and a way to group them, not a stand-in for one.
+The grid is a Pokémon browser: types are a *filter* on it, not the thing being listed. `groupByTypeName` remains for anything that wants the type-keyed view back.
 
 The practical consequence is that identity is a **species**, not a typing. Two different Water/Flying Pokémon can share a roster; a species and its Mega form cannot, matching the no-duplicate-Pokédex-number rule.
 

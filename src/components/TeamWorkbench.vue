@@ -3,16 +3,12 @@ import { computed } from 'vue';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
 import { BATTLE_FORMAT_LIST, type BattleFormatId } from '../lib/battleFormats';
 import TypeBadge from './TypeBadge.vue';
-import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
+import type { PokemonEntry } from '../lib/pokemonEntry';
 
 const props = defineProps<{
-  allDataTypes: TypeDataLike[];
-  filteredTypes: ActiveTypeDataLike[];
+  allPokemon: PokemonEntry[];
+  filteredPokemon: PokemonEntry[];
 }>();
-
-const includeAbilityImmunitiesActive = computed(() =>
-  props.allDataTypes.some(typeData => typeData.include_ability_immunities !== false)
-);
 
 const {
   roster,
@@ -75,7 +71,7 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
         <button
           class="gba-btn action-btn mini"
           :disabled="rosterIsFull || isGenerating"
-          @click="fillRemainingSlots(allDataTypes, filteredTypes)"
+          @click="fillRemainingSlots(props.allPokemon, props.filteredPokemon)"
         >
           {{ isGenerating ? '...' : (roster.length === 0 ? 'Generate Roster' : 'Fill Roster') }}
         </button>
@@ -143,7 +139,7 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
                   />
                 </div>
                 <p
-                  v-if="includeAbilityImmunitiesActive && roster[index].abilityName"
+                  v-if="roster[index].abilityName"
                   class="slot-ability"
                 >
                   Ability: {{ roster[index].abilityName }}
