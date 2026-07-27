@@ -10,7 +10,7 @@ An advanced Pokémon meta-analysis and team building engine designed with a retr
 - **Move Coverage:** Offensive answers account for what a Pokémon can actually learn, not just its STAB, using the Champions movepool.
 - **Dynamic Cup Builder:** Define custom meta-games by selecting specific type pools and region constraints.
 - **Meta-Analysis Grid:** Real-time ranking of type combinations based on offensive coverage and defensive vulnerability.
-- **Team Workbench:** Assemble 3-member teams with automated "Auto-Fill" logic that suggests optimal partners based on current team weaknesses.
+- **Team Workbench:** Register a roster of up to six, then bring three (singles) or four (doubles). The workbench suggests the strongest bring and analyses the team that actually takes the field.
 - **Retro Aesthetic:** Fully themed GBA-style UI with pixel-perfect sprites and custom components.
 - **High Performance:** Client-side caching and optimized recursive team generation algorithms.
 
@@ -21,6 +21,14 @@ Champions publishes legality as a whitelist per regulation set, so `src/lib/regu
 Legality is kept **independent** of the breedable-only rule the scan also applies. A Pokémon must satisfy both to appear: being tournament legal does not make it something you want to raise, and being breedable does not make it legal. Selecting "Any" drops the legality filter and leaves the breedable-only preference in place.
 
 To add a regulation, append an entry to `REGULATION_LIST` with its roster, dates and sources. Anything not recovered from a published source belongs in `incompleteFields` so an empty set reads as "not recorded" rather than "none".
+
+### Formats and Rosters
+
+Play! Pokémon registers up to six Pokémon and brings a subset — three in singles, four in doubles. Those are separate concepts in the code: `roster` is what you register, `bringIndices` is what enters the battle, and all team analysis describes the brought team, since the benched members never share a field.
+
+`evaluateRoster` scores a roster by enumerating every legal bring (15 for doubles, 20 for singles) and blending the best option with the depth behind it. Open team list lets the opponent pick against your roster, so having several viable brings matters alongside having one great one.
+
+Format also decides which synergy applies. Spread-move safety, redirection and ally protection all require a partner on the field, so they score zero in singles rather than crediting a capability the format cannot use.
 
 ### Coverage Moves
 

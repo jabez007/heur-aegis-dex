@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
+import { BATTLE_FORMAT_LIST, type BattleFormatId } from '../lib/battleFormats';
 import TypeBadge from './TypeBadge.vue';
 import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
 
@@ -13,10 +14,21 @@ const includeAbilityImmunitiesActive = computed(() =>
   props.allDataTypes.some(typeData => typeData.include_ability_immunities !== false)
 );
 
-const { 
-  currentParty, 
-  isGenerating, 
-  teamWeaknessSummary, 
+const {
+  roster,
+  isGenerating,
+  format,
+  formatId,
+  maxRosterSize,
+  bringSize,
+  bringIndices,
+  isBrought,
+  isSuggestedBring,
+  rosterEvaluation,
+  setFormat,
+  toggleBring,
+  useSuggestedBring,
+  teamWeaknessSummary,
   teamCoverageSummary,
   teamSpreadSummary,
   teamRoleSummary,
@@ -24,6 +36,9 @@ const {
   clearParty,
   fillRemainingSlots
 } = useTeamBuilder();
+
+const rosterIsFull = computed(() => roster.value.length >= maxRosterSize.value);
+const canFieldATeam = computed(() => bringIndices.value.length === bringSize.value);
 
 const ROLE_LABELS: Record<string, string> = {
   'intimidate': 'Intimidate',
@@ -41,71 +56,118 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
     <div class="workbench-header">
       <h2>Team Workbench</h2>
       <div class="workbench-actions">
-        <button 
-          class="gba-btn action-btn mini" 
-          :disabled="currentParty.length >= 3 || isGenerating" 
+        <label class="gba-label format-label">
+          Format:
+          <select
+            class="gba-select"
+            :value="formatId"
+            @change="setFormat(($event.target as HTMLSelectElement).value as BattleFormatId)"
+          >
+            <option
+              v-for="option in BATTLE_FORMAT_LIST"
+              :key="option.id"
+              :value="option.id"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+        <button
+          class="gba-btn action-btn mini"
+          :disabled="rosterIsFull || isGenerating"
           @click="fillRemainingSlots(allDataTypes, filteredTypes)"
         >
-          {{ isGenerating ? '...' : (currentParty.length === 0 ? 'Generate Team' : 'Auto-Fill Slot') }}
+          {{ isGenerating ? '...' : (roster.length === 0 ? 'Generate Roster' : 'Fill Roster') }}
         </button>
-        <button 
-          class="gba-btn action-btn mini" 
-          :disabled="currentParty.length === 0 || isGenerating" 
+        <button
+          class="gba-btn action-btn mini"
+          :disabled="roster.length === 0 || isGenerating"
           @click="clearParty"
         >
-          Clear Party
+          Clear Roster
         </button>
       </div>
     </div>
+
+    <p class="roster-status">
+      Roster {{ roster.length }}/{{ maxRosterSize }}
+      <span v-if="canFieldATeam">
+        // bringing {{ bringSize }}
+        <template v-if="isSuggestedBring">(suggested)</template>
+        <template v-else>(your pick)</template>
+        // {{ Math.round(rosterEvaluation.score) }}/100 over {{ rosterEvaluation.optionCount }} options
+      </span>
+      <span v-else>
+        // select {{ bringSize }} to bring
+      </span>
+      <button
+        v-if="!isSuggestedBring"
+        class="link-btn"
+        @click="useSuggestedBring"
+      >
+        Use suggested
+      </button>
+    </p>
     
     <div class="party-grid">
       <div
-        v-for="(_, index) in 3"
+        v-for="(_, index) in maxRosterSize"
         :key="index"
         class="party-slot"
-        :class="{ empty: !currentParty[index] }"
+        :class="{ empty: !roster[index], brought: roster[index] && isBrought(index) }"
       >
         <Transition
           name="party-pop"
           mode="out-in"
         >
           <div
-            v-if="currentParty[index]"
+            v-if="roster[index]"
             class="slot-content"
           >
             <div class="slot-info">
               <img
-                :src="currentParty[index].sprite"
-                :alt="currentParty[index].name"
+                :src="roster[index].sprite"
+                :alt="roster[index].name"
                 class="pixel-sprite mini"
               >
               <div class="slot-text">
                 <p class="slot-name">
-                  {{ currentParty[index].name }}
+                  {{ roster[index].name }}
                 </p>
                 <div class="slot-types">
-                  <TypeBadge 
-                    v-for="type in currentParty[index].types" 
-                    :key="type" 
-                    :type="type" 
+                  <TypeBadge
+                    v-for="type in roster[index].types"
+                    :key="type"
+                    :type="type"
                     size="mini"
                   />
                 </div>
                 <p
-                  v-if="includeAbilityImmunitiesActive && currentParty[index].abilityName"
+                  v-if="includeAbilityImmunitiesActive && roster[index].abilityName"
                   class="slot-ability"
                 >
-                  Ability: {{ currentParty[index].abilityName }}
+                  Ability: {{ roster[index].abilityName }}
                 </p>
               </div>
             </div>
-            <button
-              class="remove-btn"
-              :aria-label="`Remove ${currentParty[index].name} from party`"
-              @click="removeFromParty(index)"
-            >
-              ×
-            </button>
+            <div class="slot-actions">
+              <button
+                class="bring-btn"
+                :class="{ active: isBrought(index) }"
+                :aria-pressed="isBrought(index)"
+                :aria-label="`${isBrought(index) ? 'Do not bring' : 'Bring'} ${roster[index].name}`"
+                @click="toggleBring(index)"
+              >
+                {{ isBrought(index) ? 'BRINGING' : 'BENCH' }}
+              </button>
+              <button
+                class="remove-btn"
+                :aria-label="`Remove ${roster[index].name} from roster`"
+                @click="removeFromParty(index)"
+              >
+                ×
+              </button>
+            </div>
           </div>
           <div
             v-else
@@ -124,7 +186,7 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
       mode="out-in"
     >
       <div
-        v-if="currentParty.length > 0"
+        v-if="canFieldATeam"
         key="data"
         class="team-analysis"
       >
@@ -184,7 +246,7 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
         </div>
 
         <div
-          v-if="currentParty.length > 1"
+          v-if="format.hasAlly"
           class="analysis-grid spread-grid"
         >
           <div class="analysis-col">
@@ -274,7 +336,9 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
         class="team-analysis"
       >
         <p class="hint-text">
-          Add Pokemon from the Meta Analysis below to build your team.
+          {{ roster.length === 0
+            ? 'Add Pokemon from the Meta Analysis below to build your roster.'
+            : `Select ${bringSize} of your ${roster.length} to see the battle analysis.` }}
         </p>
       </div>
     </Transition>
@@ -455,6 +519,22 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
   gap: 24px;
 }
 
+.party-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 900px) {
+  .party-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .party-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .analysis-label {
   font-family: var(--gba-font-heading);
   font-weight: bold;
@@ -497,6 +577,65 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
   border: 2px solid var(--gba-text-dark);
   background: var(--gba-accent-cyan);
   color: var(--gba-text-dark);
+}
+
+.roster-status {
+  font-family: var(--gba-font-body);
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+  opacity: 0.9;
+}
+
+.link-btn {
+  font-family: var(--gba-font-body);
+  font-size: 0.8rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid currentColor;
+  color: var(--gba-accent-magenta);
+  cursor: pointer;
+  padding: 0;
+  margin-left: 8px;
+  text-transform: uppercase;
+}
+
+.format-label {
+  font-family: var(--gba-font-heading);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Benched members stay visible but recede, so the brought team reads first. */
+.party-slot:not(.brought):not(.empty) .slot-content {
+  opacity: 0.55;
+}
+
+.party-slot.brought {
+  outline: 3px solid var(--gba-accent-cyan);
+  outline-offset: 2px;
+}
+
+.slot-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.bring-btn {
+  font-family: var(--gba-font-body);
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border: 2px solid var(--gba-text-dark);
+  background: var(--gba-text-light);
+  color: var(--gba-text-dark);
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.bring-btn.active {
+  background: var(--gba-accent-cyan);
 }
 
 .role-conflict {

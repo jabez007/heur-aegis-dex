@@ -35,6 +35,22 @@ export type { PartyMember } from './composables/useTeamBuilder'
 export type { Notification } from './composables/useNotifications'
 export type { PokemonTypeData, DamageRelations, NamedResource } from './lib/pokedex'
 
+export {
+  BATTLE_FORMATS,
+  BATTLE_FORMAT_LIST,
+  DEFAULT_BATTLE_FORMAT,
+  combinationsOf,
+  getBattleFormat
+} from './lib/battleFormats'
+export type { BattleFormat, BattleFormatId } from './lib/battleFormats'
+export {
+  ROSTER_WEIGHTS,
+  ROSTER_DEPTH_OPTIONS,
+  evaluateRoster,
+  scoreBring
+} from './lib/rosterScoring'
+export type { RosterMember, RosterEvaluation, BringOption } from './lib/rosterScoring'
+
 export { analyzeTeamCoverage } from './lib/teamCoverage'
 export type { TeamCoverageProfile, TeamCoverageAnalysis } from './lib/teamCoverage'
 export {
