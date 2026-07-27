@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import { generateTeams } from '../lib/pokedex';
 import { resolveSelectedPokemon } from '../lib/activePokemon';
+import { analyzeTeamCoverage } from '../lib/teamCoverage';
 import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
 import type { TeamMemberResult } from '../lib/pokedexTypes';
 import { useNotifications } from './useNotifications';
@@ -40,28 +41,20 @@ export function useTeamBuilder() {
     typeName
   });
 
+  const coverageAnalysis = computed(() => analyzeTeamCoverage(currentParty.value));
+
+  // The workbench reports weaknesses with no *defensive* answer, because that is
+  // what "Team Weaknesses" means to a player: types nobody can switch into.
+  // The generator scores against the looser resist-or-cover notion, so the two
+  // legitimately differ — see teamCoverage.ts for why they are kept distinct.
   const teamWeaknessSummary = computed(() => {
-    const summary: Record<string, number> = {};
-    currentParty.value.forEach(member => {
-      member.weaknesses.forEach(w => {
-        const covered = currentParty.value.some(m => m.resistances.includes(w));
-        if (!covered) {
-          summary[w] = (summary[w] || 0) + 1;
-        }
-      });
-    });
-    return summary;
+    const { weaknessCounts, defensivelyUncoveredWeaknesses } = coverageAnalysis.value;
+    return Object.fromEntries(
+      defensivelyUncoveredWeaknesses.map(weakness => [weakness, weaknessCounts[weakness]])
+    );
   });
 
-  const teamCoverageSummary = computed(() => {
-    const summary: Record<string, number> = {};
-    currentParty.value.forEach(member => {
-      member.coverages.forEach(c => {
-        summary[c] = (summary[c] || 0) + 1;
-      });
-    });
-    return summary;
-  });
+  const teamCoverageSummary = computed(() => coverageAnalysis.value.coverageCounts);
 
   const addToParty = (typeData: ActiveTypeDataLike, pokemonIndex: number, abilityName?: string) => {
     if (currentParty.value.length >= 3) return;

@@ -1,4 +1,5 @@
 import { getEffectiveTypeProfile, getPokemonAbilityProfile } from './activePokemon';
+import { analyzeTeamCoverage } from './teamCoverage';
 import type {
   GenerateTeamsOptions,
   GeneratedTeamResult,
@@ -124,48 +125,17 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
 
     const pokemon = teamProfiles.map(entry => entry.pokemon).filter((p): p is TeamMemberResult => p !== null);
 
-    const weaknessCounts = teamProfiles.reduce((acc: Record<string, number>, entry) => {
-      (entry.profile.weaknesses || []).forEach((weakness: string) => {
-        acc[weakness] = (acc[weakness] || 0) + 1;
-      });
-      return acc;
-    }, {});
+    const {
+      weaknessCounts,
+      quadrupleWeaknessCounts,
+      uncoveredWeaknesses,
+      uncoveredQuadrupleWeaknesses,
+      sharedWeaknesses,
+      sharedQuadrupleWeaknesses,
+      uniqueResistances,
+      uniqueCoverages
+    } = analyzeTeamCoverage(teamProfiles.map((entry) => entry.profile));
 
-    const resistanceCounts = teamProfiles.reduce((acc: Record<string, number>, entry) => {
-      (entry.profile.resistances || []).forEach((resistance: string) => {
-        acc[resistance] = (acc[resistance] || 0) + 1;
-      });
-      return acc;
-    }, {});
-
-    const coverageCounts = teamProfiles.reduce((acc: Record<string, number>, entry) => {
-      (entry.profile.coverages || []).forEach((coverage: string) => {
-        acc[coverage] = (acc[coverage] || 0) + 1;
-      });
-      return acc;
-    }, {});
-
-    const quadrupleWeaknessCounts = teamProfiles.reduce((acc: Record<string, number>, entry) => {
-      (entry.profile.quadruple_weaknesses || []).forEach((weakness: string) => {
-        acc[weakness] = (acc[weakness] || 0) + 1;
-      });
-      return acc;
-    }, {});
-
-    const uncoveredWeaknesses = Object.entries(weaknessCounts)
-      .filter(([weakness]) => !resistanceCounts[weakness] && !coverageCounts[weakness])
-      .map(([weakness]) => weakness);
-    const uncoveredQuadrupleWeaknesses = Object.entries(quadrupleWeaknessCounts)
-      .filter(([weakness]) => !resistanceCounts[weakness] && !coverageCounts[weakness])
-      .map(([weakness]) => weakness);
-    const sharedWeaknesses = Object.entries(weaknessCounts)
-      .filter(([, count]) => count > 1)
-      .map(([weakness]) => weakness);
-    const sharedQuadrupleWeaknesses = Object.entries(quadrupleWeaknessCounts)
-      .filter(([, count]) => count > 1)
-      .map(([weakness]) => weakness);
-    const uniqueResistances = Object.keys(resistanceCounts).length;
-    const uniqueCoverages = Object.keys(coverageCounts).length;
     const typesTotal = (new Set(tm.flatMap((t) => t.name.split('/')))).size;
 
     const pokemonScore = teamProfiles.map((entry) => {
