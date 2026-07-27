@@ -39,6 +39,8 @@ export interface TeamTypeData {
   resistances: string[];
   /** Types dealing 0x damage. A strict subset of `resistances`. */
   immunities?: string[];
+  /** Types reachable super-effectively via any learnable move. */
+  move_coverages?: string[];
   ineffectives: string[];
   coverages: string[];
   damage_from_score?: number;
@@ -97,6 +99,8 @@ export interface PokemonListEntry {
   effective_quadruple_weaknesses?: string[];
   effective_resistances?: string[];
   effective_immunities?: string[];
+  /** Types reachable super-effectively via any learnable move, not just STAB. */
+  effective_move_coverages?: string[];
   effective_ineffectives?: string[];
   effective_coverages?: string[];
   effective_damage_from_score?: number;
@@ -117,6 +121,7 @@ export interface TeamMemberResult {
   effective_quadruple_weaknesses: string[];
   effective_resistances: string[];
   effective_immunities: string[];
+  effective_move_coverages: string[];
   effective_ineffectives: string[];
   effective_coverages: string[];
   normalized_damage_to_score: number;

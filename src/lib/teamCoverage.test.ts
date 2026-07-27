@@ -124,6 +124,41 @@ describe('analyzeTeamCoverage', () => {
     });
   });
 
+  describe('move-based offensive answers', () => {
+    it('accepts a learnable move as an offensive answer', () => {
+      // Nobody resists fire and nobody has fire STAB, but a teammate can learn a
+      // move that reaches it. That is exactly what "do we have an answer" means.
+      const analysis = analyzeTeamCoverage([
+        { weaknesses: ['fire'], resistances: [], coverages: [], moveCoverages: [] },
+        { weaknesses: [], resistances: [], coverages: [], moveCoverages: ['fire'] }
+      ]);
+
+      expect(analysis.uncoveredWeaknesses).toEqual([]);
+      // The defensive reading is unaffected: reaching fire does not let anyone
+      // switch into it.
+      expect(analysis.defensivelyUncoveredWeaknesses).toEqual(['fire']);
+    });
+
+    it('still reports a weakness nothing reaches or resists', () => {
+      const analysis = analyzeTeamCoverage([
+        { weaknesses: ['fire'], resistances: [], coverages: ['water'], moveCoverages: ['grass'] }
+      ]);
+
+      expect(analysis.uncoveredWeaknesses).toEqual(['fire']);
+    });
+
+    it('keeps STAB coverage counted separately from reach', () => {
+      // uniqueCoverages measures how hard the team threatens, so move reach must
+      // not inflate it.
+      const analysis = analyzeTeamCoverage([
+        { weaknesses: [], resistances: [], coverages: ['water'], moveCoverages: ['fire', 'ice', 'rock'] }
+      ]);
+
+      expect(analysis.uniqueCoverages).toBe(1);
+      expect(analysis.moveCoverageCounts).toEqual({ fire: 1, ice: 1, rock: 1 });
+    });
+  });
+
   it('tolerates members with missing profile fields', () => {
     const analysis = analyzeTeamCoverage([{}, { weaknesses: ['fire'] }]);
 

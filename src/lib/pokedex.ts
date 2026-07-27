@@ -1,6 +1,7 @@
 import Pokedex from 'pokedex-promise-v2';
 import { applyAbilityModifiers, createRawAbilityProfile } from './pokedexAbilities';
 import { getRegulation, isSpeciesLegal } from './regulations';
+import { buildOffensiveTypeChart, getMoveCoverage } from './coverageMoves';
 import {
   DEFAULT_BASE_SCORE,
   calculateDamageFromScore,
@@ -9,6 +10,7 @@ import {
   createTypeSummary,
   filterUniqueBy
 } from './pokedexScoring';
+import type { OffensiveTypeChart } from './coverageMoves';
 import type {
   DamageRelations,
   NamedResource,
@@ -157,6 +159,7 @@ function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
     effective_quadruple_weaknesses: [...(entry.effective_quadruple_weaknesses || [])],
     effective_resistances: [...(entry.effective_resistances || [])],
     effective_immunities: [...(entry.effective_immunities || [])],
+    effective_move_coverages: [...(entry.effective_move_coverages || [])],
     effective_ineffectives: [...(entry.effective_ineffectives || [])],
     effective_coverages: [...(entry.effective_coverages || [])]
   };
@@ -283,6 +286,11 @@ export async function getResistantTypes(options: {
     allowMegas?: boolean;
     includeAbilityImmunities?: boolean;
     /**
+     * Include coverage reachable through learnable moves, not only STAB.
+     * Defaults to true; disable to score on typing alone.
+     */
+    includeMoveCoverage?: boolean;
+    /**
      * Restrict results to a Champions regulation roster, for example `M-B`.
      * Omit or pass null to scan without a legality filter. Applied on top of
      * the breedable-only rule, never instead of it.
@@ -303,7 +311,7 @@ export async function getResistantTypes(options: {
   } = options;
 
   const _typeFilters = { maxDamageFromScore: true, allowQuadrupleDamage: true, limitQuadrupleDamage: true, ...typeFilters };
-  const _pokemonFilters = { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, regulation: null, ...pokemonFilters };
+  const _pokemonFilters = { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, includeMoveCoverage: true, regulation: null, ...pokemonFilters };
   const _statsFilters = { minimumStatsTotal: 480, minimumAttacks: 80, minimumDefenses: 80, ...statsFilters };
 
   // An unknown regulation id must not silently degrade into an unfiltered scan,
@@ -330,7 +338,7 @@ export async function getResistantTypes(options: {
     return true;
   };
 
-  const processPokemon = async (t: PokemonTypeData): Promise<PokemonListEntry[]> => {
+  const processPokemon = async (t: PokemonTypeData, offensiveChart: OffensiveTypeChart): Promise<PokemonListEntry[]> => {
     const pokemon = await Promise.all(
       (t.pokemon || []).map(async (p: PokemonListEntry) => {
         if (!_pokemonFilters.allowMegas && p.pokemon.name.includes('-mega')) return null;
@@ -399,6 +407,11 @@ export async function getResistantTypes(options: {
         p.effective_quadruple_weaknesses = bestProfile.quadruple_weaknesses;
         p.effective_resistances = bestProfile.resistances;
         p.effective_immunities = bestProfile.immunities;
+        // Move coverage is a property of the Pokemon rather than its typing, so
+        // it is resolved per entry from the variety name the scan already holds.
+        p.effective_move_coverages = _pokemonFilters.includeMoveCoverage
+          ? getMoveCoverage(p.pokemon.name, offensiveChart)
+          : [];
         p.effective_ineffectives = bestProfile.ineffectives;
         p.effective_coverages = bestProfile.coverages;
         p.effective_damage_from_score = bestProfile.damage_from_score;
@@ -418,6 +431,7 @@ export async function getResistantTypes(options: {
   // otherwise refetch all 18 type resources for the same scan.
   const baseTypes = await getBaseTypes(baseScore);
   const baseAndDualTypes = baseTypes.concat(await getDualTypes(baseScore, baseTypes));
+  const offensiveChart = buildOffensiveTypeChart(baseTypes);
 
   const uniquePokemonEntries = Array.from(
     new Map(
@@ -454,7 +468,7 @@ export async function getResistantTypes(options: {
         return meetsScoreFilter && meetsQuadFilter;
       })
       .map(async (t: PokemonTypeData) => {
-        const pokemon = await processPokemon(t);
+        const pokemon = await processPokemon(t, offensiveChart);
         // The summary describes the typing itself, so it must come from the type's
         // own damage relations. Deriving it from the highest-stat Pokemon leaked
         // that Pokemon's ability immunities into a row presented as a property of

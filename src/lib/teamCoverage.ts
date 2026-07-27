@@ -29,6 +29,13 @@ export interface TeamCoverageProfile {
   immunities?: string[];
   coverages?: string[];
   /**
+   * Types reachable super-effectively through any learnable move. Wider than
+   * `coverages`, which is STAB only. Used for "does the team have an answer",
+   * where reaching a type is exactly the question; `coverages` remains the
+   * measure of how hard the team threatens it.
+   */
+  moveCoverages?: string[];
+  /**
    * The member takes no damage from its ally's moves whatever their type, as
    * Telepathy grants. Kept as a damage fact rather than an ability name so this
    * module stays free of ability knowledge.
@@ -41,6 +48,8 @@ export interface TeamCoverageAnalysis {
   quadrupleWeaknessCounts: Record<string, number>;
   resistanceCounts: Record<string, number>;
   coverageCounts: Record<string, number>;
+  /** Tally of types reachable through learnable moves. */
+  moveCoverageCounts: Record<string, number>;
   /** Weaknesses no member resists. These are the types that actually threaten the team. */
   defensivelyUncoveredWeaknesses: string[];
   /** Weaknesses no member resists and no member answers offensively. */
@@ -141,15 +150,21 @@ export function analyzeTeamCoverage(members: TeamCoverageProfile[]): TeamCoverag
   const quadrupleWeaknessCounts = countOccurrences(members, (member) => member.quadruple_weaknesses);
   const resistanceCounts = countOccurrences(members, (member) => member.resistances);
   const coverageCounts = countOccurrences(members, (member) => member.coverages);
+  const moveCoverageCounts = countOccurrences(members, (member) => member.moveCoverages);
 
   const hasDefensiveAnswer = (typeName: string) => !!resistanceCounts[typeName];
-  const hasAnyAnswer = (typeName: string) => hasDefensiveAnswer(typeName) || !!coverageCounts[typeName];
+  // An offensive answer only needs a move that reaches the type. STAB coverage
+  // counts too, since a member always has its own types available.
+  const hasOffensiveAnswer = (typeName: string) =>
+    !!coverageCounts[typeName] || !!moveCoverageCounts[typeName];
+  const hasAnyAnswer = (typeName: string) => hasDefensiveAnswer(typeName) || hasOffensiveAnswer(typeName);
 
   return {
     weaknessCounts,
     quadrupleWeaknessCounts,
     resistanceCounts,
     coverageCounts,
+    moveCoverageCounts,
     defensivelyUncoveredWeaknesses: namesWhere(weaknessCounts, (typeName) => !hasDefensiveAnswer(typeName)),
     uncoveredWeaknesses: namesWhere(weaknessCounts, (typeName) => !hasAnyAnswer(typeName)),
     uncoveredQuadrupleWeaknesses: namesWhere(quadrupleWeaknessCounts, (typeName) => !hasAnyAnswer(typeName)),

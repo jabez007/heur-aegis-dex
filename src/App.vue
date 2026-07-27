@@ -89,6 +89,15 @@
             </label>
             <label class="gba-label checkbox-label">
               <input
+                v-model="includeMoveCoverage"
+                type="checkbox"
+                class="gba-checkbox"
+                @change="fetchTypesDebounced"
+              >
+              Include Move Coverage
+            </label>
+            <label class="gba-label checkbox-label">
+              <input
                 v-model="allowMegas"
                 type="checkbox"
                 class="gba-checkbox"
@@ -212,6 +221,7 @@ const minAttacks = ref(80);
 const minDefenses = ref(80);
 const allowMegas = ref(false);
 const includeAbilityImmunities = ref(true);
+const includeMoveCoverage = ref(true);
 const { notify } = useNotifications();
 let fetchTypesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -241,13 +251,14 @@ const fetchTypes = () => {
     inPokedex: inPokedex.value,
     allowMegas: allowMegas.value,
     includeAbilityImmunities: includeAbilityImmunities.value,
+    includeMoveCoverage: includeMoveCoverage.value,
     regulation: regulation.value || null
   };
 
   // Every filter that changes the result must appear in the key, or switching it
   // serves a cached scan from different settings. The version prefix is bumped
   // whenever the stored shape changes.
-  const key = `heur_aegis_dex_v4_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${regulation.value || 'any'}`;
+  const key = `heur_aegis_dex_v5_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
 
   const cached = lscache.get(key);
   if (cached) {

@@ -9,6 +9,8 @@ const mockState = vi.hoisted(() => ({
   useRegulationLegalSpecies: false,
   /** Report every species as legendary, exercising the breedable-only filter. */
   treatSpeciesAsLegendary: false,
+  /** Name the fire-type entry after a Pokemon present in the coverage-move table. */
+  useCoverageTableName: false,
   detailDelayMs: 0,
   requestCounts: new Map<string, number>(),
   activeDetailRequests: 0,
@@ -93,7 +95,7 @@ vi.mock('pokedex-promise-v2', () => {
             no_damage_to: []
           },
           pokemon: [
-            { pokemon: { name: 'charmander', url: 'https://pokeapi.co/api/v2/pokemon/4/' } },
+            { pokemon: { name: mockState.useCoverageTableName ? 'garchomp' : 'charmander', url: 'https://pokeapi.co/api/v2/pokemon/4/' } },
             ...extraPokemon
           ]
           };
@@ -217,6 +219,7 @@ beforeEach(() => {
   mockState.failPokemon4Once = false;
   mockState.useRegulationLegalSpecies = false;
   mockState.treatSpeciesAsLegendary = false;
+  mockState.useCoverageTableName = false;
   mockState.detailDelayMs = 0;
   mockState.requestCounts.clear();
   mockState.activeDetailRequests = 0;
@@ -365,6 +368,34 @@ describe('pokedex.js API integration logic', () => {
     });
 
     expect(resistant.every(t => t.pokemon.length === 0)).toBe(true);
+  });
+
+  it('getResistantTypes should resolve move coverage beyond STAB', async () => {
+    mockState.useCoverageTableName = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, includeMoveCoverage: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    // Garchomp's Champions movepool includes fire, water and steel moves, none
+    // of which its Ground/Dragon typing can see.
+    const coverage = resistant.find(t => t.name === 'fire')!.pokemon[0].effective_move_coverages!;
+    expect(coverage.length).toBeGreaterThan(0);
+    expect(coverage).toContain('rock');
+  });
+
+  it('getResistantTypes should skip move coverage when disabled', async () => {
+    mockState.useCoverageTableName = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, includeMoveCoverage: false },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(resistant.find(t => t.name === 'fire')!.pokemon[0].effective_move_coverages).toEqual([]);
   });
 
   it('getResistantTypes should dedupe repeated pokemon and species detail fetches', async () => {

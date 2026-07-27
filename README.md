@@ -7,6 +7,7 @@ An advanced Pokémon meta-analysis and team building engine designed with a retr
 ## 🛠 Features
 
 - **Regulation Legality:** Filter the roster to a published Pokémon Champions regulation set (M-A, M-B). Defaults to whichever regulation is in force today.
+- **Move Coverage:** Offensive answers account for what a Pokémon can actually learn, not just its STAB, using the Champions movepool.
 - **Dynamic Cup Builder:** Define custom meta-games by selecting specific type pools and region constraints.
 - **Meta-Analysis Grid:** Real-time ranking of type combinations based on offensive coverage and defensive vulnerability.
 - **Team Workbench:** Assemble 3-member teams with automated "Auto-Fill" logic that suggests optimal partners based on current team weaknesses.
@@ -20,6 +21,14 @@ Champions publishes legality as a whitelist per regulation set, so `src/lib/regu
 Legality is kept **independent** of the breedable-only rule the scan also applies. A Pokémon must satisfy both to appear: being tournament legal does not make it something you want to raise, and being breedable does not make it legal. Selecting "Any" drops the legality filter and leaves the breedable-only preference in place.
 
 To add a regulation, append an entry to `REGULATION_LIST` with its roster, dates and sources. Anything not recovered from a published source belongs in `incompleteFields` so an empty set reads as "not recorded" rather than "none".
+
+### Coverage Moves
+
+`src/lib/coverageMoveData.ts` is generated, not hand-written. It records which move types each Pokémon can bring, derived from PokeAPI's `champions` version group — the actual Champions movepool rather than a union across older games. A move counts when it is damaging with base power ≥ 60.
+
+Rebuild it with `node scripts/gen-coverage-moves.mjs` when a regulation changes the roster.
+
+Move reach is kept **separate** from STAB coverage rather than replacing it. The median roster Pokémon has qualifying moves of ten types out of eighteen, so merging the two would flatten the offensive signal almost to nothing. Reach answers "does the team have an answer to this weakness"; STAB stays the measure of how hard the team threatens it.
 
 ## 🧪 Tech Stack
 

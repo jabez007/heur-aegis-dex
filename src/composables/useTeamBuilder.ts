@@ -19,6 +19,8 @@ export interface PartyMember {
   /** Strict 0x subset of `resistances`, needed for doubles spread safety. */
   immunities: string[];
   coverages: string[];
+  /** Types reachable super-effectively via any learnable move. */
+  moveCoverages: string[];
   typeName: string;
 }
 
@@ -50,6 +52,7 @@ export function useTeamBuilder() {
     resistances: member.effective_resistances || typeData.resistances,
     immunities: member.effective_immunities || typeData.immunities || [],
     coverages: member.effective_coverages || typeData.coverages,
+    moveCoverages: member.effective_move_coverages || [],
     typeName
   });
 
@@ -111,6 +114,7 @@ export function useTeamBuilder() {
       resistances: pokemon.effective_resistances || typeData.resistances,
       immunities: pokemon.effective_immunities || typeData.immunities || [],
       coverages: pokemon.effective_coverages || typeData.coverages,
+      moveCoverages: pokemon.effective_move_coverages || [],
       typeName: typeData.name
     });
     notify(`Added ${pokemon.pokemon.name.toUpperCase()} to party.`, "success");
