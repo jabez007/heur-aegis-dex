@@ -128,6 +128,7 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
           effective_weaknesses: abilityProfile?.weaknesses || t.weaknesses || [],
           effective_quadruple_weaknesses: abilityProfile?.quadruple_weaknesses || t.quadruple_weaknesses || [],
           effective_resistances: abilityProfile?.resistances || t.resistances || [],
+          effective_immunities: abilityProfile?.immunities || t.immunities || [],
           effective_ineffectives: abilityProfile?.ineffectives || t.ineffectives || [],
           effective_coverages: abilityProfile?.coverages || t.coverages || [],
           normalized_damage_to_score: normalizeTo(abilityProfile?.damage_to_score ?? t.damage_to_score),

@@ -103,6 +103,11 @@ export const cloneDamageRelations = (dr: DamageRelations): DamageRelations => ({
 export const createTypeSummary = (dr: DamageRelations) => ({
   weaknesses: ((dr.quadruple_damage_from || []).concat(dr.double_damage_from)).map(w => w.name),
   quadruple_weaknesses: (dr.quadruple_damage_from || []).map(w => w.name),
+  // `resistances` stays the broad "takes reduced damage" set, which is what a
+  // defensive answer means. `immunities` is the strict 0x subset: it matters on
+  // its own in doubles, where resisting a partner's Earthquake at 0.5x still
+  // hurts and only true immunity makes the move free to click.
+  immunities: dr.no_damage_from.map(i => i.name),
   resistances: dr.no_damage_from
     .concat(dr.quarter_damage_from || [])
     .concat(dr.half_damage_from)

@@ -79,7 +79,8 @@ describe('activePokemon helpers', () => {
       effective_damage_relations: createDamageRelations('effective-profile'),
       effective_weaknesses: ['water'],
       effective_quadruple_weaknesses: [],
-      effective_resistances: ['fire', 'grass'],
+      effective_resistances: ['fire', 'grass', 'ground'],
+      effective_immunities: ['ground'],
       effective_ineffectives: ['rock'],
       effective_coverages: ['grass'],
       effective_damage_from_score: 11,
@@ -90,7 +91,10 @@ describe('activePokemon helpers', () => {
       damage_relations: createDamageRelations('effective-profile'),
       weaknesses: ['water'],
       quadruple_weaknesses: [],
-      resistances: ['fire', 'grass'],
+      resistances: ['fire', 'grass', 'ground'],
+      // Immunities are the strict 0x subset of resistances, carried separately
+      // so doubles synergy can tell "takes no damage" from "takes half".
+      immunities: ['ground'],
       ineffectives: ['rock'],
       coverages: ['grass'],
       damage_from_score: 11,

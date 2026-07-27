@@ -137,6 +137,7 @@ function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
             weaknesses: [...(profile.weaknesses || [])],
             quadruple_weaknesses: [...(profile.quadruple_weaknesses || [])],
             resistances: [...(profile.resistances || [])],
+            immunities: [...(profile.immunities || [])],
             ineffectives: [...(profile.ineffectives || [])],
             coverages: [...(profile.coverages || [])]
           }
@@ -155,6 +156,7 @@ function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
     effective_weaknesses: [...(entry.effective_weaknesses || [])],
     effective_quadruple_weaknesses: [...(entry.effective_quadruple_weaknesses || [])],
     effective_resistances: [...(entry.effective_resistances || [])],
+    effective_immunities: [...(entry.effective_immunities || [])],
     effective_ineffectives: [...(entry.effective_ineffectives || [])],
     effective_coverages: [...(entry.effective_coverages || [])]
   };
@@ -396,6 +398,7 @@ export async function getResistantTypes(options: {
         p.effective_weaknesses = bestProfile.weaknesses;
         p.effective_quadruple_weaknesses = bestProfile.quadruple_weaknesses;
         p.effective_resistances = bestProfile.resistances;
+        p.effective_immunities = bestProfile.immunities;
         p.effective_ineffectives = bestProfile.ineffectives;
         p.effective_coverages = bestProfile.coverages;
         p.effective_damage_from_score = bestProfile.damage_from_score;

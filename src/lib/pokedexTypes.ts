@@ -24,6 +24,8 @@ export interface PokemonTypeData {
   weaknesses?: string[];
   quadruple_weaknesses?: string[];
   resistances?: string[];
+  /** Types dealing 0x damage. A strict subset of `resistances`. */
+  immunities?: string[];
   ineffectives?: string[];
   coverages?: string[];
   damage_from_score?: number;
@@ -35,6 +37,8 @@ export interface TeamTypeData {
   weaknesses: string[];
   quadruple_weaknesses?: string[];
   resistances: string[];
+  /** Types dealing 0x damage. A strict subset of `resistances`. */
+  immunities?: string[];
   ineffectives: string[];
   coverages: string[];
   damage_from_score?: number;
@@ -72,6 +76,7 @@ export interface AbilityProfile {
   weaknesses?: string[];
   quadruple_weaknesses?: string[];
   resistances?: string[];
+  immunities?: string[];
   ineffectives?: string[];
   coverages?: string[];
   damage_from_score?: number;
@@ -91,6 +96,7 @@ export interface PokemonListEntry {
   effective_weaknesses?: string[];
   effective_quadruple_weaknesses?: string[];
   effective_resistances?: string[];
+  effective_immunities?: string[];
   effective_ineffectives?: string[];
   effective_coverages?: string[];
   effective_damage_from_score?: number;
@@ -110,6 +116,7 @@ export interface TeamMemberResult {
   effective_weaknesses: string[];
   effective_quadruple_weaknesses: string[];
   effective_resistances: string[];
+  effective_immunities: string[];
   effective_ineffectives: string[];
   effective_coverages: string[];
   normalized_damage_to_score: number;

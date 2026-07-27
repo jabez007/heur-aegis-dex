@@ -295,6 +295,11 @@ describe('pokedex.js API integration logic', () => {
     expect(fireType!.damage_from_score).toBe(19.5);
     expect(fireType!.weaknesses).toContain('ground');
     expect(fireType!.resistances).not.toContain('ground');
+
+    // Levitate grants a true 0x immunity, so ground lands in both the strict
+    // immunity set and the broader resistance set for that Pokemon.
+    expect(fireType!.pokemon[0].effective_immunities).toEqual(['ground']);
+    expect(fireType!.pokemon[0].effective_resistances).toContain('ground');
   });
 
   it('getResistantTypes should allow disabling ability immunities', async () => {

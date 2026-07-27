@@ -39,7 +39,8 @@ export function getPokemonAbilityProfile(pokemon: PokemonListEntry | null | unde
     pokemon.effective_damage_from_score !== undefined ||
     pokemon.effective_damage_to_score !== undefined ||
     pokemon.effective_weaknesses !== undefined ||
-    pokemon.effective_resistances !== undefined;
+    pokemon.effective_resistances !== undefined ||
+    pokemon.effective_immunities !== undefined;
 
   if (!hasEffectiveProfile) {
     return null;
@@ -50,6 +51,7 @@ export function getPokemonAbilityProfile(pokemon: PokemonListEntry | null | unde
     weaknesses: pokemon.effective_weaknesses || [],
     quadruple_weaknesses: pokemon.effective_quadruple_weaknesses || [],
     resistances: pokemon.effective_resistances || [],
+    immunities: pokemon.effective_immunities || [],
     ineffectives: pokemon.effective_ineffectives || [],
     coverages: pokemon.effective_coverages || [],
     damage_from_score: pokemon.effective_damage_from_score,
@@ -85,6 +87,7 @@ export function resolveSelectedPokemon(typeData: TypeDataLike, pokemonIndex: num
     effective_weaknesses: abilityProfile?.weaknesses || currentSelected?.effective_weaknesses || basePokemon.effective_weaknesses || typeData.weaknesses || [],
     effective_quadruple_weaknesses: abilityProfile?.quadruple_weaknesses || currentSelected?.effective_quadruple_weaknesses || basePokemon.effective_quadruple_weaknesses || typeData.quadruple_weaknesses || [],
     effective_resistances: abilityProfile?.resistances || currentSelected?.effective_resistances || basePokemon.effective_resistances || typeData.resistances || [],
+    effective_immunities: abilityProfile?.immunities || currentSelected?.effective_immunities || basePokemon.effective_immunities || typeData.immunities || [],
     effective_ineffectives: abilityProfile?.ineffectives || currentSelected?.effective_ineffectives || basePokemon.effective_ineffectives || typeData.ineffectives || [],
     effective_coverages: abilityProfile?.coverages || currentSelected?.effective_coverages || basePokemon.effective_coverages || typeData.coverages || [],
     effective_damage_from_score: abilityProfile?.damage_from_score ?? currentSelected?.effective_damage_from_score ?? basePokemon.effective_damage_from_score ?? typeData.damage_from_score,
@@ -120,6 +123,7 @@ export function buildActiveTypeData(typeData: TypeDataLike, pokemonIndex: number
     weaknesses: activePokemon.effective_weaknesses,
     quadruple_weaknesses: activePokemon.effective_quadruple_weaknesses,
     resistances: activePokemon.effective_resistances,
+    immunities: activePokemon.effective_immunities,
     ineffectives: activePokemon.effective_ineffectives,
     coverages: activePokemon.effective_coverages,
     damage_from_score: activePokemon.effective_damage_from_score,
@@ -146,6 +150,7 @@ export function getEffectiveTypeProfile(typeData: TypeDataLike, selectedPokemon?
     weaknesses: abilityProfile?.weaknesses || typeData.weaknesses || [],
     quadruple_weaknesses: abilityProfile?.quadruple_weaknesses || typeData.quadruple_weaknesses || [],
     resistances: abilityProfile?.resistances || typeData.resistances || [],
+    immunities: abilityProfile?.immunities || typeData.immunities || [],
     ineffectives: abilityProfile?.ineffectives || typeData.ineffectives || [],
     coverages: abilityProfile?.coverages || typeData.coverages || [],
     damage_from_score: abilityProfile?.damage_from_score ?? typeData.damage_from_score,
