@@ -32,6 +32,7 @@ const pokemon = (name: string, overrides: Partial<PokemonEntry> = {}): PokemonEn
   types: ['fire'],
   sprite: `${name}.png`,
   stats,
+  baseStats: stats,
   statsTotal: 534,
   abilities: [
     { name: 'blaze', is_hidden: false },

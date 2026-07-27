@@ -12,6 +12,7 @@ const mon = (name: string, overrides: Partial<PokemonEntry> = {}): PokemonEntry 
   types: ['normal'],
   sprite: `${name}.png`,
   stats,
+  baseStats: stats,
   statsTotal: 540,
   abilities: [],
   abilityName: '',

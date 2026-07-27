@@ -3,6 +3,7 @@ import { applyAbilityModifiers, createRawAbilityProfile } from './pokedexAbiliti
 import { getRegulation, isSpeciesLegal } from './regulations';
 import { buildOffensiveTypeChart, getMoveCoverage } from './coverageMoves';
 import { getMergedBattleForm, sharesTyping } from './battleForms';
+import { getEffectiveStats, getStatAbility, getStatAbilityName, totalStats } from './statAbilities';
 import {
   DEFAULT_BASE_SCORE,
   calculateDamageFromScore,
@@ -231,7 +232,9 @@ function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
             resistances: [...(profile.resistances || [])],
             immunities: [...(profile.immunities || [])],
             ineffectives: [...(profile.ineffectives || [])],
-            coverages: [...(profile.coverages || [])]
+            coverages: [...(profile.coverages || [])],
+            stats: profile.stats ? { ...profile.stats } : undefined,
+            move_coverages: profile.move_coverages ? [...profile.move_coverages] : undefined
           }
         ])
       )
@@ -245,6 +248,8 @@ function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
     types: entry.types ? entry.types.map((typeSlot) => ({ ...typeSlot, type: { ...typeSlot.type } })) : undefined,
     abilities: entry.abilities ? entry.abilities.map((ability) => ({ ...ability })) : undefined,
     stats: entry.stats ? { ...entry.stats } : undefined,
+    base_stats: entry.base_stats ? { ...entry.base_stats } : undefined,
+    stat_ability_name: entry.stat_ability_name,
     ability_profiles: abilityProfiles,
     effective_damage_relations: entry.effective_damage_relations ? cloneDamageRelations(entry.effective_damage_relations) : undefined,
     effective_weaknesses: [...(entry.effective_weaknesses || [])],
@@ -469,7 +474,7 @@ export async function getResistantTypes(options: {
         const combatant = await resolveCombatantForm(poke, species);
         p.battle_form_name = combatant.battleFormName;
 
-        const stats = combatant.resource.stats.reduce((merged: PokemonStats, curr: any) => {
+        const baseStats = combatant.resource.stats.reduce((merged: PokemonStats, curr: any) => {
           merged[curr.stat.name] = curr.base_stat;
           return merged;
         }, {
@@ -480,17 +485,25 @@ export async function getResistantTypes(options: {
           'special-defense': 0,
           speed: 0
         });
+        p.base_stats = baseStats;
+
+        // Huge Power and its kin are the entire reason their Pokemon are used,
+        // so the stat floors have to see the doubled number. Judging Azumarill
+        // on 50 Attack rejected it for failing a floor its ability clears twice
+        // over.
+        const abilityNames = (p.abilities || []).map((ability) => ability.name);
+        const stats = getEffectiveStats(baseStats, abilityNames);
         p.stats = stats;
+        p.stat_ability_name = getStatAbilityName(abilityNames);
 
         if (stats.attack < _statsFilters.minimumAttacks && stats['special-attack'] < _statsFilters.minimumAttacks) return null;
         if ((stats.defense + stats['special-defense']) / 2 < _statsFilters.minimumDefenses) return null;
 
-        const statsTotal = combatant.resource.stats.reduce((total: number, curr: any) => total + curr.base_stat, 0);
+        const statsTotal = totalStats(stats);
         p.stats_total = statsTotal;
         if (statsTotal < _statsFilters.minimumStatsTotal) return null;
 
         const baseDamageRelations = cloneDamageRelations(t.damage_relations);
-        const abilityNames = (p.abilities || []).map((ability) => ability.name);
         const { abilityProfiles, bestProfile } = _pokemonFilters.includeAbilityImmunities
           ? applyAbilityModifiers(baseDamageRelations, abilityNames, baseScore)
           : {
@@ -502,25 +515,50 @@ export async function getResistantTypes(options: {
               : createRawAbilityProfile(baseDamageRelations, '', baseScore)
           };
 
-        p.ability_profiles = Object.fromEntries(abilityProfiles.map((profile) => [profile.ability_name || '', profile]));
-        p.selected_ability_name = bestProfile.ability_name;
-        p.effective_damage_relations = bestProfile.damage_relations;
-        p.effective_weaknesses = bestProfile.weaknesses;
-        p.effective_quadruple_weaknesses = bestProfile.quadruple_weaknesses;
-        p.effective_resistances = bestProfile.resistances;
-        p.effective_immunities = bestProfile.immunities;
+        // Each ability carries its own stat line, so switching ability in the UI
+        // moves the numbers as well as the resistances.
+        const profilesWithStats = abilityProfiles.map((profile) => {
+          const profileStats = getEffectiveStats(baseStats, [profile.ability_name]);
+          return {
+            ...profile,
+            stats: profileStats,
+            stats_total: totalStats(profileStats),
+            move_coverages: _pokemonFilters.includeMoveCoverage
+              ? getMoveCoverage(p.pokemon.name, offensiveChart, profileStats)
+              : []
+          };
+        });
+
+        // The default selection is otherwise made on defensive merit alone,
+        // which would hand Azumarill Sap Sipper — a Grass immunity — in place of
+        // the ability that doubles its Attack. A stat ability outweighs any one
+        // type immunity for the Pokemon that have one, so it wins the default.
+        const statAbilityProfile = profilesWithStats.find((profile) => getStatAbility(profile.ability_name));
+        const selectedProfile = statAbilityProfile
+          ?? profilesWithStats.find((profile) => profile.ability_name === bestProfile.ability_name)
+          ?? profilesWithStats[0];
+
+        p.ability_profiles = Object.fromEntries(profilesWithStats.map((profile) => [profile.ability_name || '', profile]));
+        p.selected_ability_name = selectedProfile.ability_name;
+        p.effective_damage_relations = selectedProfile.damage_relations;
+        p.effective_weaknesses = selectedProfile.weaknesses;
+        p.effective_quadruple_weaknesses = selectedProfile.quadruple_weaknesses;
+        p.effective_resistances = selectedProfile.resistances;
+        p.effective_immunities = selectedProfile.immunities;
         // Move coverage is a property of the Pokemon rather than its typing, so
         // it is resolved per entry from the variety name the scan already holds.
         // The learnset belongs to the registered variety, but which half of it
         // is worth a moveslot depends on the stats it fights with — for a merged
         // battle form those are not the same Pokemon's numbers.
-        p.effective_move_coverages = _pokemonFilters.includeMoveCoverage
-          ? getMoveCoverage(p.pokemon.name, offensiveChart, stats)
-          : [];
-        p.effective_ineffectives = bestProfile.ineffectives;
-        p.effective_coverages = bestProfile.coverages;
-        p.effective_damage_from_score = bestProfile.damage_from_score;
-        p.effective_damage_to_score = bestProfile.damage_to_score;
+        p.effective_move_coverages = selectedProfile.move_coverages;
+        p.effective_ineffectives = selectedProfile.ineffectives;
+        p.effective_coverages = selectedProfile.coverages;
+        p.effective_damage_from_score = selectedProfile.damage_from_score;
+        p.effective_damage_to_score = selectedProfile.damage_to_score;
+        // The selected ability decides the stat line too, and it is not always
+        // the one that cleared the floors above.
+        p.stats = selectedProfile.stats;
+        p.stats_total = selectedProfile.stats_total;
 
         return p;
       })

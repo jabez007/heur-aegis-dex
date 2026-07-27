@@ -24,6 +24,7 @@ import type {
   PokemonStats,
   TeamTypeData
 } from './pokedexTypes';
+import { getEffectiveStats, getStatAbilityName, totalStats } from './statAbilities';
 
 export interface PokemonEntry {
   /** PokeAPI variety name. Unique, and the key everything else joins on. */
@@ -40,7 +41,15 @@ export interface PokemonEntry {
    * and fights as another. Absent when it is rated as registered.
    */
   battleFormName?: string;
+  /**
+   * Stats it fights with: the published line after the selected ability's
+   * multiplier. Scoring and the stat floors judge on these.
+   */
   stats: PokemonStats;
+  /** The published line, before abilities. */
+  baseStats: PokemonStats;
+  /** Ability responsible for the difference between the two, when there is one. */
+  statAbilityName?: string;
   statsTotal: number;
   abilities: PokemonAbilitySlot[];
   /** Ability currently selected for battle. */
@@ -119,8 +128,12 @@ export function toPokemonEntry(
   if (!entry?.pokemon?.name || !entry.stats) return null;
 
   const profile = getPokemonAbilityProfile(entry);
-  const statsTotal = entry.stats_total
-    ?? Object.values(entry.stats).reduce((total, stat) => total + Number(stat || 0), 0);
+  // The selected ability's own stat line where the scan recorded one, since
+  // Huge Power and its kin change the numbers as well as the resistances.
+  const stats = profile?.stats ?? entry.stats;
+  const statsTotal = profile?.stats_total
+    ?? entry.stats_total
+    ?? totalStats(stats);
 
   return {
     name: entry.pokemon.name,
@@ -131,7 +144,9 @@ export function toPokemonEntry(
     types: entry.types?.map((slot) => slot.type.name) ?? typeName.split('/'),
     sprite: entry.sprite || '',
     battleFormName: entry.battle_form_name,
-    stats: entry.stats ?? EMPTY_STATS,
+    stats: stats ?? EMPTY_STATS,
+    baseStats: entry.base_stats ?? entry.stats ?? EMPTY_STATS,
+    statAbilityName: getStatAbilityName([entry.selected_ability_name]),
     statsTotal,
     abilities: entry.abilities ?? [],
     abilityName: entry.selected_ability_name || '',
@@ -216,9 +231,18 @@ export function withAbility(
   const profile = entry.abilityProfiles[abilityName];
   if (!profile) return entry;
 
+  // The stat line follows the ability too. Without this, switching away from
+  // Huge Power in the UI would keep the doubled Attack it granted.
+  const stats = profile.stats ?? getEffectiveStats(entry.baseStats, [abilityName]);
+
   return {
     ...entry,
     abilityName,
+    stats,
+    baseStats: entry.baseStats,
+    statAbilityName: getStatAbilityName([abilityName]),
+    statsTotal: profile.stats_total ?? totalStats(stats),
+    moveCoverages: profile.move_coverages ?? entry.moveCoverages,
     weaknesses: profile.weaknesses ?? entry.weaknesses,
     quadrupleWeaknesses: profile.quadruple_weaknesses ?? entry.quadrupleWeaknesses,
     resistances: profile.resistances ?? entry.resistances,

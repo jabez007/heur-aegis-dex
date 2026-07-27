@@ -83,6 +83,14 @@ export interface AbilityProfile {
   coverages?: string[];
   damage_from_score?: number;
   damage_to_score?: number;
+  /**
+   * Stats with this ability's own multiplier applied. Huge Power and its kin
+   * change the stat line, so each ability carries the numbers it fights with.
+   */
+  stats?: PokemonStats;
+  stats_total?: number;
+  /** Move coverage resolved against this ability's stat line. */
+  move_coverages?: string[];
 }
 
 export interface PokemonListEntry {
@@ -98,7 +106,15 @@ export interface PokemonListEntry {
    * being rated, which is the overwhelmingly common case.
    */
   battle_form_name?: string;
+  /**
+   * Stats the Pokemon fights with: the published line after any unconditional
+   * stat ability. This is what the scan's floors and all scoring judge on.
+   */
   stats?: PokemonStats;
+  /** The published line, before abilities. Kept so a UI can show both. */
+  base_stats?: PokemonStats;
+  /** Ability responsible for the difference, when there is one. */
+  stat_ability_name?: string;
   stats_total?: number;
   selected_ability_name?: string;
   ability_profiles?: Record<string, AbilityProfile>;

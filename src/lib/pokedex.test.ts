@@ -17,6 +17,8 @@ const mockState = vi.hoisted(() => ({
   usePalafin: false,
   /** Give the registered Palafin an ability that cannot reach its battle form. */
   breakPalafinTrigger: false,
+  /** Give the fire-type entry Azumarill's ability pair: Huge Power plus a defensive immunity. */
+  useHugePower: false,
   detailDelayMs: 0,
   requestCounts: new Map<string, number>(),
   /** Every request in the order it was issued, for checking which phase made it. */
@@ -156,7 +158,11 @@ vi.mock('pokedex-promise-v2', () => {
           ],
           abilities: mockState.usePalafin
             ? [{ ability: { name: mockState.breakPalafinTrigger ? 'torrent' : 'zero-to-hero' }, is_hidden: false }]
-            : [{ ability: { name: 'blaze' }, is_hidden: false }, { ability: { name: 'levitate' }, is_hidden: true }],
+            : mockState.useHugePower
+              // Azumarill's real pair: the stat ability, and a type immunity that
+              // wins on defensive merit alone.
+              ? [{ ability: { name: 'huge-power' }, is_hidden: false }, { ability: { name: 'sap-sipper' }, is_hidden: true }]
+              : [{ ability: { name: 'blaze' }, is_hidden: false }, { ability: { name: 'levitate' }, is_hidden: true }],
           species: { url: 'https://pokeapi.co/api/v2/pokemon-species/4/' }
           };
         }
@@ -285,6 +291,7 @@ beforeEach(() => {
   mockState.includeAlternateForms = false;
   mockState.usePalafin = false;
   mockState.breakPalafinTrigger = false;
+  mockState.useHugePower = false;
   mockState.detailDelayMs = 0;
   mockState.requestCounts.clear();
   mockState.requestOrder = [];
@@ -555,6 +562,65 @@ describe('pokedex.js API integration logic', () => {
     });
 
     expect(resistant.find(t => t.name === 'fire')!.pokemon[0].battle_form_name).toBeUndefined();
+  });
+
+  // The mocked charmander is 39/52/43/60/50/65 — an Attack of 52 that Huge
+  // Power takes to 104.
+  const scanHugePower = (statsFilters = { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }) => {
+    mockState.useHugePower = true;
+    return getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters
+    });
+  };
+
+  it('getResistantTypes should apply an unconditional stat ability', async () => {
+    const entry = (await scanHugePower()).find(t => t.name === 'fire')!.pokemon[0];
+
+    expect(entry.stats!.attack).toBe(104);
+    expect(entry.base_stats!.attack).toBe(52);
+    expect(entry.stat_ability_name).toBe('huge-power');
+    // Only the one stat moves.
+    expect(entry.stats!['special-attack']).toBe(60);
+  });
+
+  it('getResistantTypes should test the stat floors against the ability', async () => {
+    // 52 Attack fails this floor; the 104 it actually swings with clears it.
+    const resistant = await scanHugePower({ minimumStatsTotal: 100, minimumAttacks: 100, minimumDefenses: 10 });
+
+    expect(resistant.find(t => t.name === 'fire')!.pokemon).toHaveLength(1);
+  });
+
+  it('getResistantTypes should prefer a stat ability over a purely defensive one', async () => {
+    const entry = (await scanHugePower()).find(t => t.name === 'fire')!.pokemon[0];
+
+    // Sap Sipper grants a Grass immunity and so wins on defensive merit, which
+    // is the only thing the ability selector used to weigh. Doubling Attack
+    // outweighs one type immunity for the Pokemon built around it.
+    expect(entry.selected_ability_name).toBe('huge-power');
+  });
+
+  it('getResistantTypes should give each ability its own stat line', async () => {
+    const entry = (await scanHugePower()).find(t => t.name === 'fire')!.pokemon[0];
+
+    expect(entry.ability_profiles!['huge-power'].stats!.attack).toBe(104);
+    // Switching ability in the UI must not keep the doubled Attack.
+    expect(entry.ability_profiles!['sap-sipper'].stats!.attack).toBe(52);
+  });
+
+  it('getResistantTypes should leave ordinary Pokemon on their published stats', async () => {
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+    const entry = resistant.find(t => t.name === 'fire')!.pokemon[0];
+
+    expect(entry.stats!.attack).toBe(52);
+    expect(entry.stat_ability_name).toBeUndefined();
   });
 
   it('getResistantTypes should fetch a battle form inside the concurrency budget', async () => {

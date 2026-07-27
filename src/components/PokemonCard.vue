@@ -31,6 +31,24 @@ watch(selectedAbilityName, (abilityName) => {
 });
 
 const availableAbilities = computed(() => props.pokemon.abilities);
+
+// A stat line that does not match the Pokedex has to explain itself, or it just
+// reads as wrong.
+const statAbilityNote = computed(() => {
+  const ability = props.pokemon.statAbilityName;
+  if (!ability) return null;
+
+  const changed = Object.keys(props.pokemon.stats)
+    .filter((stat) => props.pokemon.stats[stat] !== props.pokemon.baseStats[stat])
+    .map((stat) => `${stat} ${props.pokemon.baseStats[stat]} to ${props.pokemon.stats[stat]}`);
+
+  return {
+    label: `${ability} applied`,
+    title: changed.length > 0
+      ? `Stats shown include ${ability}: ${changed.join(', ')}.`
+      : `Stats shown include ${ability}.`
+  };
+});
 const isOnRoster = computed(() => hasSpecies(props.pokemon.speciesName));
 const rosterIsFull = computed(() => roster.value.length >= maxRosterSize.value);
 
@@ -78,6 +96,13 @@ const handleAddToRoster = () => {
           :title="`Registered as ${pokemon.name}, but it spends the battle as ${pokemon.battleFormName}, so the stats below are that form's.`"
         >
           rated as {{ pokemon.battleFormName }}
+        </p>
+        <p
+          v-if="statAbilityNote"
+          class="battle-form-note"
+          :title="statAbilityNote.title"
+        >
+          {{ statAbilityNote.label }}
         </p>
         <h3 class="type-header">
           <TypeBadge
