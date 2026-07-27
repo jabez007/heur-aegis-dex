@@ -49,6 +49,63 @@ describe('candidatePriority', () => {
     expect(candidatePriority(fragile)).toBeLessThan(candidatePriority(clean));
   });
 
+  it('does not let elite defensive typing outrank materially better stats', () => {
+    // The Klefki case. Steel/Fairy resists nearly everything, but 80/80
+    // offences threaten nobody. Defensive typing used to be paid for three
+    // times — once as its own term and twice more as the resistance and
+    // weakness lists it already summarises — which put Klefki above both.
+    const klefki = mon('klefki', {
+      stats: { hp: 57, attack: 80, defense: 91, 'special-attack': 80, 'special-defense': 87, speed: 75 },
+      statsTotal: 470,
+      resistances: Array.from({ length: 11 }, (_, i) => `resist-${i}`),
+      weaknesses: ['fire', 'ground'],
+      normalizedDamageToScore: 0.64,
+      normalizedDamageFromScore: 0.18
+    });
+    const lucario = mon('lucario', {
+      stats: { hp: 70, attack: 110, defense: 70, 'special-attack': 115, 'special-defense': 70, speed: 90 },
+      statsTotal: 525,
+      resistances: Array.from({ length: 9 }, (_, i) => `resist-${i}`),
+      weaknesses: ['fire', 'fighting', 'ground'],
+      normalizedDamageToScore: 0.67,
+      normalizedDamageFromScore: 0.22
+    });
+    const incineroar = mon('incineroar', {
+      stats: { hp: 95, attack: 115, defense: 90, 'special-attack': 80, 'special-defense': 90, speed: 60 },
+      statsTotal: 530,
+      resistances: Array.from({ length: 7 }, (_, i) => `resist-${i}`),
+      weaknesses: ['water', 'fighting', 'ground', 'rock'],
+      normalizedDamageToScore: 0.67,
+      normalizedDamageFromScore: 0.25
+    });
+
+    expect(candidatePriority(lucario)).toBeGreaterThan(candidatePriority(incineroar));
+    expect(candidatePriority(incineroar)).toBeGreaterThan(candidatePriority(klefki));
+  });
+
+  it('does not pay for resistances or weaknesses twice', () => {
+    // normalizedDamageFromScore is calculated from exactly these buckets, so
+    // counting the lists again was charging for one property twice over.
+    const plain = mon('plain');
+    const listed = mon('listed', {
+      resistances: ['fire', 'water', 'grass', 'ice', 'flying', 'bug', 'steel', 'psychic'],
+      weaknesses: ['ground', 'rock']
+    });
+
+    expect(candidatePriority(listed)).toBe(candidatePriority(plain));
+  });
+
+  it('still rates a stronger stat line above a weaker one at equal typing', () => {
+    const strong = mon('strong', {
+      stats: { hp: 95, attack: 130, defense: 95, 'special-attack': 130, 'special-defense': 95, speed: 100 }
+    });
+    const weak = mon('weak', {
+      stats: { hp: 55, attack: 60, defense: 55, 'special-attack': 60, 'special-defense': 55, speed: 50 }
+    });
+
+    expect(candidatePriority(strong)).toBeGreaterThan(candidatePriority(weak));
+  });
+
   it('credits a support role', () => {
     // Otherwise the ranking is blind to the reason half these Pokemon get
     // brought at all.

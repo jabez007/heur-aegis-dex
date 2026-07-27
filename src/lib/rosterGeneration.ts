@@ -23,6 +23,7 @@
  */
 
 import { evaluateRoster, scoreBring, type RosterEvaluation, type RosterMember } from './rosterScoring';
+import { scoreMemberQuality } from './teamScoring';
 import { DEFAULT_BASE_SCORE } from './pokedexScoring';
 import { getAbilityEffect, getApplicableRoles } from './abilityRoles';
 import type { BattleFormat } from './battleFormats';
@@ -37,29 +38,58 @@ export const DEFAULT_CANDIDATE_LIMIT = 160;
 /**
  * Weights for ranking a single Pokemon before the search begins.
  *
- * `supportRole` is the odd one out: every other term measures typing or stats,
- * which is why the ranking used to be blind to Intimidate, Drizzle and
- * redirection entirely. That blindness had teeth — this ranking decides which
- * DEFAULT_CANDIDATE_LIMIT Pokemon the search ever looks at, so a support
- * Pokemon could be cut before team synergy, which does weigh roles, had any
- * chance to see it.
+ * ## Why this is built on scoreMemberQuality
  *
- * The value is reasoned rather than validated: at 12 a role is worth three
- * resistances and well under a quadruple weakness, which puts Intimidate in the
- * right neighbourhood without letting a single ability outrank a typing.
- * All roles are weighted equally here — the team-level scoring is where their
- * differences and their interactions get resolved.
+ * The earlier version summed typing and stats as independent terms, and paid
+ * for defensive typing three separate times: once as `defensiveTyping`, again
+ * per resistance, and again per weakness. But `normalizedDamageFromScore` *is*
+ * a summary of resistances and weaknesses — `calculateDamageFromScore` sums
+ * exactly those buckets — so all three measured one property. Across a real
+ * comparison that came to a 27-point spread on typing against 4 points on
+ * stats, a ratio of roughly seven to one that nothing had chosen.
+ *
+ * Stats were the other half of the problem. `statsTotal` is stat-blind, so
+ * Klefki's unusable 80/80 offences counted the same as Lucario's 110/115. The
+ * result was a Pokemon with the best defensive typing in the game outranking
+ * two that beat it comfortably in practice.
+ *
+ * `scoreMemberQuality` already solves this, is documented, and is what the team
+ * scorer actually uses — so ranking a candidate now means asking the same
+ * question the team scorer will ask later, rather than a parallel approximation
+ * of it. Typing *modulates* stats there instead of being added beside them, so
+ * elite typing multiplies bulk a Pokemon has without inventing offence it does
+ * not. Typing stays central to the ranking, which is true to what this tool is
+ * for; it simply stops being counted three times.
+ *
+ * ## The remaining terms
+ *
+ * Each covers something member quality genuinely cannot see, and each is small
+ * enough to adjust the order rather than drive it. All are reasoned rather than
+ * validated against match outcomes — the same caveat that applies to
+ * MEMBER_WEIGHTS and MIXED_ATTACKER_RATIO.
  */
 export const CANDIDATE_WEIGHTS = {
-  offensiveTyping: 30,
-  defensiveTyping: 30,
-  coverage: 4,
-  moveCoverage: 1,
-  resistance: 4,
-  statsTotal: 0.06,
+  /** scoreMemberQuality is 0..1; this puts it on a 0..100 scale. */
+  quality: 100,
+  /**
+   * Support roles are invisible to a stat-and-typing score, and this ranking
+   * decides which DEFAULT_CANDIDATE_LIMIT Pokemon the search ever looks at — so
+   * without this a support Pokemon could be cut before team synergy, which does
+   * weigh roles, had any chance to see it.
+   */
   supportRole: 12,
-  weakness: 5,
-  quadrupleWeakness: 30
+  /** Breadth of STAB coverage, which the offensive score measures as strength rather than spread. */
+  coverage: 2,
+  /** Reachable coverage. A tiebreak: it says "can learn", never "would run". */
+  moveCoverage: 0.5,
+  /**
+   * A quadruple weakness is already inside the defensive score, which adds 3
+   * for each. This is deliberate reinforcement rather than an oversight: a 4x
+   * weakness is a discrete build risk, not merely a worse average, because one
+   * common attacking type removes the Pokemon from the game. Halved from the
+   * old 30 precisely because the first charge is already counted.
+   */
+  quadrupleWeakness: 15
 } as const;
 
 export interface GenerateRostersOptions {
@@ -118,14 +148,19 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
   const effect = getAbilityEffect(entry.abilityName);
   const hasApplicableRole = !!effect && getApplicableRoles(hasAlly).includes(effect.role);
 
-  return (entry.normalizedDamageToScore * w.offensiveTyping) +
-    ((1 - entry.normalizedDamageFromScore) * w.defensiveTyping) +
+  // Stats modulated by typing, on the same terms the team scorer will use.
+  // Resistances and weaknesses are not added separately: they are already what
+  // normalizedDamageFromScore measures.
+  const quality = scoreMemberQuality({
+    stats: entry.stats,
+    normalizedDamageToScore: entry.normalizedDamageToScore,
+    normalizedDamageFromScore: entry.normalizedDamageFromScore
+  });
+
+  return (quality * w.quality) +
+    ((hasApplicableRole ? 1 : 0) * w.supportRole) +
     (entry.coverages.length * w.coverage) +
-    (entry.moveCoverages.length * w.moveCoverage) +
-    (entry.resistances.length * w.resistance) +
-    (entry.statsTotal * w.statsTotal) +
-    ((hasApplicableRole ? 1 : 0) * w.supportRole) -
-    (entry.weaknesses.length * w.weakness) -
+    (entry.moveCoverages.length * w.moveCoverage) -
     (entry.quadrupleWeaknesses.length * w.quadrupleWeakness);
 }
 

@@ -22,6 +22,16 @@
 
 ### Changed
 
+- **Candidate ranking is built on `scoreMemberQuality` instead of its own weighted sum.** `candidatePriority` added typing and stats as independent terms and paid for defensive typing three separate times — as `defensiveTyping`, again per resistance, and again per weakness. But `normalizedDamageFromScore` *is* a summary of resistances and weaknesses, since `calculateDamageFromScore` sums exactly those buckets, so all three measured one property. Comparing Klefki, Lucario and Incineroar, that came to a 27-point spread on typing against 4 points on stats — a ratio near seven to one that nobody had chosen.
+
+  `statsTotal` was the other half: being stat-blind, it counted Klefki's unusable 80/80 offences the same as Lucario's 110/115. Between them, a Pokemon with the best defensive typing in the game outranked two that beat it comfortably in practice (Klefki 135.8, Lucario 135.0, Incineroar 117.3).
+
+  Ranking now calls `scoreMemberQuality` — already documented, already what the team scorer uses — so a candidate is judged by the same question the team scorer will ask later rather than a parallel approximation. Typing *modulates* stats there rather than sitting beside them, so elite typing multiplies bulk a Pokemon has without inventing offence it lacks. The order becomes Lucario 75.2, Incineroar 71.2, Klefki 63.8. Typing stays central, which is what this tool is for; it just stops being counted three times.
+
+  Remaining terms cover only what member quality cannot see: support roles, STAB breadth (2), reachable coverage (0.5), and quadruple weaknesses. That last penalty halves from 30 to 15 — the defensive score already adds 3 per quadruple weakness, so the extra charge is now deliberate reinforcement of a discrete build risk rather than an unnoticed double count.
+
+  This changes every generated roster, since pre-pruning to `DEFAULT_CANDIDATE_LIMIT` runs on this function. Like `MEMBER_WEIGHTS` and `MIXED_ATTACKER_RATIO`, the weights are argued from structure, not validated against match outcomes.
+
 - **Candidate ranking credits support roles, and ability selection stops hiding them.** `candidatePriority` — which orders the Pokemon Browser and, more consequentially, picks the `DEFAULT_CANDIDATE_LIMIT` Pokemon the roster search ever looks at — scored only typing and stats. It was blind to Intimidate, Drizzle, redirection and ally protection, so a support Pokemon could be pruned before team synergy, which *does* weigh roles, had any chance to see it. A role is now worth `CANDIDATE_WEIGHTS.supportRole` (12), about three resistances and well under a quadruple weakness. Reasoned, not validated.
 
   Redirection and ally protection are worth nothing without a partner, so ranking takes the format: 55 of 261 breedable Regulation M-B varieties gain the credit in doubles, 28 in singles. The browser passes the format the workbench is set to, so switching format re-orders it.
