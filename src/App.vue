@@ -187,10 +187,18 @@ const includeAbilityImmunities = ref(true);
 const { notify } = useNotifications();
 let fetchTypesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Scans cannot be aborted mid-flight, so each one claims a token and only the
+// most recent claim is allowed to write back. Without this a slow scan that was
+// superseded by a newer one can resolve last and overwrite the current results.
+let latestScanToken = 0;
+
 const fetchTypes = () => {
+  const scanToken = ++latestScanToken;
+  const isCurrentScan = () => scanToken === latestScanToken;
+
   loading.value = true;
   fetchError.value = '';
-  
+
   const filters = {
     maxDamageFromScore: true,
     allowQuadrupleDamage: true,
@@ -219,11 +227,15 @@ const fetchTypes = () => {
       pokemonFilters: pokedexFilter,
       statsFilters: statsFilters
     }).then(data => {
+      // The cache key encodes the filters this scan ran with, so the result is
+      // worth keeping even when a newer scan has already superseded the view.
       lscache.set(key, data, 60 * 24);
+      if (!isCurrentScan()) return;
       types.value = data;
       loading.value = false;
     }).catch(err => {
       console.error(err);
+      if (!isCurrentScan()) return;
       types.value = [];
       fetchError.value = 'Pokedex scan failed. Check your connection and try again.';
       notify(fetchError.value, 'error');
