@@ -61,12 +61,26 @@ export const DEFAULT_CANDIDATE_LIMIT = 160;
  * not. Typing stays central to the ranking, which is true to what this tool is
  * for; it simply stops being counted three times.
  *
- * ## The remaining terms
+ * ## The remaining terms, and the budget they share
  *
- * Each covers something member quality genuinely cannot see, and each is small
- * enough to adjust the order rather than drive it. All are reasoned rather than
- * validated against match outcomes — the same caveat that applies to
- * MEMBER_WEIGHTS and MIXED_ATTACKER_RATIO.
+ * Each covers something member quality genuinely cannot see. Their sizes are
+ * set against the *observed* spread of the quality term rather than picked
+ * independently, because that is the mistake this file already made once.
+ *
+ * Across the validation fixture `quality * 100` runs from about 33 to 62 — a
+ * span near 30 points. The adjuncts must therefore be able to reorder Pokemon
+ * whose quality is close, and must never invert a real quality gap. Their
+ * combined swing is held to roughly a third of that span.
+ *
+ * The first version of this rework failed exactly there: `supportRole` at 12
+ * and `quadrupleWeakness` at 15 were carried over from the previous formula,
+ * whose terms ran to 44. On the compressed scale they added up to 27 points of
+ * adjustment against a 30-point base, and ranked Arbok above Garchomp. The
+ * validation fixture caught it; nothing else would have.
+ *
+ * All of these are still reasoned rather than measured against match outcomes,
+ * as with MEMBER_WEIGHTS and MIXED_ATTACKER_RATIO. The fixture constrains them;
+ * it does not derive them.
  */
 export const CANDIDATE_WEIGHTS = {
   /** scoreMemberQuality is 0..1; this puts it on a 0..100 scale. */
@@ -75,21 +89,23 @@ export const CANDIDATE_WEIGHTS = {
    * Support roles are invisible to a stat-and-typing score, and this ranking
    * decides which DEFAULT_CANDIDATE_LIMIT Pokemon the search ever looks at — so
    * without this a support Pokemon could be cut before team synergy, which does
-   * weigh roles, had any chance to see it.
+   * weigh roles, had any chance to see it. Enough to lift a supporter past a
+   * near-equal Pokemon without one; nowhere near enough to make Intimidate turn
+   * an unusable Pokemon into a good one.
    */
-  supportRole: 12,
+  supportRole: 4,
   /** Breadth of STAB coverage, which the offensive score measures as strength rather than spread. */
-  coverage: 2,
+  coverage: 0.75,
   /** Reachable coverage. A tiebreak: it says "can learn", never "would run". */
-  moveCoverage: 0.5,
+  moveCoverage: 0.2,
   /**
    * A quadruple weakness is already inside the defensive score, which adds 3
    * for each. This is deliberate reinforcement rather than an oversight: a 4x
    * weakness is a discrete build risk, not merely a worse average, because one
-   * common attacking type removes the Pokemon from the game. Halved from the
-   * old 30 precisely because the first charge is already counted.
+   * common attacking type removes the Pokemon from the game. Kept just above
+   * `supportRole`, so a role can never offset one.
    */
-  quadrupleWeakness: 15
+  quadrupleWeakness: 5
 } as const;
 
 export interface GenerateRostersOptions {

@@ -42,7 +42,9 @@
     "lint:fix": "eslint . --fix",
     "predeploy": "npm run build",
     "deploy": "push-dir --dir=dist --branch=main --cleanup",
-    "check:browser": "bash scripts/check-browser-bundle.sh"
+    "check:browser": "bash scripts/check-browser-bundle.sh",
+    "gen:coverage-moves": "node scripts/gen-coverage-moves.mjs",
+    "gen:scoring-fixture": "tsx scripts/gen-scoring-fixture.mjs > src/lib/scoring.fixture.ts"
   },
   "dependencies": {
     "events": "^3.3.0",
