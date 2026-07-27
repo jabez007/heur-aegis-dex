@@ -3,19 +3,24 @@ import { applyAbilityModifiers, createRawAbilityProfile } from './pokedexAbiliti
 import { getRegulation, isSpeciesLegal } from './regulations';
 import { buildOffensiveTypeChart, getMoveCoverage } from './coverageMoves';
 import { getMergedBattleForm, sharesTyping } from './battleForms';
-import { getEffectiveStats, getStatAbility, getStatAbilityName, totalStats } from './statAbilities';
+import { getEffectiveStats, getStatAbilityName, totalStats } from './statAbilities';
 import { collapseIndistinctVarieties } from './pokemonEntry';
 import { getAbilityEffect } from './abilityRoles';
+import { scoreMemberQuality } from './teamScoring';
+import { CANDIDATE_WEIGHTS } from './rosterGeneration';
 import {
   DEFAULT_BASE_SCORE,
   calculateDamageFromScore,
   calculateDamageToScore,
   cloneDamageRelations,
   createTypeSummary,
-  filterUniqueBy
+  filterUniqueBy,
+  normalizeDamageFromScore,
+  normalizeDamageToScore
 } from './pokedexScoring';
 import type { OffensiveTypeChart } from './coverageMoves';
 import type {
+  AbilityProfile,
   DamageRelations,
   NamedResource,
   PokemonAbilitySlot,
@@ -243,6 +248,52 @@ async function resolveCombatantForm(
   if (!sharesTyping(typeNames(poke), typeNames(battleForm))) return asRegistered;
 
   return { resource: battleForm, battleFormName: rule.variety };
+}
+
+/**
+ * Picks the ability a Pokemon should default to.
+ *
+ * This began as a single rule — lowest incoming damage — and then grew a
+ * precedence chain in front of it as each new ability layer landed: stat
+ * abilities first, then support roles, then defensive merit. Every addition was
+ * reactive, the ordering between them was never argued for, and the chain still
+ * missed a whole category. Unaware, Multiscale, Magic Guard and Adaptability
+ * all sit in a Pokemon's second or third ability slot, so `abilityEffects.ts`
+ * shipped with nothing in the app ever selecting one of them.
+ *
+ * So the chain is gone. The default is whichever ability makes the Pokemon best
+ * by the model's own reckoning — the same question the browser and the roster
+ * search ask. One rule, no ordering to justify, and it stays correct as the
+ * ability layers grow instead of needing another clause each time.
+ *
+ * The old special cases fall out of it rather than being encoded: Huge Power
+ * beats Sap Sipper because doubling Attack moves quality more than one type
+ * immunity, and Drought beats Flash Fire because a support role is worth more
+ * than turning a resistance into an immunity.
+ *
+ * @param profiles Ability profiles carrying their own stat lines.
+ * @param baseScore Baseline the damage scores were calculated with.
+ * @returns The profile to present as selected. Never empty for a non-empty input.
+ */
+export function chooseDefaultAbility<T extends AbilityProfile & { stats: PokemonStats }>(
+  profiles: T[],
+  baseScore: number
+): T {
+  // Member quality cannot see a support role, so it is added back on the same
+  // 0..1 scale the candidate ranking uses.
+  const supportBonus = CANDIDATE_WEIGHTS.supportRole / CANDIDATE_WEIGHTS.quality;
+
+  const score = (profile: T) =>
+    scoreMemberQuality({
+      stats: profile.stats,
+      normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, baseScore),
+      normalizedDamageFromScore: normalizeDamageFromScore(profile.damage_from_score, baseScore),
+      abilityName: profile.ability_name
+    }) + (getAbilityEffect(profile.ability_name) ? supportBonus : 0);
+
+  // Ties keep the earlier profile, which is PokeAPI slot order — the Pokemon's
+  // primary ability.
+  return profiles.reduce((best, profile) => (score(profile) > score(best) ? profile : best));
 }
 
 function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
@@ -540,15 +591,12 @@ export async function getResistantTypes(options: {
         if (statsTotal < _statsFilters.minimumStatsTotal) return null;
 
         const baseDamageRelations = cloneDamageRelations(t.damage_relations);
-        const { abilityProfiles, bestProfile } = _pokemonFilters.includeAbilityImmunities
+        const { abilityProfiles } = _pokemonFilters.includeAbilityImmunities
           ? applyAbilityModifiers(baseDamageRelations, abilityNames, baseScore)
           : {
             abilityProfiles: abilityNames.length > 0
               ? abilityNames.map((abilityName: string) => createRawAbilityProfile(baseDamageRelations, abilityName, baseScore))
               : [createRawAbilityProfile(baseDamageRelations, '', baseScore)],
-            bestProfile: abilityNames.length > 0
-              ? createRawAbilityProfile(baseDamageRelations, abilityNames[0], baseScore)
-              : createRawAbilityProfile(baseDamageRelations, '', baseScore)
           };
 
         // Each ability carries its own stat line, so switching ability in the UI
@@ -565,26 +613,7 @@ export async function getResistantTypes(options: {
           };
         });
 
-        // Ability selection ranks by defensive merit alone unless told otherwise,
-        // and that reads badly for the abilities a Pokemon is actually brought
-        // for. It handed Azumarill Sap Sipper over the ability that doubles its
-        // Attack, and Torkoal White Smoke over Drought — the entire reason
-        // Torkoal is on a team. So two kinds of ability take precedence:
-        //
-        //   1. a stat ability, the largest single swing available to a Pokemon;
-        //   2. a support role, which shapes the whole team rather than one matchup.
-        //
-        // Support beating a type immunity is a deliberate call, and the roster
-        // bears it out: Intimidate over Flash Fire on Arcanine, Drought over
-        // Flash Fire on Ninetales, Drizzle over Water Absorb on Politoed. In
-        // each case the immunity is situational and the role is the reason the
-        // Pokemon gets brought.
-        const statAbilityProfile = profilesWithStats.find((profile) => getStatAbility(profile.ability_name));
-        const supportProfile = profilesWithStats.find((profile) => getAbilityEffect(profile.ability_name));
-        const selectedProfile = statAbilityProfile
-          ?? supportProfile
-          ?? profilesWithStats.find((profile) => profile.ability_name === bestProfile.ability_name)
-          ?? profilesWithStats[0];
+        const selectedProfile = chooseDefaultAbility(profilesWithStats, baseScore);
 
         p.ability_profiles = Object.fromEntries(profilesWithStats.map((profile) => [profile.ability_name || '', profile]));
         p.selected_ability_name = selectedProfile.ability_name;

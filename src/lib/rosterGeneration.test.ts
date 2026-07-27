@@ -126,6 +126,18 @@ describe('candidatePriority', () => {
     expect(candidatePriority(chosen)).toBe(candidatePriority(mon('plain', { abilityName: 'blaze' })));
   });
 
+  it('credits a weather setter less than a role that works alone', () => {
+    // Intimidate lands the moment its holder switches in. Drought changes the
+    // field, which is worth nothing until a teammate wants it changed — and
+    // team scoring is where that gets evaluated.
+    const setter = mon('torkoal', { abilityName: 'drought' });
+    const intimidator = mon('incineroar', { abilityName: 'intimidate' });
+    const plain = mon('plain', { abilityName: 'blaze' });
+
+    expect(candidatePriority(setter)).toBeGreaterThan(candidatePriority(plain));
+    expect(candidatePriority(setter)).toBeLessThan(candidatePriority(intimidator));
+  });
+
   it('ignores doubles-only roles in singles', () => {
     const redirector = mon('togedemaru', { abilityName: 'lightning-rod' });
     const plain = mon('plain', { abilityName: 'blaze' });

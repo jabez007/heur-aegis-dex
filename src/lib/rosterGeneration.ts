@@ -25,7 +25,7 @@
 import { evaluateRoster, scoreBring, type RosterEvaluation, type RosterMember } from './rosterScoring';
 import { scoreMemberQuality } from './teamScoring';
 import { DEFAULT_BASE_SCORE } from './pokedexScoring';
-import { getAbilityEffect, getApplicableRoles } from './abilityRoles';
+import { getAbilityEffect, getApplicableRoles, soloRoleValue } from './abilityRoles';
 import type { BattleFormat } from './battleFormats';
 import type { PokemonEntry } from './pokemonEntry';
 
@@ -92,6 +92,10 @@ export const CANDIDATE_WEIGHTS = {
    * weigh roles, had any chance to see it. Enough to lift a supporter past a
    * near-equal Pokemon without one; nowhere near enough to make Intimidate turn
    * an unusable Pokemon into a good one.
+   *
+   * Weather and terrain setters earn a fraction of this — see soloRoleValue.
+   * Their payoff depends on teammates that want the field changed, which team
+   * scoring evaluates and a solo ranking cannot.
    */
   supportRole: 4,
   /** Breadth of STAB coverage, which the offensive score measures as strength rather than spread. */
@@ -167,8 +171,12 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
   const { hasAlly = true } = options;
   const w = CANDIDATE_WEIGHTS;
 
+  // Scored in isolation, so a role that needs teammates to pay off earns less
+  // than one that works the moment the Pokemon is on the field.
   const effect = getAbilityEffect(entry.abilityName);
-  const hasApplicableRole = !!effect && getApplicableRoles(hasAlly).includes(effect.role);
+  const roleValue = effect && getApplicableRoles(hasAlly).includes(effect.role)
+    ? soloRoleValue(effect.role)
+    : 0;
 
   // Stats modulated by typing, on the same terms the team scorer will use.
   // Resistances and weaknesses are not added separately: they are already what
@@ -181,7 +189,7 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
   });
 
   return (quality * w.quality) +
-    ((hasApplicableRole ? 1 : 0) * w.supportRole) +
+    (roleValue * w.supportRole) +
     (entry.coverages.length * w.coverage) +
     (entry.moveCoverages.length * w.moveCoverage) -
     (entry.quadrupleWeaknesses.length * w.quadrupleWeakness);

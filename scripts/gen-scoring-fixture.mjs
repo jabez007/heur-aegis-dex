@@ -8,7 +8,7 @@
 //
 // Run with:  npx tsx scripts/gen-scoring-fixture.mjs > src/lib/scoring.fixture.ts
 
-import { getBaseTypes, getDualTypes } from '../src/lib/pokedex.ts';
+import { chooseDefaultAbility, getBaseTypes, getDualTypes } from '../src/lib/pokedex.ts';
 import { applyAbilityModifiers } from '../src/lib/pokedexAbilities.ts';
 import { buildOffensiveTypeChart, getMoveCoverage } from '../src/lib/coverageMoves.ts';
 import { getEffectiveStats, getStatAbilityName, totalStats } from '../src/lib/statAbilities.ts';
@@ -18,62 +18,35 @@ import {
   normalizeDamageToScore
 } from '../src/lib/pokedexScoring.ts';
 
-// Ability is named explicitly rather than derived: a fixture must be
-// deterministic and must not silently follow a change to the selection rule it
-// exists to test around.
+// Abilities are *derived* the same way the scan derives them, not pinned.
+//
+// An earlier version pinned them, on the reasoning that a fixture should be
+// deterministic. That reasoning was wrong in a way worth recording: pinning
+// Skeledirge to Unaware made the ability-effect layer look tested while the app
+// selected Blaze and never reached it. A fixture that does not use the app's own
+// selection rule is testing something the user will never see.
+
+
 const FIXTURE = [
   // Recognisable strong Pokemon
-  ['incineroar', 'intimidate'],
-  ['dragonite', 'multiscale'],
-  ['garchomp', 'rough-skin'],
-  ['metagross', 'clear-body'],
-  ['milotic', 'competitive'],
-  ['clefable', 'magic-guard'],
-  ['tyranitar', 'sand-stream'],
-  ['hydreigon', 'levitate'],
-  ['volcarona', 'flame-body'],
-  ['kingambit', 'defiant'],
-  ['annihilape', 'defiant'],
-  ['sylveon', 'pixilate'],
-  ['glimmora', 'toxic-debris'],
-  ['sneasler', 'poison-touch'],
+  'incineroar', 'dragonite', 'garchomp', 'metagross', 'milotic', 'clefable',
+  'tyranitar', 'hydreigon', 'volcarona', 'kingambit', 'annihilape', 'sylveon',
+  'glimmora', 'sneasler',
+
   // Same Fire/Ghost typing, so the comparison is purely stats and abilities.
-  ['skeledirge', 'unaware'],
-  ['typhlosion-hisui', 'blaze'],
-  ['dragonite', 'multiscale'],
+  'skeledirge', 'typhlosion-hisui',
 
   // Weather cores
-  ['torkoal', 'drought'],
-  ['venusaur', 'chlorophyll'],
-  ['charizard', 'blaze'],
-  ['arcanine', 'intimidate'],
-  ['pelipper', 'drizzle'],
-  ['basculegion-male', 'adaptability'],
+  'torkoal', 'venusaur', 'charizard', 'arcanine', 'pelipper', 'basculegion-male',
+  'ninetales', 'ninetales-alola',
 
   // Support and defensive specialists
-  ['whimsicott', 'prankster'],
-  ['grimmsnarl', 'prankster'],
-  ['klefki', 'prankster'],
-  ['skarmory', 'sturdy'],
-  ['forretress', 'sturdy'],
-  ['farigiraf', 'armor-tail'],
-  ['azumarill', 'huge-power'],
-  ['lucario', 'inner-focus'],
-  ['talonflame', 'gale-wings'],
+  'whimsicott', 'grimmsnarl', 'klefki', 'skarmory', 'forretress', 'farigiraf',
+  'azumarill', 'lucario', 'talonflame',
 
   // Deliberately weak: low stats, poor typing, no role
-  ['pikachu', 'static'],
-  ['castform', 'forecast'],
-  ['watchog', 'illuminate'],
-  ['emolga', 'static'],
-  ['dedenne', 'cheek-pouch'],
-  ['liepard', 'limber'],
-  ['audino', 'healer'],
-  ['arbok', 'intimidate'],
-  ['simisear', 'blaze'],
-  ['camerupt', 'magma-armor'],
-  ['salazzle', 'corrosion'],
-  ['scovillain', 'chlorophyll']
+  'pikachu', 'castform', 'watchog', 'emolga', 'dedenne', 'liepard', 'audino',
+  'arbok', 'simisear', 'camerupt', 'salazzle', 'scovillain'
 ];
 
 const base = await getBaseTypes(BASE);
@@ -96,7 +69,7 @@ const getJson = async (url) => {
 const seen = new Set();
 const entries = [];
 
-for (const [name, abilityName] of FIXTURE) {
+for (const name of FIXTURE) {
   if (seen.has(name)) continue;
   seen.add(name);
 
@@ -108,16 +81,17 @@ for (const [name, abilityName] of FIXTURE) {
   if (!typeData) throw new Error(`no type entry for ${name} (${types.join('/')})`);
 
   const abilityNames = poke.abilities.map((a) => a.ability.name);
-  if (!abilityNames.includes(abilityName)) {
-    throw new Error(`${name} has no ability ${abilityName}; it has ${abilityNames.join(', ')}`);
-  }
-
   const baseStats = poke.stats.reduce((acc, s) => ({ ...acc, [s.stat.name]: s.base_stat }), {});
-  const stats = getEffectiveStats(baseStats, [abilityName]);
 
+  // Exactly what the scan does: build a profile per ability, then let the scan's
+  // own rule pick the default.
   const { abilityProfiles } = applyAbilityModifiers(typeData.damage_relations, abilityNames, BASE);
-  const profile = abilityProfiles.find((p) => p.ability_name === abilityName);
-  if (!profile) throw new Error(`no profile for ${name}/${abilityName}`);
+  const profile = chooseDefaultAbility(
+    abilityProfiles.map((p) => ({ ...p, stats: getEffectiveStats(baseStats, [p.ability_name]) })),
+    BASE
+  );
+  const abilityName = profile.ability_name;
+  const stats = profile.stats;
 
   entries.push({
     name,

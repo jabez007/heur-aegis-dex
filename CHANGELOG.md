@@ -70,6 +70,14 @@
 
 ### Fixed
 
+- **Ability selection reaches the abilities that matter.** The scan chose a default ability through a precedence chain — stat abilities, then support roles, then defensive merit, then the first slot — that had grown a clause per ability layer without the ordering between them ever being argued for. It still missed a whole category: Unaware, Multiscale, Magic Guard and Adaptability all sit in a second or third ability slot, so `abilityEffects.ts` shipped with the app never selecting one of them and the layer did nothing in the browser.
+
+  The chain is replaced by one rule: the default is whichever ability makes the Pokemon best by the model's own reckoning. The old special cases fall out of it rather than being encoded — Huge Power beats Sap Sipper because doubling Attack moves quality further than one type immunity, Drought beats Flash Fire because a support role is worth more than upgrading a resistance to an immunity.
+
+  The scoring fixture had pinned each Pokemon's ability explicitly, which made the layer look tested while the app selected something else. It now derives abilities the same way the scan does, so it tests what a user actually sees.
+
+- **Weather and terrain setters are credited less when ranked alone.** Intimidate lands the moment its holder switches in; Drought changes the field, which is worth nothing until a teammate wants it changed. Ranking them equally put Ninetales above Hydreigon despite an 8.5-point quality gap. Team scoring credits setters properly through its own support-role synergy term, so the solo bonus is halved — enough to keep them in the candidate pool, not enough to rank them as though the payoff had happened. Ability *selection* is unaffected: Ninetales still defaults to Drought, because that remains the right ability for it to run.
+
 - **Battle-only forms no longer appear as their own Pokemon.** Gigantamax, Mimikyu-Busted, Eiscue-Noice and the like are states a Pokemon enters mid-battle, so listing them beside their base form invented team slots. Detected via `is_battle_only` on PokeAPI's form resource rather than by name suffix. Megas are battle-only by the same flag but remain a real pre-battle choice, so `allowMegas` still governs them — via `is_mega` now, replacing the `-mega` substring check. Where dropping a form would have understated the Pokemon, the battle-form rating above covers it.
 - **Cosmetic varieties no longer appear as separate Pokemon.** PokeAPI models a lot of appearance-only variation as its own variety: Pikachu carries fifteen between the cosplay outfits and the travelling caps, and every Totem Pokemon duplicates its base form's stat line exactly. All of them were arriving in the browser as their own entry. `collapseIndistinctVarieties` keeps one when two varieties of a species match in everything this tool models — stats, typing and abilities — preferring the species' default. The rule is safe by construction: whatever it drops was indistinguishable from what stays.
 
@@ -78,7 +86,7 @@
   Deliberately not keyed on move coverage: it is looked up by variety name, so the cosmetic variants have none, and including it would make them look distinct and defeat the rule. The survivor preference guards that instead.
 - **Form controls look the same everywhere.** `.gba-label` / `.gba-select` / `.gba-input` were defined in `App.vue`'s scoped style block, so the Team Workbench's Format select rendered unstyled. They now live in `assets/scss/main.scss`.
 
-The scan cache key moved to `v12`, so stored results containing battle-only forms — or rating Palafin as its registered form — are discarded rather than served.
+The scan cache key moved to `v13`, so stored results containing battle-only forms — or rating Palafin as its registered form — are discarded rather than served.
 
 ## 0.3.0
 

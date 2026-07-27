@@ -23,6 +23,8 @@ const mockState = vi.hoisted(() => ({
   useHugePower: false,
   /** Give the fire-type entry a support ability alongside a filler and a type immunity. */
   useSupportAbility: false,
+  /** Give the fire-type entry Skeledirge's pair: a filler first, a quality ability hidden. */
+  useQualityAbility: false,
   detailDelayMs: 0,
   requestCounts: new Map<string, number>(),
   /** Every request in the order it was issued, for checking which phase made it. */
@@ -186,7 +188,14 @@ vi.mock('pokedex-promise-v2', () => {
           ],
           abilities: mockState.usePalafin
             ? [{ ability: { name: mockState.breakPalafinTrigger ? 'torrent' : 'zero-to-hero' }, is_hidden: false }]
-            : mockState.useSupportAbility
+            : mockState.useQualityAbility
+              // Skeledirge's real pair. Unaware sits in the hidden slot, so any
+              // rule that falls back to "first ability" never reaches it.
+              ? [
+                { ability: { name: 'blaze' }, is_hidden: false },
+                { ability: { name: 'unaware' }, is_hidden: true }
+              ]
+              : mockState.useSupportAbility
               // Ninetales' real trio: a filler, the weather ability it is
               // brought for, and a type immunity that wins on defence alone.
               ? [
@@ -330,6 +339,7 @@ beforeEach(() => {
   mockState.breakPalafinTrigger = false;
   mockState.useHugePower = false;
   mockState.useSupportAbility = false;
+  mockState.useQualityAbility = false;
   mockState.detailDelayMs = 0;
   mockState.requestCounts.clear();
   mockState.requestOrder = [];
@@ -742,6 +752,22 @@ describe('pokedex.js API integration logic', () => {
     expect(entry.selected_ability_name).toBe('drought');
     // Every ability is still offered; only the default changed.
     expect(Object.keys(entry.ability_profiles!).sort()).toEqual(['drought', 'flash-fire', 'white-smoke']);
+  });
+
+  it('getResistantTypes should select a quality ability out of a hidden slot', async () => {
+    mockState.useQualityAbility = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+    const entry = resistant.find(t => t.name === 'fire')!.pokemon[0];
+
+    // Unaware changes neither the stats nor a type matchup, so every earlier
+    // version of the selection rule fell through to the first slot and picked
+    // Blaze — which left abilityEffects.ts with nothing in the app using it.
+    expect(entry.selected_ability_name).toBe('unaware');
   });
 
   it('getResistantTypes should fetch a battle form inside the concurrency budget', async () => {

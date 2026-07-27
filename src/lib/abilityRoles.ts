@@ -56,6 +56,43 @@ export const ABILITY_ROLES: readonly AbilityRole[] = [
 export const DOUBLES_ONLY_ROLES: readonly AbilityRole[] = ['redirection', 'ally-protection'];
 
 /**
+ * Roles whose payoff depends on the rest of the team rather than on the holder.
+ *
+ * Intimidate drops the opponent's Attack the moment its holder switches in, and
+ * redirection pulls attacks off whatever partner happens to be beside it. A
+ * weather or terrain setter does neither: it changes the field, and that is
+ * worth nothing until something on the team wants the field changed. Drought on
+ * Ninetales is the whole reason to bring it *and* worth zero without the sun
+ * abusers behind it.
+ *
+ * The distinction matters when ranking a Pokemon on its own, where a setter's
+ * payoff has not happened yet. Team scoring credits these properly through its
+ * own support-role synergy term, which is the right place for it.
+ */
+export const TEAM_DEPENDENT_ROLES: readonly AbilityRole[] = ['weather-setter', 'terrain-setter'];
+
+/**
+ * How much of a solo support bonus a team-dependent role earns.
+ *
+ * Not zero: the solo ranking decides which Pokemon the roster search looks at
+ * in the first place, and a setter pruned there can never be credited by the
+ * team scoring that would have valued it. Not full either, for the reason
+ * above. Reasoned, not measured.
+ */
+export const TEAM_DEPENDENT_ROLE_DISCOUNT = 0.5;
+
+/**
+ * Fraction of the solo support bonus a role earns when scored in isolation.
+ *
+ * @param role Role to weigh, or undefined for no role.
+ * @returns 1 for roles that pay off alone, the discount for ones that need teammates, 0 for none.
+ */
+export function soloRoleValue(role: AbilityRole | undefined): number {
+  if (!role) return 0;
+  return TEAM_DEPENDENT_ROLES.includes(role) ? TEAM_DEPENDENT_ROLE_DISCOUNT : 1;
+}
+
+/**
  * Roles worth scoring in a given format.
  *
  * @param hasAlly Whether an ally shares the field.

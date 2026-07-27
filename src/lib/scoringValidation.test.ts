@@ -102,11 +102,13 @@ const TEAMS = {
       + 'ever outscores a real team the scoring is not measuring anything.',
     members: team('pikachu', 'castform', 'watchog', 'emolga', 'dedenne', 'liepard')
   },
-  frailAttackers: {
-    label: 'frail attackers',
-    why: 'Individually respectable attackers with no bulk, no support and heavily '
-      + 'overlapping weaknesses. Tests that synergy is weighed, not just member quality.',
-    members: team('sneasler', 'talonflame', 'basculegion-male', 'glimmora', 'liepard', 'arbok')
+  overlappingThreats: {
+    label: 'overlapping threats',
+    why: 'Six genuinely strong attackers that all fold to the same coverage. Ground hits four '
+      + 'of them, Fighting and Psychic most of the rest, and two carry a 4x weakness. '
+      + 'Individually the best team here; collectively one Landorus away from losing. This is '
+      + 'the case that separates synergy scoring from summing member quality.',
+    members: team('garchomp', 'sneasler', 'annihilape', 'kingambit', 'lucario', 'glimmora')
   }
 } as const;
 
@@ -177,7 +179,7 @@ describe('scoring validation — member ranking', () => {
 
 describe('scoring validation — team ranking', () => {
   const strong = [TEAMS.balance, TEAMS.sun, TEAMS.defensiveCore];
-  const weak = [TEAMS.monoFire, TEAMS.junk, TEAMS.frailAttackers];
+  const weak = [TEAMS.monoFire, TEAMS.junk, TEAMS.overlappingThreats];
 
   it('scores every considered team above every discarded one', () => {
     // The full cross product, so one lucky pairing cannot hide a failure.
@@ -208,7 +210,7 @@ describe('scoring validation — team ranking', () => {
     // Torkoal alone ranks poorly. A scoring model that only summed member
     // quality would reject the team it makes possible.
     expect(candidatePriority(mon('torkoal'))).toBeLessThan(candidatePriority(mon('metagross')));
-    expect(scoreTeam(TEAMS.sun.members)).toBeGreaterThan(scoreTeam(TEAMS.frailAttackers.members));
+    expect(scoreTeam(TEAMS.sun.members)).toBeGreaterThan(scoreTeam(TEAMS.overlappingThreats.members));
   });
 
   it('rates synergy above raw member quality', () => {
@@ -218,7 +220,7 @@ describe('scoring validation — team ranking', () => {
     const individualQuality = (members: PokemonEntry[]) =>
       members.reduce((total, m) => total + candidatePriority(m), 0) / members.length;
 
-    const frail = TEAMS.frailAttackers.members;
+    const frail = TEAMS.overlappingThreats.members;
     const core = TEAMS.defensiveCore.members;
 
     expect(individualQuality(frail)).toBeGreaterThan(individualQuality(core));
