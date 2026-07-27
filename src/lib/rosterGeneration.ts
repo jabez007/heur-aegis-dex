@@ -99,11 +99,17 @@ export const CANDIDATE_WEIGHTS = {
   /** Reachable coverage. A tiebreak: it says "can learn", never "would run". */
   moveCoverage: 0.2,
   /**
-   * A quadruple weakness is already inside the defensive score, which adds 3
-   * for each. This is deliberate reinforcement rather than an oversight: a 4x
-   * weakness is a discrete build risk, not merely a worse average, because one
-   * common attacking type removes the Pokemon from the game. Kept just above
-   * `supportRole`, so a role can never offset one.
+   * A 4x weakness is a discrete build risk rather than a worse average: one
+   * common attacking type removes the Pokemon from the game.
+   *
+   * The defensive score does charge for it — `calculateDamageFromScore` adds 3
+   * for a quadruple against 1 for a double — but measured through normalization
+   * and the bulk term that difference is worth **0.35 points** on this scale.
+   * So this is not the reinforcement of an existing charge, which an earlier
+   * version of this comment claimed; it is very nearly the whole charge, and
+   * should be read that way when tuning it.
+   *
+   * Kept just above `supportRole`, so a role can never offset one.
    */
   quadrupleWeakness: 5
 } as const;
