@@ -2,6 +2,7 @@ import Pokedex from 'pokedex-promise-v2';
 import { applyAbilityModifiers, createRawAbilityProfile } from './pokedexAbilities';
 import { getRegulation, isSpeciesLegal } from './regulations';
 import { buildOffensiveTypeChart, getMoveCoverage } from './coverageMoves';
+import { getMergedBattleForm, sharesTyping } from './battleForms';
 import {
   DEFAULT_BASE_SCORE,
   calculateDamageFromScore,
@@ -174,6 +175,45 @@ async function isRegisterableForm(poke: any, allowMegas: boolean): Promise<boole
   return !form.is_battle_only;
 }
 
+/**
+ * Resolves which form's numbers describe how a Pokemon actually battles.
+ *
+ * Returns the registered `/pokemon` resource unchanged unless `battleForms.ts`
+ * whitelists a battle-only form for the species *and* the registered form has
+ * the ability that triggers it *and* the merge leaves the typing alone. Any of
+ * those failing means the Pokemon is rated as registered, which is the safe
+ * direction: understating one Pokemon is a worse outcome than silently filing
+ * it under a typing it does not have.
+ *
+ * @param poke Fetched `/pokemon` resource for the registered form.
+ * @param species Fetched `/pokemon-species` resource, used to locate the variety.
+ * @param abilities Abilities the registered form has.
+ * @returns The resource to take stats from, and the form name to disclose. The
+ *          name comes from the table rather than the fetched resource, so the
+ *          disclosure cannot go missing if the response shape shifts.
+ */
+async function resolveCombatantForm(
+  poke: any,
+  species: any,
+  abilities: readonly PokemonAbilitySlot[]
+): Promise<{ resource: any; battleFormName?: string }> {
+  const asRegistered = { resource: poke };
+
+  const rule = getMergedBattleForm(species.name, abilities.map((ability) => ability.name));
+  if (!rule) return asRegistered;
+
+  const variety = (species.varieties || [])
+    .find((entry: any) => entry.pokemon?.name === rule.variety);
+  if (!variety?.pokemon?.url) return asRegistered;
+
+  const battleForm = await fetchPokemonResource(getPokemonIdFromUrl(variety.pokemon.url));
+
+  const typeNames = (resource: any) => (resource.types || []).map((slot: any) => slot.type.name);
+  if (!sharesTyping(typeNames(poke), typeNames(battleForm))) return asRegistered;
+
+  return { resource: battleForm, battleFormName: rule.variety };
+}
+
 function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
   const abilityProfiles = entry.ability_profiles
     ? Object.fromEntries(
@@ -197,6 +237,7 @@ function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
     ...entry,
     pokemon: { ...entry.pokemon },
     species_name: entry.species_name,
+    battle_form_name: entry.battle_form_name,
     types: entry.types ? entry.types.map((typeSlot) => ({ ...typeSlot, type: { ...typeSlot.type } })) : undefined,
     abilities: entry.abilities ? entry.abilities.map((ability) => ({ ...ability })) : undefined,
     stats: entry.stats ? { ...entry.stats } : undefined,
@@ -417,7 +458,14 @@ export async function getResistantTypes(options: {
           name: abilityEntry.ability.name,
           is_hidden: abilityEntry.is_hidden
         }));
-        const stats = poke.stats.reduce((merged: PokemonStats, curr: any) => {
+
+        // Identity stays with the registered form; only the numbers move. A
+        // Palafin on your team list is a Palafin, but every turn it takes is
+        // taken as Hero, so that is what the stat filters and scoring see.
+        const combatant = await resolveCombatantForm(poke, species, p.abilities ?? []);
+        p.battle_form_name = combatant.battleFormName;
+
+        const stats = combatant.resource.stats.reduce((merged: PokemonStats, curr: any) => {
           merged[curr.stat.name] = curr.base_stat;
           return merged;
         }, {
@@ -433,7 +481,7 @@ export async function getResistantTypes(options: {
         if (stats.attack < _statsFilters.minimumAttacks && stats['special-attack'] < _statsFilters.minimumAttacks) return null;
         if ((stats.defense + stats['special-defense']) / 2 < _statsFilters.minimumDefenses) return null;
 
-        const statsTotal = poke.stats.reduce((total: number, curr: any) => total + curr.base_stat, 0);
+        const statsTotal = combatant.resource.stats.reduce((total: number, curr: any) => total + curr.base_stat, 0);
         p.stats_total = statsTotal;
         if (statsTotal < _statsFilters.minimumStatsTotal) return null;
 

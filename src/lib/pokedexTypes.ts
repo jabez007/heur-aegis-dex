@@ -92,6 +92,12 @@ export interface PokemonListEntry {
   types?: PokemonTypeSlot[];
   sprite?: string | null;
   abilities?: PokemonAbilitySlot[];
+  /**
+   * Battle-only form these stats describe, when the Pokemon registers as one
+   * form and fights as another. Absent when the registered form is the one
+   * being rated, which is the overwhelmingly common case.
+   */
+  battle_form_name?: string;
   stats?: PokemonStats;
   stats_total?: number;
   selected_ability_name?: string;

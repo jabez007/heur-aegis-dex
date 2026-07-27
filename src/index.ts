@@ -57,6 +57,13 @@ export {
 export type { Regulation, RegulationId, RegulationRules, MechanicId } from './lib/regulations'
 
 export {
+  BATTLE_FORMS,
+  getMergedBattleForm,
+  hasBattleFormRule
+} from './lib/battleForms'
+export type { BattleFormRule } from './lib/battleForms'
+
+export {
   BATTLE_FORMATS,
   BATTLE_FORMAT_LIST,
   DEFAULT_BATTLE_FORMAT,

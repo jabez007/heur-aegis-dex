@@ -35,6 +35,11 @@ export interface PokemonEntry {
   /** The Pokemon's own elemental types. */
   types: string[];
   sprite: string;
+  /**
+   * Battle-only form `stats` describe, when the Pokemon registers as one form
+   * and fights as another. Absent when it is rated as registered.
+   */
+  battleFormName?: string;
   stats: PokemonStats;
   statsTotal: number;
   abilities: PokemonAbilitySlot[];
@@ -125,6 +130,7 @@ export function toPokemonEntry(
     // for entries the scan never enriched.
     types: entry.types?.map((slot) => slot.type.name) ?? typeName.split('/'),
     sprite: entry.sprite || '',
+    battleFormName: entry.battle_form_name,
     stats: entry.stats ?? EMPTY_STATS,
     statsTotal,
     abilities: entry.abilities ?? [],

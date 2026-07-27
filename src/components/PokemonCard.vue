@@ -72,6 +72,13 @@ const handleAddToRoster = () => {
         <p class="poke-name">
           {{ pokemon.name }}
         </p>
+        <p
+          v-if="pokemon.battleFormName"
+          class="battle-form-note"
+          :title="`Registered as ${pokemon.name}, but it spends the battle as ${pokemon.battleFormName}, so the stats below are that form's.`"
+        >
+          rated as {{ pokemon.battleFormName }}
+        </p>
         <h3 class="type-header">
           <TypeBadge
             v-for="part in pokemon.types"
@@ -300,6 +307,15 @@ const handleAddToRoster = () => {
   font-family: var(--gba-font-heading);
   font-size: 1.2rem;
   margin: 0;
+}
+
+// The stats below are not the registered form's, and the card has to say so.
+.battle-form-note {
+  font-family: var(--gba-font-body);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: var(--gba-accent-magenta);
+  margin: 2px 0 0;
 }
 
 .poke-name-wrapper {

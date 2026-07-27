@@ -13,6 +13,10 @@ const mockState = vi.hoisted(() => ({
   useCoverageTableName: false,
   /** Add a Gigantamax, a Mega and a permanent regional form to the fire roster. */
   includeAlternateForms: false,
+  /** Present the fire-type entry as Palafin, which registers as one form and fights as another. */
+  usePalafin: false,
+  /** Give the registered Palafin an ability that cannot reach its battle form. */
+  breakPalafinTrigger: false,
   detailDelayMs: 0,
   requestCounts: new Map<string, number>(),
   activeDetailRequests: 0,
@@ -147,17 +151,46 @@ vi.mock('pokedex-promise-v2', () => {
             { base_stat: 50, stat: { name: 'special-defense' } },
             { base_stat: 65, stat: { name: 'speed' } }
           ],
-          abilities: [{ ability: { name: 'blaze' }, is_hidden: false }, { ability: { name: 'levitate' }, is_hidden: true }],
+          abilities: mockState.usePalafin
+            ? [{ ability: { name: mockState.breakPalafinTrigger ? 'torrent' : 'zero-to-hero' }, is_hidden: false }]
+            : [{ ability: { name: 'blaze' }, is_hidden: false }, { ability: { name: 'levitate' }, is_hidden: true }],
+          species: { url: 'https://pokeapi.co/api/v2/pokemon-species/4/' }
+          };
+        }
+        // The battle form Palafin actually fights in. Same typing as the mocked
+        // registered form, and a far larger stat line.
+        if (url.startsWith('/api/v2/pokemon/9000/')) {
+          return {
+          is_default: false,
+          types: [{ type: { name: 'fire' } }],
+          sprites: { front_default: 'palafin-hero.png' },
+          stats: [
+            { base_stat: 100, stat: { name: 'hp' } },
+            { base_stat: 160, stat: { name: 'attack' } },
+            { base_stat: 97, stat: { name: 'defense' } },
+            { base_stat: 106, stat: { name: 'special-attack' } },
+            { base_stat: 87, stat: { name: 'special-defense' } },
+            { base_stat: 100, stat: { name: 'speed' } }
+          ],
+          abilities: [{ ability: { name: 'zero-to-hero' }, is_hidden: false }],
           species: { url: 'https://pokeapi.co/api/v2/pokemon-species/4/' }
           };
         }
         if (url.startsWith('/api/v2/pokemon-species/4/')) {
           return {
-          name: mockState.useRegulationLegalSpecies ? 'charizard' : 'charmander',
+          name: mockState.usePalafin
+            ? 'palafin'
+            : (mockState.useRegulationLegalSpecies ? 'charizard' : 'charmander'),
           is_legendary: mockState.treatSpeciesAsLegendary,
           is_mythical: false,
           egg_groups: [{ name: 'monster' }],
-          pokedex_numbers: [{ pokedex: { name: 'national' } }]
+          pokedex_numbers: [{ pokedex: { name: 'national' } }],
+          varieties: mockState.usePalafin
+            ? [
+              { is_default: true, pokemon: { name: 'palafin-zero', url: 'https://pokeapi.co/api/v2/pokemon/4/' } },
+              { is_default: false, pokemon: { name: 'palafin-hero', url: 'https://pokeapi.co/api/v2/pokemon/9000/' } }
+            ]
+            : []
           };
         }
         if (url.startsWith('/api/v2/pokemon/7/')) {
@@ -247,6 +280,8 @@ beforeEach(() => {
   mockState.treatSpeciesAsLegendary = false;
   mockState.useCoverageTableName = false;
   mockState.includeAlternateForms = false;
+  mockState.usePalafin = false;
+  mockState.breakPalafinTrigger = false;
   mockState.detailDelayMs = 0;
   mockState.requestCounts.clear();
   mockState.activeDetailRequests = 0;
@@ -466,6 +501,56 @@ describe('pokedex.js API integration logic', () => {
     // known to be registerable without asking.
     expect(mockState.requestCounts.get('/api/v2/pokemon-form/4/')).toBeUndefined();
     expect(mockState.requestCounts.get('/api/v2/pokemon-form/10001/')).toBe(1);
+  });
+
+  const scanPalafin = (statsFilters = { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }) => {
+    mockState.usePalafin = true;
+    return getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters
+    });
+  };
+
+  it('getResistantTypes should rate a Pokemon on the form it fights in', async () => {
+    const entry = (await scanPalafin()).find(t => t.name === 'fire')!.pokemon[0];
+
+    // Identity stays with the registered form; only the numbers move.
+    expect(entry.pokemon.name).toBe('charmander');
+    expect(entry.species_name).toBe('palafin');
+    expect(entry.battle_form_name).toBe('palafin-hero');
+    expect(entry.stats!.attack).toBe(160);
+    expect(entry.stats_total).toBe(650);
+  });
+
+  it('getResistantTypes should apply stat floors to the fighting form', async () => {
+    // The registered Palafin-Zero form would fail this floor. Rating it there
+    // would drop from the scan a Pokemon that battles at 650.
+    const resistant = await scanPalafin({ minimumStatsTotal: 600, minimumAttacks: 150, minimumDefenses: 80 });
+
+    expect(resistant.find(t => t.name === 'fire')!.pokemon).toHaveLength(1);
+  });
+
+  it('getResistantTypes should rate as registered when the trigger ability is absent', async () => {
+    mockState.breakPalafinTrigger = true;
+    const entry = (await scanPalafin()).find(t => t.name === 'fire')!.pokemon[0];
+
+    // Without Zero to Hero the battle form is unreachable, so the registered
+    // form's own stats stand.
+    expect(entry.battle_form_name).toBeUndefined();
+    expect(entry.stats!.attack).toBe(52);
+  });
+
+  it('getResistantTypes should leave ordinary Pokemon unmarked', async () => {
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(resistant.find(t => t.name === 'fire')!.pokemon[0].battle_form_name).toBeUndefined();
   });
 
   it('getResistantTypes should dedupe repeated pokemon and species detail fetches', async () => {
