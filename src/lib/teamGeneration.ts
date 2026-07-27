@@ -85,7 +85,12 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
     const candidateCoverages = candidateProfile.coverages || [];
     const candidateResistances = candidateProfile.resistances || [];
 
-    const passesSharedType = _teamComposition.allowSharedTypes || current.name.split('/').every((n) => !candidate.name.includes(n));
+    // Compare whole type names. Substring matching happened to work only
+    // because no current type name contains another, which is not a property
+    // worth relying on.
+    const candidateTypes = new Set(candidate.name.split('/'));
+    const passesSharedType = _teamComposition.allowSharedTypes ||
+      current.name.split('/').every((typeName) => !candidateTypes.has(typeName));
     const passesSharedWeakness = _teamComposition.allowSharedWeaknesses ||
       currentWeaknesses.every((w) => !candidateWeaknesses.includes(w));
 

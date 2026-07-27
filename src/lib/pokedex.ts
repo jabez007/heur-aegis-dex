@@ -1,8 +1,7 @@
 import Pokedex from 'pokedex-promise-v2';
-import 'lodash.combinations';
-import _ from 'lodash';
 import { applyAbilityModifiers, createRawAbilityProfile } from './pokedexAbilities';
 import {
+  DEFAULT_BASE_SCORE,
   calculateDamageFromScore,
   calculateDamageToScore,
   cloneDamageRelations,
@@ -19,9 +18,27 @@ import type {
   ResistantTypeResult
 } from './pokedexTypes';
 
-const _lodash = _ as any;
-const BASESCORE = 18;
+const BASESCORE = DEFAULT_BASE_SCORE;
 const POKEMON_DETAIL_CONCURRENCY = 12;
+
+/**
+ * Returns every unordered pair drawn from the supplied items.
+ *
+ * Replaces lodash.combinations, which pulled all of lodash into the browser
+ * bundle and needed an `any` cast because it patches the lodash namespace.
+ *
+ * @param items Items to pair up.
+ * @returns Each distinct pair, in input order.
+ */
+function pairCombinations<T>(items: T[]): [T, T][] {
+  const pairs: [T, T][] = [];
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      pairs.push([items[i], items[j]]);
+    }
+  }
+  return pairs;
+}
 
 const pokemonResourceCache = new Map<number, Promise<any>>();
 const pokemonSpeciesCache = new Map<number, Promise<any>>();
@@ -158,12 +175,16 @@ export async function getBaseTypes(baseScore: number = BASESCORE): Promise<Pokem
  * Builds combined dual-type damage profiles from the fetched base types.
  *
  * @param baseScore Baseline score used to normalize offensive and defensive damage values.
+ * @param baseTypes Already-fetched base types to combine. Fetched on demand when omitted.
  * @returns A list of synthesized dual-type entries with merged damage relations.
  */
-export async function getDualTypes(baseScore: number = BASESCORE): Promise<PokemonTypeData[]> {
-  const baseTypes = await getBaseTypes(baseScore);
+export async function getDualTypes(
+  baseScore: number = BASESCORE,
+  baseTypes?: PokemonTypeData[]
+): Promise<PokemonTypeData[]> {
+  const resolvedBaseTypes = baseTypes ?? await getBaseTypes(baseScore);
 
-  return _lodash.combinations(baseTypes, 2)
+  return pairCombinations(resolvedBaseTypes)
     .map((dt: PokemonTypeData[]) => {
       const dr0 = dt[0].damage_relations;
       const dr1 = dt[1].damage_relations;
@@ -363,7 +384,10 @@ export async function getResistantTypes(options: {
       .sort((p1, p2) => (p2.stats_total || 0) - (p1.stats_total || 0));
   };
 
-  const baseAndDualTypes = (await getBaseTypes(baseScore)).concat(await getDualTypes(baseScore));
+  // Fetch the base types once and hand them to getDualTypes, which would
+  // otherwise refetch all 18 type resources for the same scan.
+  const baseTypes = await getBaseTypes(baseScore);
+  const baseAndDualTypes = baseTypes.concat(await getDualTypes(baseScore, baseTypes));
 
   const uniquePokemonEntries = Array.from(
     new Map(
