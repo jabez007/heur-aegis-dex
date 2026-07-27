@@ -1,5 +1,6 @@
 import Pokedex from 'pokedex-promise-v2';
 import { applyAbilityModifiers, createRawAbilityProfile } from './pokedexAbilities';
+import { getRegulation, isSpeciesLegal } from './regulations';
 import {
   DEFAULT_BASE_SCORE,
   calculateDamageFromScore,
@@ -51,6 +52,15 @@ export const pokedex = new Pokedex({
 
 export type { NamedResource, DamageRelations, PokemonTypeData } from './pokedexTypes';
 export { generateTeams } from './teamGeneration';
+export {
+  REGULATIONS,
+  getActiveRegulation,
+  getRegulation,
+  isSpeciesLegal,
+  canMegaEvolve,
+  hasCompleteData
+} from './regulations';
+export type { Regulation, RegulationId, RegulationRules, MechanicId } from './regulations';
 
 /**
  * Clears internal Pokemon detail caches. Intended for tests.
@@ -270,6 +280,12 @@ export async function getResistantTypes(options: {
     inPokedex?: string;
     allowMegas?: boolean;
     includeAbilityImmunities?: boolean;
+    /**
+     * Restrict results to a Champions regulation roster, for example `M-B`.
+     * Omit or pass null to scan without a legality filter. Applied on top of
+     * the breedable-only rule, never instead of it.
+     */
+    regulation?: string | null;
   };
   statsFilters?: {
     minimumStatsTotal?: number;
@@ -285,8 +301,15 @@ export async function getResistantTypes(options: {
   } = options;
 
   const _typeFilters = { maxDamageFromScore: true, allowQuadrupleDamage: true, limitQuadrupleDamage: true, ...typeFilters };
-  const _pokemonFilters = { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, ...pokemonFilters };
+  const _pokemonFilters = { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, regulation: null, ...pokemonFilters };
   const _statsFilters = { minimumStatsTotal: 480, minimumAttacks: 80, minimumDefenses: 80, ...statsFilters };
+
+  // An unknown regulation id must not silently degrade into an unfiltered scan,
+  // which would quietly hand back an illegal roster.
+  const regulation = _pokemonFilters.regulation ? getRegulation(_pokemonFilters.regulation) : undefined;
+  if (_pokemonFilters.regulation && !regulation) {
+    throw new Error(`Unknown regulation: ${_pokemonFilters.regulation}`);
+  }
 
   const pokedexMaps: Record<string, string[]> = {
     national: ['national'],
@@ -316,7 +339,11 @@ export async function getResistantTypes(options: {
         const speciesId = getPokemonIdFromUrl(poke.species.url);
         const species = await fetchPokemonSpeciesResource(speciesId);
 
+        // Two independent filters. Legality is what the format permits;
+        // breedability is a play-style preference. Neither implies the other,
+        // so both are applied and neither replaces the other.
         if (!isBreedable(species, p.pokemon.name)) return null;
+        if (regulation && !isSpeciesLegal(regulation, species.name)) return null;
 
         if (!species.pokedex_numbers.some((pn: any) =>
           (pokedexMaps[_pokemonFilters.inPokedex] || []).some((pm: any) => pn.pokedex.name.includes(pm))

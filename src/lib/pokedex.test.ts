@@ -5,6 +5,10 @@ const mockState = vi.hoisted(() => ({
   duplicateCharmanderAcrossTypes: false,
   expandFireRoster: false,
   failPokemon4Once: false,
+  /** Report species names that appear on the Regulation M-B roster. */
+  useRegulationLegalSpecies: false,
+  /** Report every species as legendary, exercising the breedable-only filter. */
+  treatSpeciesAsLegendary: false,
   detailDelayMs: 0,
   requestCounts: new Map<string, number>(),
   activeDetailRequests: 0,
@@ -136,7 +140,8 @@ vi.mock('pokedex-promise-v2', () => {
         }
         if (url.startsWith('/api/v2/pokemon-species/4/')) {
           return {
-          is_legendary: false,
+          name: mockState.useRegulationLegalSpecies ? 'charizard' : 'charmander',
+          is_legendary: mockState.treatSpeciesAsLegendary,
           is_mythical: false,
           egg_groups: [{ name: 'monster' }],
           pokedex_numbers: [{ pokedex: { name: 'national' } }]
@@ -160,7 +165,8 @@ vi.mock('pokedex-promise-v2', () => {
         }
         if (url.startsWith('/api/v2/pokemon-species/7/')) {
           return {
-          is_legendary: false,
+          name: mockState.useRegulationLegalSpecies ? 'blastoise' : 'squirtle',
+          is_legendary: mockState.treatSpeciesAsLegendary,
           is_mythical: false,
           egg_groups: [{ name: 'monster' }],
           pokedex_numbers: [{ pokedex: { name: 'national' } }]
@@ -189,7 +195,8 @@ vi.mock('pokedex-promise-v2', () => {
         const speciesMatch = url.match(/^\/api\/v2\/pokemon-species\/(\d+)\/$/);
         if (speciesMatch) {
           return {
-            is_legendary: false,
+            name: `species-${speciesMatch[1]}`,
+            is_legendary: mockState.treatSpeciesAsLegendary,
             is_mythical: false,
             egg_groups: [{ name: 'monster' }],
             pokedex_numbers: [{ pokedex: { name: 'national' } }]
@@ -208,6 +215,8 @@ beforeEach(() => {
   mockState.duplicateCharmanderAcrossTypes = false;
   mockState.expandFireRoster = false;
   mockState.failPokemon4Once = false;
+  mockState.useRegulationLegalSpecies = false;
+  mockState.treatSpeciesAsLegendary = false;
   mockState.detailDelayMs = 0;
   mockState.requestCounts.clear();
   mockState.activeDetailRequests = 0;
@@ -302,6 +311,55 @@ describe('pokedex.js API integration logic', () => {
     expect(fireType!.pokemon[0].effective_weaknesses).toContain('ground');
     expect(fireType!.pokemon[0].effective_resistances).not.toContain('ground');
     expect(fireType!.damage_from_score).toBe(19.5);
+  });
+
+  it('getResistantTypes should exclude species outside the selected regulation', async () => {
+    // charmander and squirtle are not on the Regulation M-B roster.
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, regulation: 'M-B' },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(resistant.every(t => t.pokemon.length === 0)).toBe(true);
+  });
+
+  it('getResistantTypes should keep species on the selected regulation roster', async () => {
+    mockState.useRegulationLegalSpecies = true;
+
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, regulation: 'M-B' },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(resistant.find(t => t.name === 'fire')!.pokemon).toHaveLength(1);
+    expect(resistant.find(t => t.name === 'water')!.pokemon).toHaveLength(1);
+  });
+
+  it('getResistantTypes should reject an unknown regulation instead of scanning unfiltered', async () => {
+    await expect(getResistantTypes({
+      pokemonFilters: { regulation: 'M-Z' }
+    })).rejects.toThrow('Unknown regulation: M-Z');
+  });
+
+  it('getResistantTypes should apply the regulation on top of the breedable filter', async () => {
+    // charizard is legal in M-B, but the species is reported as legendary here,
+    // so the breedable-only preference must still exclude it. Legality and
+    // breedability are independent filters and neither overrides the other.
+    mockState.useRegulationLegalSpecies = true;
+    mockState.treatSpeciesAsLegendary = true;
+
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, regulation: 'M-B' },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(resistant.every(t => t.pokemon.length === 0)).toBe(true);
   });
 
   it('getResistantTypes should dedupe repeated pokemon and species detail fetches', async () => {
