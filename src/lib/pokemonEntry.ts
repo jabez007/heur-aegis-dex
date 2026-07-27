@@ -15,10 +15,10 @@
  * the seam that lets them.
  */
 
-import { getPokemonAbilityProfile } from './activePokemon';
 import { DEFAULT_BASE_SCORE, normalizeDamageFromScore, normalizeDamageToScore } from './pokedexScoring';
 import type {
   AbilityProfile,
+  DamageRelations,
   PokemonAbilitySlot,
   PokemonListEntry,
   PokemonStats,
@@ -52,6 +52,46 @@ export interface PokemonEntry {
   moveCoverages: string[];
   normalizedDamageToScore: number;
   normalizedDamageFromScore: number;
+}
+
+/**
+ * Resolves the currently active ability profile for a Pokemon, falling back to
+ * its effective profile fields when no named ability profile is available.
+ *
+ * @param pokemon Pokemon entry to inspect.
+ * @param abilityName Optional explicit ability name to resolve instead of the stored selection.
+ * @returns The matching ability profile, a profile synthesized from effective fields, or `null`.
+ */
+export function getPokemonAbilityProfile(pokemon: PokemonListEntry | null | undefined, abilityName?: string): AbilityProfile | null {
+  if (!pokemon) return null;
+
+  const selectedAbilityName = abilityName || pokemon.selected_ability_name;
+  if (selectedAbilityName && pokemon.ability_profiles?.[selectedAbilityName]) {
+    return pokemon.ability_profiles[selectedAbilityName];
+  }
+
+  const hasEffectiveProfile =
+    pokemon.effective_damage_from_score !== undefined ||
+    pokemon.effective_damage_to_score !== undefined ||
+    pokemon.effective_weaknesses !== undefined ||
+    pokemon.effective_resistances !== undefined ||
+    pokemon.effective_immunities !== undefined;
+
+  if (!hasEffectiveProfile) {
+    return null;
+  }
+
+  return {
+    damage_relations: pokemon.effective_damage_relations as DamageRelations | undefined,
+    weaknesses: pokemon.effective_weaknesses || [],
+    quadruple_weaknesses: pokemon.effective_quadruple_weaknesses || [],
+    resistances: pokemon.effective_resistances || [],
+    immunities: pokemon.effective_immunities || [],
+    ineffectives: pokemon.effective_ineffectives || [],
+    coverages: pokemon.effective_coverages || [],
+    damage_from_score: pokemon.effective_damage_from_score,
+    damage_to_score: pokemon.effective_damage_to_score
+  };
 }
 
 const EMPTY_STATS: PokemonStats = {

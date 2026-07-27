@@ -1,7 +1,6 @@
 import { ref, computed } from 'vue';
 import { withAbility, type PokemonEntry } from '../lib/pokemonEntry';
 import { generateRosters } from '../lib/rosterGeneration';
-import { resolveSelectedPokemon } from '../lib/activePokemon';
 import { analyzeTeamCoverage } from '../lib/teamCoverage';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from '../lib/abilityRoles';
 import { evaluateRoster, type RosterMember } from '../lib/rosterScoring';
@@ -11,8 +10,6 @@ import {
   getBattleFormat,
   type BattleFormatId
 } from '../lib/battleFormats';
-import { DEFAULT_BASE_SCORE, normalizeDamageFromScore, normalizeDamageToScore } from '../lib/pokedexScoring';
-import type { ActiveTypeDataLike } from '../lib/activePokemon';
 import { useNotifications } from './useNotifications';
 import { createInjectableState } from './injectableState';
 
@@ -185,8 +182,6 @@ export function useTeamBuilder() {
   /**
    * Registers a Pokemon on the roster.
    *
-   * The Pokemon-native entry point. addToParty remains for callers still
-   * holding a type card.
    *
    * @param entry Pokemon to register.
    * @param abilityName Optional ability override.
@@ -212,46 +207,6 @@ export function useTeamBuilder() {
 
   const hasSpecies = (speciesName: string) =>
     roster.value.some((member) => member.speciesName === speciesName);
-
-  const addToParty = (typeData: ActiveTypeDataLike, pokemonIndex: number, abilityName?: string) => {
-    if (roster.value.length >= maxRosterSize.value) {
-      notify(`Roster is full at ${maxRosterSize.value}.`, 'error');
-      return;
-    }
-
-    const pokemon = resolveSelectedPokemon(typeData, pokemonIndex, abilityName);
-    if (!pokemon || !pokemon.types || !pokemon.stats) return;
-
-    // Champions forbids duplicate Pokedex numbers, so the roster is keyed by
-    // species. It is deliberately *not* keyed by type combination: two
-    // different Water/Flying Pokemon are a legal and often sensible pair, and
-    // the old rule rejected them only because typings were the entities.
-    const speciesName = pokemon.species_name || pokemon.pokemon.name;
-    if (roster.value.some(member => member.speciesName === speciesName)) {
-      notify(`${speciesName.toUpperCase()} is already in your roster.`, "error");
-      return;
-    }
-
-    roster.value.push({
-      name: pokemon.pokemon.name,
-      speciesName,
-      types: pokemon.types.map((p) => p.type.name),
-      sprite: pokemon.sprite || '',
-      stats: pokemon.stats,
-      abilityName: pokemon.selected_ability_name,
-      weaknesses: pokemon.effective_weaknesses || typeData.weaknesses,
-      resistances: pokemon.effective_resistances || typeData.resistances,
-      immunities: pokemon.effective_immunities || typeData.immunities || [],
-      coverages: pokemon.effective_coverages || typeData.coverages,
-      moveCoverages: pokemon.effective_move_coverages || [],
-      normalizedDamageToScore: normalizeDamageToScore(pokemon.effective_damage_to_score, DEFAULT_BASE_SCORE),
-      normalizedDamageFromScore: normalizeDamageFromScore(pokemon.effective_damage_from_score, DEFAULT_BASE_SCORE),
-      typeName: typeData.name
-    });
-    // Roster positions shift, so a manual pick no longer means what it did.
-    manualBringIndices.value = null;
-    notify(`Added ${pokemon.pokemon.name.toUpperCase()} to roster.`, "success");
-  };
 
   const removeFromParty = (index: number) => {
     roster.value.splice(index, 1);
@@ -364,7 +319,6 @@ export function useTeamBuilder() {
     teamCoverageSummary,
     teamSpreadSummary,
     teamRoleSummary,
-    addToParty,
     removeFromParty,
     clearParty,
     generateFullTeam,

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { flattenToPokemon, groupByTypeName, toPokemonEntry, withAbility } from './pokemonEntry';
+import {
+  flattenToPokemon,
+  getPokemonAbilityProfile,
+  groupByTypeName,
+  toPokemonEntry,
+  withAbility
+} from './pokemonEntry';
 import type { PokemonListEntry } from './pokedexTypes';
 
 const stats = { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 };
@@ -181,5 +187,73 @@ describe('withAbility', () => {
     withAbility(base, 'storm-drain');
     expect(base.abilityName).toBe('keen-eye');
     expect(base.immunities).toEqual([]);
+  });
+});
+
+describe('getPokemonAbilityProfile', () => {
+  const createDamageRelations = (id: string) => ({
+    double_damage_from: [{ name: `${id}-from` }],
+    half_damage_from: [],
+    no_damage_from: [],
+    double_damage_to: [{ name: `${id}-to` }],
+    half_damage_to: [],
+    no_damage_to: []
+  });
+
+  const baseTypeData = {
+    pokemon: [{
+      pokemon: { name: 'charizard' },
+      selected_ability_name: 'levitate',
+      ability_profiles: {
+        blaze: {
+          damage_relations: createDamageRelations('blaze-profile'),
+          weaknesses: ['water', 'rock', 'ground'],
+          quadruple_weaknesses: [],
+          resistances: ['fire', 'grass', 'bug'],
+          ineffectives: ['water', 'fire', 'rock'],
+          coverages: ['grass', 'bug', 'ice'],
+          damage_from_score: 19.5,
+          damage_to_score: 20
+        }
+      }
+    }]
+  };
+
+  it('returns an explicit ability profile when requested', () => {
+    const pokemon = baseTypeData.pokemon[0];
+    const profile = getPokemonAbilityProfile(pokemon, 'blaze');
+
+    expect(profile).toBe(pokemon.ability_profiles.blaze);
+    expect(profile?.weaknesses).toEqual(['water', 'rock', 'ground']);
+  });
+
+  it('falls back to effective profile data when no ability profile is available', () => {
+    const pokemon = {
+      pokemon: { name: 'flareon' },
+      selected_ability_name: 'flash-fire',
+      effective_damage_relations: createDamageRelations('effective-profile'),
+      effective_weaknesses: ['water'],
+      effective_quadruple_weaknesses: [],
+      effective_resistances: ['fire', 'grass', 'ground'],
+      effective_immunities: ['ground'],
+      effective_ineffectives: ['rock'],
+      effective_coverages: ['grass'],
+      effective_damage_from_score: 11,
+      effective_damage_to_score: 22
+    };
+
+    expect(getPokemonAbilityProfile(pokemon)).toEqual({
+      damage_relations: createDamageRelations('effective-profile'),
+      weaknesses: ['water'],
+      quadruple_weaknesses: [],
+      resistances: ['fire', 'grass', 'ground'],
+      // Immunities are the strict 0x subset of resistances, carried separately
+      // so doubles synergy can tell "takes no damage" from "takes half".
+      immunities: ['ground'],
+      ineffectives: ['rock'],
+      coverages: ['grass'],
+      damage_from_score: 11,
+      damage_to_score: 22
+    });
   });
 });

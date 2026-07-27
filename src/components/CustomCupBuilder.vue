@@ -6,10 +6,10 @@ import MetaAnalysisGrid from './MetaAnalysisGrid.vue';
 import { useMetaFilters } from '../composables/useMetaFilters';
 import { flattenToPokemon, withAbility } from '../lib/pokemonEntry';
 import { candidatePriority } from '../lib/rosterGeneration';
-import type { TypeDataLike } from '../lib/activePokemon';
+import type { ResistantTypeResult } from '../lib/pokedexTypes';
 
 const props = defineProps<{
-  allDataTypes: TypeDataLike[]
+  allDataTypes: ResistantTypeResult[]
 }>();
 
 const { selectedTypes, requireAllTypes } = useMetaFilters();

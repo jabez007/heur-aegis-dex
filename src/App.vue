@@ -205,10 +205,10 @@ import { REGULATIONS, getActiveRegulation, getResistantTypes } from './lib/poked
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
 import GbaNotification from './components/GbaNotification.vue';
 import { useNotifications } from './composables/useNotifications';
-import type { TypeDataLike } from './lib/activePokemon';
+import type { ResistantTypeResult } from './lib/pokedexTypes';
 
 const loading = ref(false);
-const types = ref<TypeDataLike[]>([]);
+const types = ref<ResistantTypeResult[]>([]);
 const fetchError = ref('');
 const inPokedex = ref('national');
 // Default to whichever regulation is in force today so the tool is correct for

@@ -1,71 +1,91 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useTeamBuilder } from './useTeamBuilder';
+import type { PokemonEntry } from '../lib/pokemonEntry';
+
+const stats = { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 };
 
 const abilityProfiles = {
   blaze: {
     weaknesses: ['water', 'rock', 'ground'],
+    quadruple_weaknesses: [],
     resistances: ['fire', 'grass', 'bug'],
-    coverages: ['grass', 'bug', 'ice']
+    immunities: [],
+    coverages: ['grass', 'bug', 'ice'],
+    damage_from_score: 19.5,
+    damage_to_score: 20
   },
   levitate: {
     weaknesses: ['water', 'rock'],
+    quadruple_weaknesses: [],
     resistances: ['fire', 'grass', 'bug', 'ground'],
-    coverages: ['grass', 'bug', 'ice']
+    immunities: ['ground'],
+    coverages: ['grass', 'bug', 'ice'],
+    damage_from_score: 17.5,
+    damage_to_score: 20
   }
 };
 
-const stats = { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 };
+const pokemon = (name: string, overrides: Partial<PokemonEntry> = {}): PokemonEntry => ({
+  name,
+  speciesName: name,
+  typeName: 'fire',
+  types: ['fire'],
+  sprite: `${name}.png`,
+  stats,
+  statsTotal: 534,
+  abilities: [
+    { name: 'blaze', is_hidden: false },
+    { name: 'levitate', is_hidden: true }
+  ],
+  abilityName: 'levitate',
+  abilityProfiles,
+  weaknesses: ['water', 'rock'],
+  quadrupleWeaknesses: [],
+  resistances: ['fire', 'grass', 'bug', 'ground'],
+  immunities: ['ground'],
+  coverages: ['grass', 'bug', 'ice'],
+  moveCoverages: [],
+  normalizedDamageToScore: 0.5,
+  normalizedDamageFromScore: 0.5,
+  ...overrides
+});
 
-/** Builds a type card whose single Pokemon carries both ability profiles. */
-const typeCard = (typeName: string, pokemonName: string, speciesName = pokemonName) => {
-  const pokemon = {
-    pokemon: { name: pokemonName },
-    species_name: speciesName,
-    types: [{ type: { name: typeName } }],
-    sprite: `${pokemonName}.png`,
-    stats,
-    selected_ability_name: 'levitate',
-    ability_profiles: abilityProfiles,
-    effective_weaknesses: ['water', 'rock'],
-    effective_resistances: ['fire', 'grass', 'bug', 'ground'],
-    effective_coverages: ['grass', 'bug', 'ice']
-  };
-
-  return {
-    name: typeName,
-    weaknesses: ['water', 'rock', 'ground'],
-    resistances: ['fire', 'grass', 'bug'],
-    coverages: ['grass', 'bug', 'ice'],
-    ineffectives: ['water', 'fire', 'rock'],
-    selected_pokemon_index: 0,
-    selected_ability_name: 'levitate',
-    pokemon: [pokemon],
-    selectedPokemon: { ...pokemon, selected_ability_name: 'blaze' }
-  };
+/** Registers `count` distinct Pokemon, each with its own typing. */
+const fillRoster = (add: (entry: PokemonEntry) => boolean, count: number) => {
+  ['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark'].slice(0, count).forEach((type, index) => {
+    add(pokemon(`mon-${index}`, { typeName: type, types: [type] }));
+  });
 };
 
 describe('useTeamBuilder', () => {
   const builder = useTeamBuilder();
-  const { addToParty, clearParty, roster, setFormat, teamWeaknessSummary } = builder;
+  const { addPokemon, clearParty, roster, setFormat, teamWeaknessSummary } = builder;
 
   beforeEach(() => {
     clearParty();
     setFormat('doubles');
   });
 
-  it('uses the currently selected ability profile when adding a pokemon', () => {
-    addToParty(typeCard('fire', 'charizard') as never, 0, 'blaze');
+  it('applies the chosen ability when registering a Pokemon', () => {
+    addPokemon(pokemon('charizard'), 'blaze');
 
     expect(roster.value).toHaveLength(1);
     expect(roster.value[0].abilityName).toBe('blaze');
+    // The defensive profile follows the ability, not just the label.
     expect(roster.value[0].weaknesses).toEqual(['water', 'rock', 'ground']);
-    expect(roster.value[0].resistances).toEqual(['fire', 'grass', 'bug']);
+    expect(roster.value[0].immunities).toEqual([]);
+  });
+
+  it('keeps the scan-selected ability when none is given', () => {
+    addPokemon(pokemon('charizard'));
+
+    expect(roster.value[0].abilityName).toBe('levitate');
+    expect(roster.value[0].immunities).toEqual(['ground']);
   });
 
   it('reports no battle analysis until a full bring is selected', () => {
-    // Doubles brings four. One registered Pokemon cannot field a team, so there
-    // is nothing to analyse yet.
-    addToParty(typeCard('fire', 'charizard') as never, 0, 'blaze');
+    // Doubles brings four. One registered Pokemon cannot field a team.
+    addPokemon(pokemon('charizard'));
 
     expect(builder.bringIndices.value).toEqual([]);
     expect(teamWeaknessSummary.value).toEqual({});
@@ -73,7 +93,7 @@ describe('useTeamBuilder', () => {
 
   it('analyses the brought team once the roster can field one', () => {
     ['fire', 'water', 'grass', 'electric'].forEach((type, index) => {
-      addToParty(typeCard(type, `mon-${index}`) as never, 0, 'blaze');
+      addPokemon(pokemon(`mon-${index}`, { typeName: type, types: [type] }), 'blaze');
     });
 
     expect(builder.bringIndices.value).toHaveLength(4);
@@ -82,27 +102,23 @@ describe('useTeamBuilder', () => {
   });
 
   it('accepts two Pokemon sharing a typing', () => {
-    // The roster is keyed by species, not by type combination. Two different
-    // Water/Flying Pokemon are a legal pair and used to be rejected only
-    // because typings were the primary entity.
-    addToParty(typeCard('water/flying', 'pelipper') as never, 0, 'blaze');
-    addToParty(typeCard('water/flying', 'gyarados') as never, 0, 'blaze');
+    // A typing groups Pokemon; it is not an identity.
+    addPokemon(pokemon('pelipper', { typeName: 'water/flying', types: ['water', 'flying'] }));
+    addPokemon(pokemon('gyarados', { typeName: 'water/flying', types: ['water', 'flying'] }));
 
     expect(roster.value.map((member) => member.name)).toEqual(['pelipper', 'gyarados']);
   });
 
   it('refuses the same species twice', () => {
-    addToParty(typeCard('fire', 'charizard') as never, 0, 'blaze');
-    addToParty(typeCard('fire/flying', 'charizard-mega-x', 'charizard') as never, 0, 'blaze');
+    addPokemon(pokemon('charizard'));
+    const added = addPokemon(pokemon('charizard-mega-x', { speciesName: 'charizard' }));
 
+    expect(added).toBe(false);
     expect(roster.value).toHaveLength(1);
-    expect(roster.value[0].name).toBe('charizard');
   });
 
   it('registers up to six and brings only four in doubles', () => {
-    ['fire', 'water', 'grass', 'electric', 'ice', 'rock'].forEach((type, index) => {
-      addToParty(typeCard(type, `mon-${index}`) as never, 0, 'blaze');
-    });
+    fillRoster(addPokemon, 6);
 
     expect(roster.value).toHaveLength(6);
     expect(builder.bringIndices.value).toHaveLength(4);
@@ -110,17 +126,13 @@ describe('useTeamBuilder', () => {
   });
 
   it('refuses a seventh roster entry', () => {
-    ['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark'].forEach((type, index) => {
-      addToParty(typeCard(type, `mon-${index}`) as never, 0, 'blaze');
-    });
+    fillRoster(addPokemon, 7);
 
     expect(roster.value).toHaveLength(6);
   });
 
   it('brings three in singles from the same roster', () => {
-    ['fire', 'water', 'grass', 'electric', 'ice', 'rock'].forEach((type, index) => {
-      addToParty(typeCard(type, `mon-${index}`) as never, 0, 'blaze');
-    });
+    fillRoster(addPokemon, 6);
     setFormat('singles');
 
     expect(roster.value).toHaveLength(6);
@@ -129,9 +141,7 @@ describe('useTeamBuilder', () => {
   });
 
   it('lets the user override the suggested bring', () => {
-    ['fire', 'water', 'grass', 'electric', 'ice'].forEach((type, index) => {
-      addToParty(typeCard(type, `mon-${index}`) as never, 0, 'blaze');
-    });
+    fillRoster(addPokemon, 5);
 
     expect(builder.isSuggestedBring.value).toBe(true);
     builder.toggleBring(0);
@@ -143,11 +153,8 @@ describe('useTeamBuilder', () => {
   });
 
   it('refuses to bring more than the format allows', () => {
-    ['fire', 'water', 'grass', 'electric', 'ice'].forEach((type, index) => {
-      addToParty(typeCard(type, `mon-${index}`) as never, 0, 'blaze');
-    });
+    fillRoster(addPokemon, 5);
 
-    // Start from an explicit selection of four, then try to add a fifth.
     builder.useSuggestedBring();
     const suggested = [...builder.bringIndices.value];
     const benched = [0, 1, 2, 3, 4].find((index) => !suggested.includes(index))!;
@@ -158,9 +165,7 @@ describe('useTeamBuilder', () => {
   });
 
   it('drops a manual bring when the format changes', () => {
-    ['fire', 'water', 'grass', 'electric', 'ice'].forEach((type, index) => {
-      addToParty(typeCard(type, `mon-${index}`) as never, 0, 'blaze');
-    });
+    fillRoster(addPokemon, 5);
     builder.toggleBring(0);
     expect(builder.isSuggestedBring.value).toBe(false);
 
@@ -169,5 +174,11 @@ describe('useTeamBuilder', () => {
     // A bring sized for doubles says nothing about which three to bring.
     expect(builder.isSuggestedBring.value).toBe(true);
     expect(builder.bringIndices.value).toHaveLength(3);
+  });
+
+  it('reports whether a species is already registered', () => {
+    expect(builder.hasSpecies('charizard')).toBe(false);
+    addPokemon(pokemon('charizard'));
+    expect(builder.hasSpecies('charizard')).toBe(true);
   });
 });

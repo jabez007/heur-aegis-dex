@@ -54,6 +54,7 @@ export type { RosterMember, RosterEvaluation, BringOption } from './lib/rosterSc
 export {
   flattenToPokemon,
   groupByTypeName,
+  getPokemonAbilityProfile,
   toPokemonEntry,
   withAbility
 } from './lib/pokemonEntry'
