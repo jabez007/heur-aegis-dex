@@ -15,6 +15,8 @@ export interface PartyMember {
   abilityName?: string;
   weaknesses: string[];
   resistances: string[];
+  /** Strict 0x subset of `resistances`, needed for doubles spread safety. */
+  immunities: string[];
   coverages: string[];
   typeName: string;
 }
@@ -45,6 +47,7 @@ export function useTeamBuilder() {
     abilityName: member.selected_ability_name,
     weaknesses: member.effective_weaknesses || typeData.weaknesses,
     resistances: member.effective_resistances || typeData.resistances,
+    immunities: member.effective_immunities || typeData.immunities || [],
     coverages: member.effective_coverages || typeData.coverages,
     typeName
   });
@@ -82,6 +85,7 @@ export function useTeamBuilder() {
       abilityName: pokemon.selected_ability_name,
       weaknesses: pokemon.effective_weaknesses || typeData.weaknesses,
       resistances: pokemon.effective_resistances || typeData.resistances,
+      immunities: pokemon.effective_immunities || typeData.immunities || [],
       coverages: pokemon.effective_coverages || typeData.coverages,
       typeName: typeData.name
     });

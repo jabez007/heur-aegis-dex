@@ -15,9 +15,18 @@
  */
 
 export interface TeamCoverageProfile {
+  /**
+   * The member's own elemental types, which stand in for the types it attacks
+   * with. Spread-move safety keys on these rather than on `coverages`: what
+   * hurts your partner is the *type of the move you click*, not the list of
+   * types you happen to hit super-effectively.
+   */
+  types?: string[];
   weaknesses?: string[];
   quadruple_weaknesses?: string[];
   resistances?: string[];
+  /** Strict 0x subset of `resistances`. */
+  immunities?: string[];
   coverages?: string[];
 }
 
@@ -38,6 +47,55 @@ export interface TeamCoverageAnalysis {
   sharedQuadrupleWeaknesses: string[];
   uniqueResistances: number;
   uniqueCoverages: number;
+  /**
+   * Attacking types for which some teammate is immune, so a spread move of that
+   * type can be clicked freely alongside that partner. This is the positive
+   * synergy singles has no concept of: a Ground-immune partner is what makes
+   * Earthquake usable rather than merely survivable.
+   */
+  enabledSpreadTypes: string[];
+  /**
+   * Attacking types for which *every* teammate is weak, leaving no safe partner
+   * to pair with. Doubles puts one ally on the field at a time, so a type is
+   * only a real problem when there is no viable pairing at all.
+   */
+  spreadConflicts: string[];
+}
+
+/**
+ * Works out which attacking types are safe to use as spread moves.
+ *
+ * @param members Effective profiles for each team member.
+ * @returns The enabled and conflicting attacking types.
+ */
+function analyzeSpreadSafety(members: TeamCoverageProfile[]) {
+  // With no partner there is nothing to hit by accident, so neither list means
+  // anything. Returning empty avoids handing a solo team a free bonus from the
+  // vacuous truth that "every partner is immune".
+  if (members.length < 2) {
+    return { enabledSpreadTypes: [], spreadConflicts: [] };
+  }
+
+  const enabled = new Set<string>();
+  const conflicting = new Set<string>();
+
+  members.forEach((member, index) => {
+    const partners = members.filter((_, partnerIndex) => partnerIndex !== index);
+
+    (member.types || []).forEach((attackingType) => {
+      if (partners.some((partner) => (partner.immunities || []).includes(attackingType))) {
+        enabled.add(attackingType);
+      }
+      if (partners.every((partner) => (partner.weaknesses || []).includes(attackingType))) {
+        conflicting.add(attackingType);
+      }
+    });
+  });
+
+  return {
+    enabledSpreadTypes: [...enabled],
+    spreadConflicts: [...conflicting]
+  };
 }
 
 const countOccurrences = (
@@ -85,6 +143,7 @@ export function analyzeTeamCoverage(members: TeamCoverageProfile[]): TeamCoverag
     sharedWeaknesses: namesWhere(weaknessCounts, (_typeName, count) => count > 1),
     sharedQuadrupleWeaknesses: namesWhere(quadrupleWeaknessCounts, (_typeName, count) => count > 1),
     uniqueResistances: Object.keys(resistanceCounts).length,
-    uniqueCoverages: Object.keys(coverageCounts).length
+    uniqueCoverages: Object.keys(coverageCounts).length,
+    ...analyzeSpreadSafety(members)
   };
 }

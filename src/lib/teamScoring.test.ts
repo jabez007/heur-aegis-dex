@@ -16,16 +16,18 @@ const statsOf = (overrides: Partial<Record<string, number>> = {}) => ({
 });
 
 describe('teamScoring weights', () => {
+  // Summed over every value rather than a hand-written list, so adding a weight
+  // without rebalancing the others fails here instead of silently inflating the
+  // achievable maximum.
+  const sumWeights = (weights: Record<string, number>) =>
+    Object.values(weights).reduce((total, weight) => total + weight, 0);
+
   it('keeps member weights on a unit scale so quality is always 0..1', () => {
-    const total = MEMBER_WEIGHTS.offense + MEMBER_WEIGHTS.bulk + MEMBER_WEIGHTS.speed;
-    expect(total).toBeCloseTo(1);
+    expect(sumWeights(MEMBER_WEIGHTS)).toBeCloseTo(1);
   });
 
   it('keeps synergy bonus weights on a unit scale', () => {
-    const total = SYNERGY_BONUS_WEIGHTS.coverageBreadth +
-      SYNERGY_BONUS_WEIGHTS.resistanceBreadth +
-      SYNERGY_BONUS_WEIGHTS.typeDiversity;
-    expect(total).toBeCloseTo(1);
+    expect(sumWeights(SYNERGY_BONUS_WEIGHTS)).toBeCloseTo(1);
   });
 
   it('splits the composite score entirely between quality and synergy', () => {
@@ -96,6 +98,32 @@ describe('scoreTeamSynergy', () => {
 
     expect(awful).toBeGreaterThanOrEqual(-1);
     expect(awful).toBeLessThanOrEqual(1);
+  });
+
+  it('rewards a partner immunity that frees up a spread move', () => {
+    const withImmunePartner = synergyFor([
+      { types: ['ground'], weaknesses: ['water'], resistances: [], immunities: [], coverages: ['fire'] },
+      { types: ['flying'], weaknesses: ['ice'], resistances: ['ground'], immunities: ['ground'], coverages: ['grass'] }
+    ]);
+    const withoutImmunePartner = synergyFor([
+      { types: ['ground'], weaknesses: ['water'], resistances: [], immunities: [], coverages: ['fire'] },
+      { types: ['grass'], weaknesses: ['ice'], resistances: ['ground'], immunities: [], coverages: ['grass'] }
+    ]);
+
+    expect(withImmunePartner).toBeGreaterThan(withoutImmunePartner);
+  });
+
+  it('penalises an attacking type with no safe partner', () => {
+    const noSafePartner = synergyFor([
+      { types: ['ground'], weaknesses: ['water'], resistances: [], immunities: [], coverages: ['fire'] },
+      { types: ['fire'], weaknesses: ['ground'], resistances: [], immunities: [], coverages: ['grass'] }
+    ]);
+    const safePartner = synergyFor([
+      { types: ['ground'], weaknesses: ['water'], resistances: [], immunities: [], coverages: ['fire'] },
+      { types: ['fire'], weaknesses: ['rock'], resistances: [], immunities: [], coverages: ['grass'] }
+    ]);
+
+    expect(noSafePartner).toBeLessThan(safePartner);
   });
 
   it('returns a neutral score when the team shape is degenerate', () => {

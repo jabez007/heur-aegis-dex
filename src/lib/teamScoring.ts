@@ -56,9 +56,11 @@ export const TYPE_MODULATION = 0.5;
  * Positive synergy weights. These sum to 1, so the bonus is in 0..1.
  */
 export const SYNERGY_BONUS_WEIGHTS = {
-  coverageBreadth: 0.45,
-  resistanceBreadth: 0.35,
-  typeDiversity: 0.2
+  coverageBreadth: 0.4,
+  resistanceBreadth: 0.3,
+  typeDiversity: 0.15,
+  /** Attacking types a partner's immunity makes free to spread. */
+  enabledSpread: 0.15
 } as const;
 
 /**
@@ -75,7 +77,13 @@ export const SYNERGY_PENALTY_WEIGHTS = {
   /** Any 4x weakness on the team, answered or not. */
   quadrupleWeakness: 0.6,
   /** Members beyond the first sharing a 4x weakness — the worst failure mode. */
-  sharedQuadrupleWeakness: 1.5
+  sharedQuadrupleWeakness: 1.5,
+  /**
+   * Attacking types with no safe partner to spread alongside. Weighted well
+   * below the defensive terms: it costs the team an option rather than losing
+   * it a game, since single-target moves of that type remain available.
+   */
+  spreadConflict: 0.25
 } as const;
 
 /**
@@ -167,14 +175,16 @@ export function scoreTeamSynergy(input: SynergyInput): number {
   const bonus =
     (SYNERGY_BONUS_WEIGHTS.coverageBreadth * clamp01(coverage.uniqueCoverages / typeCount)) +
     (SYNERGY_BONUS_WEIGHTS.resistanceBreadth * clamp01(coverage.uniqueResistances / typeCount)) +
-    (SYNERGY_BONUS_WEIGHTS.typeDiversity * clamp01(typesTotal / maxDistinctTypes));
+    (SYNERGY_BONUS_WEIGHTS.typeDiversity * clamp01(typesTotal / maxDistinctTypes)) +
+    (SYNERGY_BONUS_WEIGHTS.enabledSpread * clamp01(coverage.enabledSpreadTypes.length / maxDistinctTypes));
 
   const penalty =
     (SYNERGY_PENALTY_WEIGHTS.uncoveredWeakness * (coverage.uncoveredWeaknesses.length / typeCount)) +
     (SYNERGY_PENALTY_WEIGHTS.uncoveredQuadrupleWeakness * (coverage.uncoveredQuadrupleWeaknesses.length / typeCount)) +
     (SYNERGY_PENALTY_WEIGHTS.sharedWeakness * (sumBeyondFirst(coverage.weaknessCounts, coverage.sharedWeaknesses) / (teamSize * 2))) +
     (SYNERGY_PENALTY_WEIGHTS.quadrupleWeakness * (sumAll(coverage.quadrupleWeaknessCounts) / teamSize)) +
-    (SYNERGY_PENALTY_WEIGHTS.sharedQuadrupleWeakness * (sumBeyondFirst(coverage.quadrupleWeaknessCounts, coverage.sharedQuadrupleWeaknesses) / teamSize));
+    (SYNERGY_PENALTY_WEIGHTS.sharedQuadrupleWeakness * (sumBeyondFirst(coverage.quadrupleWeaknessCounts, coverage.sharedQuadrupleWeaknesses) / teamSize)) +
+    (SYNERGY_PENALTY_WEIGHTS.spreadConflict * clamp01(coverage.spreadConflicts.length / maxDistinctTypes));
 
   return Math.min(1, Math.max(-1, bonus - penalty));
 }

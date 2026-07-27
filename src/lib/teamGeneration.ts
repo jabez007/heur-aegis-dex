@@ -142,7 +142,12 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
 
     const pokemon = teamProfiles.map(entry => entry.pokemon).filter((p): p is TeamMemberResult => p !== null);
 
-    const coverage = analyzeTeamCoverage(teamProfiles.map((entry) => entry.profile));
+    // The profile carries the combined typing as a name, so split it back out:
+    // spread-move safety needs the member's own attacking types.
+    const coverage = analyzeTeamCoverage(teamProfiles.map((entry, index) => ({
+      ...entry.profile,
+      types: tm[index].name.split('/')
+    })));
     const {
       uncoveredWeaknesses,
       uncoveredQuadrupleWeaknesses,
