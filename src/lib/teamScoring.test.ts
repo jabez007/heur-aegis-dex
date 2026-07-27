@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeTeamCoverage } from './teamCoverage';
 import { analyzeTeamRoles } from './abilityRoles';
+import { BATTLE_FORMATS } from './battleFormats';
 import {
   COMPOSITE_WEIGHTS,
   MEMBER_WEIGHTS,
-  SYNERGY_BONUS_WEIGHTS,
+  SYNERGY_BONUS_WEIGHTS_BY_FORMAT,
   composeTeamScore,
   scoreMemberQuality,
   scoreTeamSynergy
@@ -27,8 +28,15 @@ describe('teamScoring weights', () => {
     expect(sumWeights(MEMBER_WEIGHTS)).toBeCloseTo(1);
   });
 
-  it('keeps synergy bonus weights on a unit scale', () => {
-    expect(sumWeights(SYNERGY_BONUS_WEIGHTS)).toBeCloseTo(1);
+  it('keeps synergy bonus weights on a unit scale for every format', () => {
+    Object.entries(SYNERGY_BONUS_WEIGHTS_BY_FORMAT).forEach(([format, weights]) => {
+      expect(sumWeights(weights), `${format} weights must sum to 1`).toBeCloseTo(1);
+    });
+  });
+
+  it('zeroes the spread bonus in singles, which has no ally to hit', () => {
+    expect(SYNERGY_BONUS_WEIGHTS_BY_FORMAT.singles.enabledSpread).toBe(0);
+    expect(SYNERGY_BONUS_WEIGHTS_BY_FORMAT.doubles.enabledSpread).toBeGreaterThan(0);
   });
 
   it('splits the composite score entirely between quality and synergy', () => {
@@ -225,5 +233,67 @@ describe('damage score normalization', () => {
     expect(normalizeDamageFromScore(500, 18)).toBe(1);
     expect(normalizeDamageFromScore(undefined, 18)).toBe(0.5);
     expect(normalizeDamageToScore(undefined, 18)).toBe(0.5);
+  });
+});
+
+describe('format-specific synergy', () => {
+  const spreadTeam = [
+    { types: ['ground'], weaknesses: ['water'], resistances: [], immunities: [], coverages: ['fire'] },
+    { types: ['flying'], weaknesses: ['ice'], resistances: ['ground'], immunities: ['ground'], coverages: ['grass'] }
+  ];
+
+  const scoreIn = (format: typeof BATTLE_FORMATS.singles) => scoreTeamSynergy({
+    coverage: analyzeTeamCoverage(spreadTeam),
+    format,
+    typesTotal: 2,
+    teamSize: 2,
+    typeCount: 18
+  });
+
+  it('ignores spread safety in singles', () => {
+    // The Flying partner's Ground immunity is worth nothing when it never
+    // shares the field, so removing the immunity must not change the singles
+    // score.
+    const withImmunity = scoreIn(BATTLE_FORMATS.singles);
+    const withoutImmunity = scoreTeamSynergy({
+      coverage: analyzeTeamCoverage([
+        spreadTeam[0],
+        { ...spreadTeam[1], immunities: [] }
+      ]),
+      format: BATTLE_FORMATS.singles,
+      typesTotal: 2,
+      teamSize: 2,
+      typeCount: 18
+    });
+
+    expect(withImmunity).toBeCloseTo(withoutImmunity);
+  });
+
+  it('rewards the same immunity in doubles', () => {
+    const withImmunity = scoreIn(BATTLE_FORMATS.doubles);
+    const withoutImmunity = scoreTeamSynergy({
+      coverage: analyzeTeamCoverage([
+        spreadTeam[0],
+        { ...spreadTeam[1], immunities: [] }
+      ]),
+      format: BATTLE_FORMATS.doubles,
+      typesTotal: 2,
+      teamSize: 2,
+      typeCount: 18
+    });
+
+    expect(withImmunity).toBeGreaterThan(withoutImmunity);
+  });
+
+  it('defaults to doubles when no format is supplied', () => {
+    const explicit = scoreIn(BATTLE_FORMATS.doubles);
+    const implicit = scoreTeamSynergy({
+      coverage: analyzeTeamCoverage(spreadTeam),
+      typesTotal: 2,
+      teamSize: 2,
+      typeCount: 18
+    });
+
+    expect(implicit).toBeCloseTo(explicit);
   });
 });

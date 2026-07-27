@@ -15,6 +15,7 @@
 import type { PokemonStats } from './pokedexTypes';
 import type { TeamCoverageAnalysis } from './teamCoverage';
 import { ABILITY_ROLES, type TeamRoleAnalysis } from './abilityRoles';
+import { BATTLE_FORMATS, DEFAULT_BATTLE_FORMAT, type BattleFormat } from './battleFormats';
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
@@ -54,17 +55,36 @@ export const MEMBER_WEIGHTS = {
 export const TYPE_MODULATION = 0.5;
 
 /**
- * Positive synergy weights. These sum to 1, so the bonus is in 0..1.
+ * Positive synergy weights per format. Each set sums to 1, so the bonus is
+ * always in 0..1 whichever format is being scored.
+ *
+ * Singles has no ally on the field, so spread-move safety cannot occur and its
+ * weight is zero rather than being scored on a property the format does not
+ * have. That share is redistributed across the terms that do apply, which is
+ * why the two sets are written out in full rather than derived — an explicit
+ * pair of tables is easier to check than redistribution arithmetic.
  */
-export const SYNERGY_BONUS_WEIGHTS = {
-  coverageBreadth: 0.35,
-  resistanceBreadth: 0.25,
-  typeDiversity: 0.15,
-  /** Attacking types a partner's immunity makes free to spread. */
-  enabledSpread: 0.13,
-  /** Breadth of doubles support roles the team's abilities cover. */
-  supportRoles: 0.12
+export const SYNERGY_BONUS_WEIGHTS_BY_FORMAT = {
+  doubles: {
+    coverageBreadth: 0.35,
+    resistanceBreadth: 0.25,
+    typeDiversity: 0.15,
+    /** Attacking types a partner's immunity makes free to spread. */
+    enabledSpread: 0.13,
+    /** Breadth of doubles support roles the team's abilities cover. */
+    supportRoles: 0.12
+  },
+  singles: {
+    coverageBreadth: 0.4,
+    resistanceBreadth: 0.3,
+    typeDiversity: 0.17,
+    enabledSpread: 0,
+    supportRoles: 0.13
+  }
 } as const;
+
+/** Doubles weights, kept as the default for callers that omit a format. */
+export const SYNERGY_BONUS_WEIGHTS = SYNERGY_BONUS_WEIGHTS_BY_FORMAT.doubles;
 
 /**
  * Penalty weights, expressed on the same 0..1 scale as the bonus. A weight
@@ -85,6 +105,10 @@ export const SYNERGY_PENALTY_WEIGHTS = {
    * Attacking types with no safe partner to spread alongside. Weighted well
    * below the defensive terms: it costs the team an option rather than losing
    * it a game, since single-target moves of that type remain available.
+   */
+  /**
+   * Only meaningful in doubles; zeroed for singles alongside the enabledSpread
+   * bonus so neither side of the spread model scores a format that lacks it.
    */
   spreadConflict: 0.25,
   /**
@@ -155,6 +179,8 @@ export function scoreMemberQuality(member: MemberQualityInput): number {
 
 export interface SynergyInput {
   coverage: TeamCoverageAnalysis;
+  /** Battle format being scored. Defaults to doubles. */
+  format?: BattleFormat;
   /** Ability-derived support roles. Omit when abilities are unknown. */
   roles?: TeamRoleAnalysis;
   /** Distinct elemental types across the team. */
@@ -174,6 +200,11 @@ export function scoreTeamSynergy(input: SynergyInput): number {
   const { coverage, roles, typesTotal, teamSize, typeCount } = input;
   if (typeCount <= 0 || teamSize <= 0) return 0;
 
+  const format = input.format ?? BATTLE_FORMATS[DEFAULT_BATTLE_FORMAT];
+  const bonusWeights = SYNERGY_BONUS_WEIGHTS_BY_FORMAT[format.id];
+  // With no ally on the field, neither half of the spread model can occur.
+  const spreadConflictWeight = format.hasAlly ? SYNERGY_PENALTY_WEIGHTS.spreadConflict : 0;
+
   const sumBeyondFirst = (counts: Record<string, number>, names: string[]): number =>
     names.reduce((total, name) => total + (counts[name] - 1), 0);
   const sumAll = (counts: Record<string, number>): number =>
@@ -184,11 +215,11 @@ export function scoreTeamSynergy(input: SynergyInput): number {
   const maxDistinctTypes = Math.min(teamSize * 2, typeCount);
 
   const bonus =
-    (SYNERGY_BONUS_WEIGHTS.coverageBreadth * clamp01(coverage.uniqueCoverages / typeCount)) +
-    (SYNERGY_BONUS_WEIGHTS.resistanceBreadth * clamp01(coverage.uniqueResistances / typeCount)) +
-    (SYNERGY_BONUS_WEIGHTS.typeDiversity * clamp01(typesTotal / maxDistinctTypes)) +
-    (SYNERGY_BONUS_WEIGHTS.enabledSpread * clamp01(coverage.enabledSpreadTypes.length / maxDistinctTypes)) +
-    (SYNERGY_BONUS_WEIGHTS.supportRoles * clamp01((roles?.roles.length ?? 0) / ABILITY_ROLES.length));
+    (bonusWeights.coverageBreadth * clamp01(coverage.uniqueCoverages / typeCount)) +
+    (bonusWeights.resistanceBreadth * clamp01(coverage.uniqueResistances / typeCount)) +
+    (bonusWeights.typeDiversity * clamp01(typesTotal / maxDistinctTypes)) +
+    (bonusWeights.enabledSpread * clamp01(coverage.enabledSpreadTypes.length / maxDistinctTypes)) +
+    (bonusWeights.supportRoles * clamp01((roles?.roles.length ?? 0) / ABILITY_ROLES.length));
 
   const penalty =
     (SYNERGY_PENALTY_WEIGHTS.uncoveredWeakness * (coverage.uncoveredWeaknesses.length / typeCount)) +
@@ -196,7 +227,7 @@ export function scoreTeamSynergy(input: SynergyInput): number {
     (SYNERGY_PENALTY_WEIGHTS.sharedWeakness * (sumBeyondFirst(coverage.weaknessCounts, coverage.sharedWeaknesses) / (teamSize * 2))) +
     (SYNERGY_PENALTY_WEIGHTS.quadrupleWeakness * (sumAll(coverage.quadrupleWeaknessCounts) / teamSize)) +
     (SYNERGY_PENALTY_WEIGHTS.sharedQuadrupleWeakness * (sumBeyondFirst(coverage.quadrupleWeaknessCounts, coverage.sharedQuadrupleWeaknesses) / teamSize)) +
-    (SYNERGY_PENALTY_WEIGHTS.spreadConflict * clamp01(coverage.spreadConflicts.length / maxDistinctTypes)) +
+    (spreadConflictWeight * clamp01(coverage.spreadConflicts.length / maxDistinctTypes)) +
     (SYNERGY_PENALTY_WEIGHTS.fieldConflict * clamp01((roles?.fieldConflicts.length ?? 0) / ABILITY_ROLES.length));
 
   return Math.min(1, Math.max(-1, bonus - penalty));

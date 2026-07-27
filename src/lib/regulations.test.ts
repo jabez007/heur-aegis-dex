@@ -7,6 +7,7 @@ import {
   hasCompleteData,
   isSpeciesLegal
 } from './regulations';
+import { getBattleFormat } from './battleFormats';
 
 const mA = getRegulation('M-A')!;
 const mB = getRegulation('M-B')!;
@@ -104,13 +105,19 @@ describe('data completeness', () => {
 });
 
 describe('regulation rules', () => {
-  it('describes the Champions doubles format', () => {
-    expect(mB.rules.format).toBe('doubles');
-    expect(mB.rules.broughtToBattle).toBe(4);
-    expect(mB.rules.maxTeamSize).toBe(6);
+  it('supports both formats off the same roster', () => {
+    // Champions runs singles and doubles from one registered team; only the
+    // bring count differs, which is a property of the format not the regulation.
+    expect(mB.rules.formats).toEqual(['singles', 'doubles']);
     expect(mB.rules.battleLevel).toBe(50);
     expect(mB.rules.allowDuplicateSpecies).toBe(false);
     expect(mB.rules.allowDuplicateItems).toBe(false);
+  });
+
+  it('resolves roster and bring sizes through the format', () => {
+    expect(getBattleFormat('singles').broughtToBattle).toBe(3);
+    expect(getBattleFormat('doubles').broughtToBattle).toBe(4);
+    expect(getBattleFormat('doubles').maxRosterSize).toBe(6);
   });
 
   it('lists Mega Evolution as the only active mechanic', () => {

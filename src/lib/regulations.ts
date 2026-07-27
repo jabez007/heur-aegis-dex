@@ -24,18 +24,15 @@
  * before it can express that.
  */
 
+import type { BattleFormatId } from './battleFormats';
+
 export type MechanicId = 'mega' | 'terastal' | 'dynamax' | 'z-move';
 
 export type RegulationId = 'M-A' | 'M-B';
 
 export interface RegulationRules {
-  format: 'doubles' | 'singles';
-  /** Smallest legal team roster. */
-  minTeamSize: number;
-  /** Largest legal team roster. */
-  maxTeamSize: number;
-  /** How many of the roster are brought into a single battle. */
-  broughtToBattle: number;
+  /** Formats this regulation is played in. Roster and bring sizes live on the format. */
+  formats: readonly BattleFormatId[];
   /** Level every Pokemon is set to during battle. */
   battleLevel: number;
   allowDuplicateSpecies: boolean;
@@ -65,11 +62,10 @@ export interface Regulation {
   readonly verifiedOn: string;
 }
 
-const CHAMPIONS_DOUBLES_RULES: RegulationRules = {
-  format: 'doubles',
-  minTeamSize: 4,
-  maxTeamSize: 6,
-  broughtToBattle: 4,
+// Champions runs both formats off one roster; only the bring count differs, so
+// the sizes live on the format rather than being duplicated per regulation.
+const CHAMPIONS_RULES: RegulationRules = {
+  formats: ['singles', 'doubles'],
   battleLevel: 50,
   allowDuplicateSpecies: false,
   allowDuplicateItems: false
@@ -131,7 +127,7 @@ const REGULATION_LIST: readonly Regulation[] = [
     label: 'Regulation Set M-A',
     activeFrom: '2026-04-08T00:00:00Z',
     activeTo: '2026-06-17T02:00:00Z',
-    rules: CHAMPIONS_DOUBLES_RULES,
+    rules: CHAMPIONS_RULES,
     mechanics: ['mega'],
     legalSpecies: new Set<string>(M_A_SPECIES),
     // M-B is documented as adding 16 Mega Evolutions beyond M-A's pool, but the
@@ -148,7 +144,7 @@ const REGULATION_LIST: readonly Regulation[] = [
     label: 'Regulation Set M-B',
     activeFrom: '2026-06-17T02:00:00Z',
     activeTo: '2026-09-02T05:59:00Z',
-    rules: CHAMPIONS_DOUBLES_RULES,
+    rules: CHAMPIONS_RULES,
     mechanics: ['mega'],
     legalSpecies: new Set<string>([...M_A_SPECIES, ...M_B_ADDITIONS]),
     megaCapableSpecies: new Set<string>(M_B_MEGA_CAPABLE),
