@@ -13,6 +13,8 @@ const mockState = vi.hoisted(() => ({
   useCoverageTableName: false,
   /** Add a Gigantamax, a Mega and a permanent regional form to the fire roster. */
   includeAlternateForms: false,
+  /** Add a cosmetic variety indistinguishable from the base Pokemon. */
+  includeCosmeticVarieties: false,
   /** Present the fire-type entry as Palafin, which registers as one form and fights as another. */
   usePalafin: false,
   /** Give the registered Palafin an ability that cannot reach its battle form. */
@@ -116,6 +118,10 @@ vi.mock('pokedex-promise-v2', () => {
                 { pokemon: { name: 'charmander-alola', url: 'https://pokeapi.co/api/v2/pokemon/10003/' } }
               ]
               : []),
+            ...(mockState.includeCosmeticVarieties
+              // Same species, same stats, same typing, same abilities — a cap.
+              ? [{ pokemon: { name: 'charmander-world-cap', url: 'https://pokeapi.co/api/v2/pokemon/10500/' } }]
+              : []),
             ...extraPokemon
           ]
           };
@@ -138,6 +144,26 @@ vi.mock('pokedex-promise-v2', () => {
               ? [{ pokemon: { name: 'charmander', url: 'https://pokeapi.co/api/v2/pokemon/4/' } }]
               : [])
           ]
+          };
+        }
+        // A cosmetic variety: identical to /pokemon/4/ in everything modelled,
+        // differing only in that it is not the default.
+        if (url.startsWith('/api/v2/pokemon/10500/')) {
+          return {
+          is_default: false,
+          forms: [{ url: 'https://pokeapi.co/api/v2/pokemon-form/10500/' }],
+          types: [{ type: { name: 'fire' } }],
+          sprites: { front_default: 'charmander-world-cap.png' },
+          stats: [
+            { base_stat: 39, stat: { name: 'hp' } },
+            { base_stat: 52, stat: { name: 'attack' } },
+            { base_stat: 43, stat: { name: 'defense' } },
+            { base_stat: 60, stat: { name: 'special-attack' } },
+            { base_stat: 50, stat: { name: 'special-defense' } },
+            { base_stat: 65, stat: { name: 'speed' } }
+          ],
+          abilities: [{ ability: { name: 'blaze' }, is_hidden: false }, { ability: { name: 'levitate' }, is_hidden: true }],
+          species: { url: 'https://pokeapi.co/api/v2/pokemon-species/4/' }
           };
         }
         if (url.startsWith('/api/v2/pokemon/4/')) {
@@ -289,6 +315,7 @@ beforeEach(() => {
   mockState.treatSpeciesAsLegendary = false;
   mockState.useCoverageTableName = false;
   mockState.includeAlternateForms = false;
+  mockState.includeCosmeticVarieties = false;
   mockState.usePalafin = false;
   mockState.breakPalafinTrigger = false;
   mockState.useHugePower = false;
@@ -480,6 +507,20 @@ describe('pokedex.js API integration logic', () => {
       statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
     });
   };
+
+  it('getResistantTypes should collapse cosmetic varieties into the base Pokemon', async () => {
+    mockState.includeCosmeticVarieties = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+    // A cap changes nothing this tool models, so it is not a second Pokemon.
+    expect(names).toEqual(['charmander']);
+  });
 
   it('getResistantTypes should drop battle-only forms but keep permanent ones', async () => {
     const resistant = await scanWithAlternateForms(false);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collapseIndistinctVarieties,
   flattenToPokemon,
   getPokemonAbilityProfile,
   groupByTypeName,
@@ -124,6 +125,108 @@ describe('flattenToPokemon', () => {
 
   it('tolerates groupings with no Pokemon', () => {
     expect(flattenToPokemon([{ name: 'ice', pokemon: [] }, { name: 'bug' }])).toEqual([]);
+  });
+});
+
+describe('collapseIndistinctVarieties', () => {
+  const variety = (name: string, overrides: Partial<PokemonListEntry> = {}) => ({
+    ...scanEntry(name),
+    species_name: 'pikachu',
+    is_default_variety: false,
+    effective_move_coverages: [],
+    ...overrides
+  });
+
+  it('drops cosmetic varieties that match the default in every modelled field', () => {
+    // Pikachu's caps and outfits differ only in appearance, which this tool
+    // does not model at all.
+    const collapsed = collapseIndistinctVarieties([
+      variety('pikachu', { is_default_variety: true, effective_move_coverages: ['fire'] }),
+      variety('pikachu-libre'),
+      variety('pikachu-world-cap'),
+      variety('pikachu-phd')
+    ]);
+
+    expect(collapsed.map((entry) => entry.pokemon.name)).toEqual(['pikachu']);
+  });
+
+  it('keeps the default variety even when it appears last', () => {
+    const collapsed = collapseIndistinctVarieties([
+      variety('pikachu-libre'),
+      variety('pikachu', { is_default_variety: true })
+    ]);
+
+    expect(collapsed[0].pokemon.name).toBe('pikachu');
+  });
+
+  it('falls back to the variety with coverage data when none is default', () => {
+    // A cosmetic variant has no learnset of its own, so it must not stand in
+    // for the entry that does.
+    const collapsed = collapseIndistinctVarieties([
+      variety('mimikyu-totem-disguised'),
+      variety('mimikyu-disguised', { effective_move_coverages: ['ghost', 'fairy'] })
+    ]);
+
+    expect(collapsed[0].pokemon.name).toBe('mimikyu-disguised');
+  });
+
+  it('keeps varieties whose stats differ', () => {
+    // Basculegion's forms are 112 Attack against 92, and 80 Special Attack
+    // against 100 — genuinely different picks, not a cosmetic split.
+    const male = variety('basculegion-male', {
+      species_name: 'basculegion',
+      stats: { ...stats, attack: 112, 'special-attack': 80 }
+    });
+    const female = variety('basculegion-female', {
+      species_name: 'basculegion',
+      stats: { ...stats, attack: 92, 'special-attack': 100 }
+    });
+
+    expect(collapseIndistinctVarieties([male, female])).toHaveLength(2);
+  });
+
+  it('keeps varieties whose abilities differ', () => {
+    // Meowstic's forms share a stat line but not Prankster against Competitive.
+    const male = variety('meowstic-male', {
+      species_name: 'meowstic',
+      abilities: [{ name: 'prankster', is_hidden: true }]
+    });
+    const female = variety('meowstic-female', {
+      species_name: 'meowstic',
+      abilities: [{ name: 'competitive', is_hidden: true }]
+    });
+
+    expect(collapseIndistinctVarieties([male, female])).toHaveLength(2);
+  });
+
+  it('keeps varieties whose typing differs', () => {
+    const wash = variety('rotom-wash', {
+      species_name: 'rotom',
+      types: [{ type: { name: 'electric' } }, { type: { name: 'water' } }]
+    });
+    const fan = variety('rotom-fan', {
+      species_name: 'rotom',
+      types: [{ type: { name: 'electric' } }, { type: { name: 'flying' } }]
+    });
+
+    expect(collapseIndistinctVarieties([wash, fan])).toHaveLength(2);
+  });
+
+  it('never collapses across species', () => {
+    const a = variety('one', { species_name: 'one' });
+    const b = variety('two', { species_name: 'two' });
+
+    expect(collapseIndistinctVarieties([a, b])).toHaveLength(2);
+  });
+
+  it('preserves input order and tolerates an empty list', () => {
+    const kept = collapseIndistinctVarieties([
+      variety('first', { species_name: 'first' }),
+      variety('second', { species_name: 'second' })
+    ]);
+
+    expect(kept.map((entry) => entry.pokemon.name)).toEqual(['first', 'second']);
+    expect(collapseIndistinctVarieties([])).toEqual([]);
   });
 });
 

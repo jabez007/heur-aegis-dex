@@ -166,6 +166,64 @@ export function toPokemonEntry(
   };
 }
 
+/**
+ * Drops varieties of a species that this tool cannot tell apart.
+ *
+ * PokeAPI models a great deal of cosmetic variation as separate varieties.
+ * Pikachu alone carries fifteen — the cosplay outfits and every travelling cap —
+ * each with identical stats, typing and abilities. Totem Pokemon are the same
+ * story: oversized Sun/Moon variants whose numbers match the base form exactly.
+ * All of them arrived in the browser as their own Pokemon, competing for
+ * attention with genuinely different choices.
+ *
+ * The rule is deliberately narrow: two varieties collapse only when everything
+ * this tool models about them matches. That makes the removal safe by
+ * construction — whatever is dropped was indistinguishable from what stays, so
+ * no option is lost. Varieties that genuinely differ survive, which is why
+ * Basculegion keeps both its forms (112 Attack against 92, 80 Special Attack
+ * against 100) and Meowstic keeps both of its (identical stats, but Prankster
+ * against Competitive).
+ *
+ * Deliberately *not* keyed on move coverage. Coverage is looked up by variety
+ * name, so the cosmetic variants have none — including it would make them look
+ * distinct and defeat the purpose. The survivor is chosen to protect against
+ * that instead: the species' default variety wins, and failing that one that
+ * actually has coverage data.
+ *
+ * @param entries Enriched scan entries, expected to share a type grouping.
+ * @returns The same entries with indistinguishable duplicates removed.
+ */
+export function collapseIndistinctVarieties(entries: PokemonListEntry[]): PokemonListEntry[] {
+  const identityOf = (entry: PokemonListEntry) => JSON.stringify([
+    entry.species_name || entry.pokemon.name,
+    entry.stats ?? null,
+    (entry.types || []).map((slot) => slot.type.name).sort(),
+    (entry.abilities || []).map((ability) => `${ability.name}:${ability.is_hidden}`).sort()
+  ]);
+
+  // Higher wins. A default variety is the one the games treat as the Pokemon;
+  // coverage data is the tiebreak that stops a cosmetic variant standing in for
+  // the real entry when no variety is marked default.
+  const survivorRank = (entry: PokemonListEntry) =>
+    (entry.is_default_variety ? 2 : 0) + ((entry.effective_move_coverages || []).length > 0 ? 1 : 0);
+
+  const best = new Map<string, PokemonListEntry>();
+  const order: string[] = [];
+
+  entries.forEach((entry) => {
+    const identity = identityOf(entry);
+    const incumbent = best.get(identity);
+    if (!incumbent) {
+      best.set(identity, entry);
+      order.push(identity);
+      return;
+    }
+    if (survivorRank(entry) > survivorRank(incumbent)) best.set(identity, entry);
+  });
+
+  return order.map((identity) => best.get(identity)!);
+}
+
 export interface FlattenOptions {
   baseScore?: number;
   /** Keep only one entry per species. Off by default, since browsing wants every form. */

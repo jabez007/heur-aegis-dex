@@ -33,9 +33,14 @@
 ### Fixed
 
 - **Battle-only forms no longer appear as their own Pokemon.** Gigantamax, Mimikyu-Busted, Eiscue-Noice and the like are states a Pokemon enters mid-battle, so listing them beside their base form invented team slots. Detected via `is_battle_only` on PokeAPI's form resource rather than by name suffix. Megas are battle-only by the same flag but remain a real pre-battle choice, so `allowMegas` still governs them — via `is_mega` now, replacing the `-mega` substring check. Where dropping a form would have understated the Pokemon, the battle-form rating above covers it.
+- **Cosmetic varieties no longer appear as separate Pokemon.** PokeAPI models a lot of appearance-only variation as its own variety: Pikachu carries fifteen between the cosplay outfits and the travelling caps, and every Totem Pokemon duplicates its base form's stat line exactly. All of them were arriving in the browser as their own entry. `collapseIndistinctVarieties` keeps one when two varieties of a species match in everything this tool models — stats, typing and abilities — preferring the species' default. The rule is safe by construction: whatever it drops was indistinguishable from what stays.
+
+  Varieties that genuinely differ are untouched. Basculegion keeps both forms (112 Attack against 92, 80 Special Attack against 100 — a physical attacker and a special one), and Meowstic keeps both of its despite an identical stat line, because Prankster and Competitive are not the same Pokemon to build around.
+
+  Deliberately not keyed on move coverage: it is looked up by variety name, so the cosmetic variants have none, and including it would make them look distinct and defeat the rule. The survivor preference guards that instead.
 - **Form controls look the same everywhere.** `.gba-label` / `.gba-select` / `.gba-input` were defined in `App.vue`'s scoped style block, so the Team Workbench's Format select rendered unstyled. They now live in `assets/scss/main.scss`.
 
-The scan cache key moved to `v10`, so stored results containing battle-only forms — or rating Palafin as its registered form — are discarded rather than served.
+The scan cache key moved to `v11`, so stored results containing battle-only forms — or rating Palafin as its registered form — are discarded rather than served.
 
 ## 0.3.0
 

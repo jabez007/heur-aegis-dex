@@ -115,6 +115,8 @@ export interface PokemonListEntry {
   base_stats?: PokemonStats;
   /** Ability responsible for the difference, when there is one. */
   stat_ability_name?: string;
+  /** Whether this is the species' default variety, used to pick a survivor when varieties collapse. */
+  is_default_variety?: boolean;
   stats_total?: number;
   selected_ability_name?: string;
   ability_profiles?: Record<string, AbilityProfile>;

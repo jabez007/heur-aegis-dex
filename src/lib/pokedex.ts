@@ -4,6 +4,7 @@ import { getRegulation, isSpeciesLegal } from './regulations';
 import { buildOffensiveTypeChart, getMoveCoverage } from './coverageMoves';
 import { getMergedBattleForm, sharesTyping } from './battleForms';
 import { getEffectiveStats, getStatAbility, getStatAbilityName, totalStats } from './statAbilities';
+import { collapseIndistinctVarieties } from './pokemonEntry';
 import {
   DEFAULT_BASE_SCORE,
   calculateDamageFromScore,
@@ -274,6 +275,7 @@ function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
     stats: entry.stats ? { ...entry.stats } : undefined,
     base_stats: entry.base_stats ? { ...entry.base_stats } : undefined,
     stat_ability_name: entry.stat_ability_name,
+    is_default_variety: entry.is_default_variety,
     ability_profiles: abilityProfiles,
     effective_damage_relations: entry.effective_damage_relations ? cloneDamageRelations(entry.effective_damage_relations) : undefined,
     effective_weaknesses: [...(entry.effective_weaknesses || [])],
@@ -489,6 +491,7 @@ export async function getResistantTypes(options: {
         }
 
         p.species_name = species.name;
+        p.is_default_variety = poke.is_default === true;
         p.types = poke.types;
         p.sprite = poke.sprites.front_default;
         p.abilities = poke.abilities.map((abilityEntry: any): PokemonAbilitySlot => ({
@@ -596,10 +599,14 @@ export async function getResistantTypes(options: {
       })
     );
 
-    return pokemon
-      .filter((p): p is PokemonListEntry => p !== null)
-      .filter((p) => t.name.includes('/') || (p.types?.length || 0) === 1)
-      .sort((p1, p2) => (p2.stats_total || 0) - (p1.stats_total || 0));
+    // Cosmetic varieties — Pikachu's caps, the Totem forms — are indistinguishable
+    // from their base here, and a species' varieties always share a typing, so
+    // this grouping holds all of them.
+    return collapseIndistinctVarieties(
+      pokemon
+        .filter((p): p is PokemonListEntry => p !== null)
+        .filter((p) => t.name.includes('/') || (p.types?.length || 0) === 1)
+    ).sort((p1, p2) => (p2.stats_total || 0) - (p1.stats_total || 0));
   };
 
   // Fetch the base types once and hand them to getDualTypes, which would
