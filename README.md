@@ -58,7 +58,9 @@ Move reach is kept **separate** from STAB coverage rather than replacing it. The
 
 ## 📦 Library Usage
 
-Heur-Aegis Dex can also be used as a component library in other Vue 3 projects.
+Heur-Aegis Dex can also be used as a component library in other Vue 3 projects. See [CHANGELOG.md](./CHANGELOG.md) for breaking changes between versions.
+
+Beyond the components, the package exports the engine itself — `getResistantTypes` to run a scan, `flattenToPokemon` to work with the results, `generateRosters` and `evaluateRoster` for team building, and the regulation and battle-format data.
 
 ### Installation
 

@@ -1,12 +1,13 @@
 {
   "name": "@jabez007/heur-aegis-dex",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "main": "lib/heur-aegis-dex.cjs",
   "module": "lib/heur-aegis-dex.es.js",
   "types": "lib/index.d.ts",
   "files": [
-    "lib"
+    "lib",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {

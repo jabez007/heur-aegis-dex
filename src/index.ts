@@ -33,7 +33,28 @@ export { useNotifications, provideNotifications } from './composables/useNotific
 
 export type { PartyMember } from './composables/useTeamBuilder'
 export type { Notification } from './composables/useNotifications'
-export type { PokemonTypeData, DamageRelations, NamedResource } from './lib/pokedex'
+// The scan itself, so consumers can drive the engine without mounting the app.
+export { getBaseTypes, getDualTypes, getResistantTypes } from './lib/pokedex'
+export type {
+  PokemonTypeData,
+  DamageRelations,
+  NamedResource,
+  ResistantTypeResult,
+  TeamTypeData,
+  PokemonListEntry,
+  PokemonStats,
+  AbilityProfile
+} from './lib/pokedexTypes'
+
+export {
+  REGULATIONS,
+  getActiveRegulation,
+  getRegulation,
+  isSpeciesLegal,
+  canMegaEvolve,
+  hasCompleteData
+} from './lib/regulations'
+export type { Regulation, RegulationId, RegulationRules, MechanicId } from './lib/regulations'
 
 export {
   BATTLE_FORMATS,
