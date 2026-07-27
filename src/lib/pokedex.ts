@@ -53,7 +53,6 @@ export const pokedex = new Pokedex({
 });
 
 export type { NamedResource, DamageRelations, PokemonTypeData } from './pokedexTypes';
-export { generateTeams } from './teamGeneration';
 export {
   REGULATIONS,
   getActiveRegulation,

@@ -2,7 +2,6 @@ import type {
   AbilityProfile,
   DamageRelations,
   PokemonListEntry,
-  ResistantTypeResult,
   TeamTypeData
 } from './pokedexTypes';
 
@@ -128,32 +127,5 @@ export function buildActiveTypeData(typeData: TypeDataLike, pokemonIndex: number
     coverages: activePokemon.effective_coverages,
     damage_from_score: activePokemon.effective_damage_from_score,
     damage_to_score: activePokemon.effective_damage_to_score
-  };
-}
-
-/**
- * Returns the effective defensive and offensive profile for a type card, using
- * the selected Pokemon profile when one is available.
- *
- * @param typeData Base type card data.
- * @param selectedPokemon Optional explicit selected Pokemon override.
- * @returns A profile object backed by the selected Pokemon when available, otherwise the raw type data.
- */
-export function getEffectiveTypeProfile(typeData: TypeDataLike, selectedPokemon?: PokemonListEntry | null): ResistantTypeResult | TypeDataLike {
-  const activePokemon = selectedPokemon || typeData.selectedPokemon;
-  if (!activePokemon) return typeData;
-
-  const abilityProfile = getPokemonAbilityProfile(activePokemon);
-
-  return {
-    ...typeData,
-    weaknesses: abilityProfile?.weaknesses || typeData.weaknesses || [],
-    quadruple_weaknesses: abilityProfile?.quadruple_weaknesses || typeData.quadruple_weaknesses || [],
-    resistances: abilityProfile?.resistances || typeData.resistances || [],
-    immunities: abilityProfile?.immunities || typeData.immunities || [],
-    ineffectives: abilityProfile?.ineffectives || typeData.ineffectives || [],
-    coverages: abilityProfile?.coverages || typeData.coverages || [],
-    damage_from_score: abilityProfile?.damage_from_score ?? typeData.damage_from_score,
-    damage_to_score: abilityProfile?.damage_to_score ?? typeData.damage_to_score
   };
 }

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildActiveTypeData,
-  getEffectiveTypeProfile,
   getPokemonAbilityProfile,
   resolveSelectedPokemon
 } from './activePokemon';
@@ -134,23 +133,5 @@ describe('activePokemon helpers', () => {
     expect(activeTypeData.weaknesses).toEqual(['water', 'rock']);
     expect(activeTypeData.resistances).toEqual(['fire', 'grass', 'bug', 'ground']);
     expect(activeTypeData.damage_from_score).toBe(17.5);
-  });
-
-  it('falls back to type-level data when no active pokemon is available', () => {
-    const typeProfile = getEffectiveTypeProfile({
-      name: 'ghost',
-      weaknesses: ['ghost', 'dark'],
-      quadruple_weaknesses: [],
-      resistances: ['bug', 'poison'],
-      ineffectives: ['normal'],
-      coverages: ['ghost', 'psychic'],
-      damage_from_score: 16,
-      damage_to_score: 18,
-      pokemon: []
-    });
-
-    expect(typeProfile.weaknesses).toEqual(['ghost', 'dark']);
-    expect(typeProfile.resistances).toEqual(['bug', 'poison']);
-    expect(typeProfile.damage_from_score).toBe(16);
   });
 });

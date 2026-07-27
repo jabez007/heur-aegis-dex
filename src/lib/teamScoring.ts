@@ -128,23 +128,6 @@ export const COMPOSITE_WEIGHTS = {
   synergy: 0.55
 } as const;
 
-/**
- * Weights for ordering single candidates before beam pruning.
- *
- * These live on their own arbitrary scale because only the resulting order
- * matters — they decide which typings the search looks at first, never how a
- * finished team scores.
- */
-export const CANDIDATE_PRIORITY_WEIGHTS = {
-  offensiveTyping: 40,
-  defensiveTyping: 32,
-  coverage: 8,
-  resistance: 5,
-  statsTotal: 0.08,
-  weakness: 6,
-  quadrupleWeakness: 40
-} as const;
-
 export interface MemberQualityInput {
   stats: PokemonStats;
   /** Normalized offensive score, 0..1, higher is broader coverage. */
