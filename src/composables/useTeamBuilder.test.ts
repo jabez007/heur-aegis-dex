@@ -117,6 +117,21 @@ describe('useTeamBuilder', () => {
     expect(roster.value).toHaveLength(1);
   });
 
+  it('refuses two forms of one species even when their typings differ', () => {
+    // Rotom's appliance forms each carry their own secondary type, so nothing
+    // about the typing stops them sharing a roster. They are one Pokedex number,
+    // and that is what the duplicate rule is about.
+    addPokemon(pokemon('rotom-wash', {
+      speciesName: 'rotom', typeName: 'electric/water', types: ['electric', 'water']
+    }));
+    const added = addPokemon(pokemon('rotom-fan', {
+      speciesName: 'rotom', typeName: 'electric/flying', types: ['electric', 'flying']
+    }));
+
+    expect(added).toBe(false);
+    expect(roster.value.map((member) => member.name)).toEqual(['rotom-wash']);
+  });
+
   it('registers up to six and brings only four in doubles', () => {
     fillRoster(addPokemon, 6);
 
