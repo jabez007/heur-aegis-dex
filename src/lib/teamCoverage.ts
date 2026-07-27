@@ -28,6 +28,12 @@ export interface TeamCoverageProfile {
   /** Strict 0x subset of `resistances`. */
   immunities?: string[];
   coverages?: string[];
+  /**
+   * The member takes no damage from its ally's moves whatever their type, as
+   * Telepathy grants. Kept as a damage fact rather than an ability name so this
+   * module stays free of ability knowledge.
+   */
+  immuneToAllyMoves?: boolean;
 }
 
 export interface TeamCoverageAnalysis {
@@ -82,11 +88,18 @@ function analyzeSpreadSafety(members: TeamCoverageProfile[]) {
   members.forEach((member, index) => {
     const partners = members.filter((_, partnerIndex) => partnerIndex !== index);
 
+    // A partner immune to ally damage outright is safe against every spread
+    // type, not just the ones its typing resists.
+    const isSafePartner = (partner: TeamCoverageProfile, attackingType: string) =>
+      partner.immuneToAllyMoves === true || (partner.immunities || []).includes(attackingType);
+
     (member.types || []).forEach((attackingType) => {
-      if (partners.some((partner) => (partner.immunities || []).includes(attackingType))) {
+      if (partners.some((partner) => isSafePartner(partner, attackingType))) {
         enabled.add(attackingType);
       }
-      if (partners.every((partner) => (partner.weaknesses || []).includes(attackingType))) {
+      if (partners.every((partner) =>
+        partner.immuneToAllyMoves !== true && (partner.weaknesses || []).includes(attackingType)
+      )) {
         conflicting.add(attackingType);
       }
     });

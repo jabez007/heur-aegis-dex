@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import { generateTeams } from '../lib/pokedex';
 import { resolveSelectedPokemon } from '../lib/activePokemon';
 import { analyzeTeamCoverage } from '../lib/teamCoverage';
+import { analyzeTeamRoles, isImmuneToAllyMoves } from '../lib/abilityRoles';
 import type { ActiveTypeDataLike, TypeDataLike } from '../lib/activePokemon';
 import type { TeamMemberResult } from '../lib/pokedexTypes';
 import { useNotifications } from './useNotifications';
@@ -52,7 +53,23 @@ export function useTeamBuilder() {
     typeName
   });
 
-  const coverageAnalysis = computed(() => analyzeTeamCoverage(currentParty.value));
+  const coverageAnalysis = computed(() => analyzeTeamCoverage(
+    currentParty.value.map((member) => ({
+      ...member,
+      immuneToAllyMoves: isImmuneToAllyMoves(member.abilityName)
+    }))
+  ));
+
+  const roleAnalysis = computed(() => analyzeTeamRoles(currentParty.value));
+
+  // Doubles support roles the party's selected abilities cover, plus any
+  // members fighting over the same weather or terrain.
+  const teamRoleSummary = computed(() => ({
+    roles: roleAnalysis.value.roles,
+    roleSources: roleAnalysis.value.roleSources,
+    fieldConflicts: roleAnalysis.value.fieldConflicts,
+    conflictingAbilities: roleAnalysis.value.conflictingAbilities
+  }));
 
   // The workbench reports weaknesses with no *defensive* answer, because that is
   // what "Team Weaknesses" means to a player: types nobody can switch into.
@@ -191,6 +208,7 @@ export function useTeamBuilder() {
     teamWeaknessSummary,
     teamCoverageSummary,
     teamSpreadSummary,
+    teamRoleSummary,
     addToParty,
     removeFromParty,
     clearParty,

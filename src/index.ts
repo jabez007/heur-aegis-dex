@@ -35,6 +35,17 @@ export type { PartyMember } from './composables/useTeamBuilder'
 export type { Notification } from './composables/useNotifications'
 export type { PokemonTypeData, DamageRelations, NamedResource } from './lib/pokedex'
 
+export { analyzeTeamCoverage } from './lib/teamCoverage'
+export type { TeamCoverageProfile, TeamCoverageAnalysis } from './lib/teamCoverage'
+export {
+  ABILITY_ROLES,
+  DOUBLES_ABILITIES,
+  analyzeTeamRoles,
+  getAbilityEffect,
+  isImmuneToAllyMoves
+} from './lib/abilityRoles'
+export type { AbilityRole, AbilityEffect, TeamRoleAnalysis } from './lib/abilityRoles'
+
 export default {
   install: (app: App) => {
     // Each app gets its own party, filters and notifications. Without this the

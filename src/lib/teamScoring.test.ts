@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeTeamCoverage } from './teamCoverage';
+import { analyzeTeamRoles } from './abilityRoles';
 import {
   COMPOSITE_WEIGHTS,
   MEMBER_WEIGHTS,
@@ -124,6 +125,57 @@ describe('scoreTeamSynergy', () => {
     ]);
 
     expect(noSafePartner).toBeLessThan(safePartner);
+  });
+
+  it('rewards breadth of doubles support roles', () => {
+    const coverage = analyzeTeamCoverage([
+      { types: ['fire'], weaknesses: [], resistances: [], immunities: [], coverages: [] },
+      { types: ['water'], weaknesses: [], resistances: [], immunities: [], coverages: [] }
+    ]);
+    const withRoles = scoreTeamSynergy({
+      coverage,
+      roles: analyzeTeamRoles([{ abilityName: 'intimidate' }, { abilityName: 'lightning-rod' }]),
+      typesTotal: 2, teamSize: 2, typeCount: 18
+    });
+    const withoutRoles = scoreTeamSynergy({
+      coverage,
+      roles: analyzeTeamRoles([{ abilityName: 'blaze' }, { abilityName: 'torrent' }]),
+      typesTotal: 2, teamSize: 2, typeCount: 18
+    });
+
+    expect(withRoles).toBeGreaterThan(withoutRoles);
+  });
+
+  it('penalises members fighting over the same field state', () => {
+    const coverage = analyzeTeamCoverage([
+      { types: ['fire'], weaknesses: [], resistances: [], immunities: [], coverages: [] },
+      { types: ['water'], weaknesses: [], resistances: [], immunities: [], coverages: [] }
+    ]);
+    const clashing = scoreTeamSynergy({
+      coverage,
+      roles: analyzeTeamRoles([{ abilityName: 'drought' }, { abilityName: 'drizzle' }]),
+      typesTotal: 2, teamSize: 2, typeCount: 18
+    });
+    const agreeing = scoreTeamSynergy({
+      coverage,
+      roles: analyzeTeamRoles([{ abilityName: 'drought' }, { abilityName: 'drought' }]),
+      typesTotal: 2, teamSize: 2, typeCount: 18
+    });
+
+    expect(clashing).toBeLessThan(agreeing);
+  });
+
+  it('scores identically whether roles are omitted or empty', () => {
+    const coverage = analyzeTeamCoverage([
+      { types: ['fire'], weaknesses: [], resistances: [], immunities: [], coverages: [] },
+      { types: ['water'], weaknesses: [], resistances: [], immunities: [], coverages: [] }
+    ]);
+    const omitted = scoreTeamSynergy({ coverage, typesTotal: 2, teamSize: 2, typeCount: 18 });
+    const empty = scoreTeamSynergy({
+      coverage, roles: analyzeTeamRoles([]), typesTotal: 2, teamSize: 2, typeCount: 18
+    });
+
+    expect(omitted).toBeCloseTo(empty);
   });
 
   it('returns a neutral score when the team shape is degenerate', () => {

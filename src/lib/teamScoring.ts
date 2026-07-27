@@ -14,6 +14,7 @@
 
 import type { PokemonStats } from './pokedexTypes';
 import type { TeamCoverageAnalysis } from './teamCoverage';
+import { ABILITY_ROLES, type TeamRoleAnalysis } from './abilityRoles';
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
@@ -56,11 +57,13 @@ export const TYPE_MODULATION = 0.5;
  * Positive synergy weights. These sum to 1, so the bonus is in 0..1.
  */
 export const SYNERGY_BONUS_WEIGHTS = {
-  coverageBreadth: 0.4,
-  resistanceBreadth: 0.3,
+  coverageBreadth: 0.35,
+  resistanceBreadth: 0.25,
   typeDiversity: 0.15,
   /** Attacking types a partner's immunity makes free to spread. */
-  enabledSpread: 0.15
+  enabledSpread: 0.13,
+  /** Breadth of doubles support roles the team's abilities cover. */
+  supportRoles: 0.12
 } as const;
 
 /**
@@ -83,7 +86,13 @@ export const SYNERGY_PENALTY_WEIGHTS = {
    * below the defensive terms: it costs the team an option rather than losing
    * it a game, since single-target moves of that type remain available.
    */
-  spreadConflict: 0.25
+  spreadConflict: 0.25,
+  /**
+   * Members competing to set incompatible weather or terrain. Weighted heavily
+   * because it is a build error rather than a missed bonus: the abilities
+   * actively overwrite each other every time either switches in.
+   */
+  fieldConflict: 0.4
 } as const;
 
 /**
@@ -146,6 +155,8 @@ export function scoreMemberQuality(member: MemberQualityInput): number {
 
 export interface SynergyInput {
   coverage: TeamCoverageAnalysis;
+  /** Ability-derived support roles. Omit when abilities are unknown. */
+  roles?: TeamRoleAnalysis;
   /** Distinct elemental types across the team. */
   typesTotal: number;
   teamSize: number;
@@ -160,7 +171,7 @@ export interface SynergyInput {
  * @returns A value in -1..1, where negative means the gaps outweigh the synergy.
  */
 export function scoreTeamSynergy(input: SynergyInput): number {
-  const { coverage, typesTotal, teamSize, typeCount } = input;
+  const { coverage, roles, typesTotal, teamSize, typeCount } = input;
   if (typeCount <= 0 || teamSize <= 0) return 0;
 
   const sumBeyondFirst = (counts: Record<string, number>, names: string[]): number =>
@@ -176,7 +187,8 @@ export function scoreTeamSynergy(input: SynergyInput): number {
     (SYNERGY_BONUS_WEIGHTS.coverageBreadth * clamp01(coverage.uniqueCoverages / typeCount)) +
     (SYNERGY_BONUS_WEIGHTS.resistanceBreadth * clamp01(coverage.uniqueResistances / typeCount)) +
     (SYNERGY_BONUS_WEIGHTS.typeDiversity * clamp01(typesTotal / maxDistinctTypes)) +
-    (SYNERGY_BONUS_WEIGHTS.enabledSpread * clamp01(coverage.enabledSpreadTypes.length / maxDistinctTypes));
+    (SYNERGY_BONUS_WEIGHTS.enabledSpread * clamp01(coverage.enabledSpreadTypes.length / maxDistinctTypes)) +
+    (SYNERGY_BONUS_WEIGHTS.supportRoles * clamp01((roles?.roles.length ?? 0) / ABILITY_ROLES.length));
 
   const penalty =
     (SYNERGY_PENALTY_WEIGHTS.uncoveredWeakness * (coverage.uncoveredWeaknesses.length / typeCount)) +
@@ -184,7 +196,8 @@ export function scoreTeamSynergy(input: SynergyInput): number {
     (SYNERGY_PENALTY_WEIGHTS.sharedWeakness * (sumBeyondFirst(coverage.weaknessCounts, coverage.sharedWeaknesses) / (teamSize * 2))) +
     (SYNERGY_PENALTY_WEIGHTS.quadrupleWeakness * (sumAll(coverage.quadrupleWeaknessCounts) / teamSize)) +
     (SYNERGY_PENALTY_WEIGHTS.sharedQuadrupleWeakness * (sumBeyondFirst(coverage.quadrupleWeaknessCounts, coverage.sharedQuadrupleWeaknesses) / teamSize)) +
-    (SYNERGY_PENALTY_WEIGHTS.spreadConflict * clamp01(coverage.spreadConflicts.length / maxDistinctTypes));
+    (SYNERGY_PENALTY_WEIGHTS.spreadConflict * clamp01(coverage.spreadConflicts.length / maxDistinctTypes)) +
+    (SYNERGY_PENALTY_WEIGHTS.fieldConflict * clamp01((roles?.fieldConflicts.length ?? 0) / ABILITY_ROLES.length));
 
   return Math.min(1, Math.max(-1, bonus - penalty));
 }

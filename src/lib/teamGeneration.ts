@@ -1,5 +1,6 @@
 import { getEffectiveTypeProfile, getPokemonAbilityProfile } from './activePokemon';
 import { analyzeTeamCoverage } from './teamCoverage';
+import { analyzeTeamRoles, isImmuneToAllyMoves } from './abilityRoles';
 import {
   DEFAULT_BASE_SCORE,
   normalizeDamageFromScore,
@@ -146,7 +147,14 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
     // spread-move safety needs the member's own attacking types.
     const coverage = analyzeTeamCoverage(teamProfiles.map((entry, index) => ({
       ...entry.profile,
-      types: tm[index].name.split('/')
+      types: tm[index].name.split('/'),
+      immuneToAllyMoves: isImmuneToAllyMoves(entry.pokemon?.selected_ability_name)
+    })));
+
+    // Roles come from the ability actually selected for battle, not from every
+    // ability the species can have.
+    const roles = analyzeTeamRoles(teamProfiles.map((entry) => ({
+      abilityName: entry.pokemon?.selected_ability_name
     })));
     const {
       uncoveredWeaknesses,
@@ -170,6 +178,7 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
 
     const synergy = scoreTeamSynergy({
       coverage,
+      roles,
       typesTotal,
       teamSize: tm.length,
       typeCount: baseScore

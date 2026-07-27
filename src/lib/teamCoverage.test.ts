@@ -97,6 +97,20 @@ describe('analyzeTeamCoverage', () => {
       expect(analysis.spreadConflicts).toEqual([]);
     });
 
+    it('treats a partner immune to ally moves as safe against every spread type', () => {
+      // Telepathy blocks the ally's damage whatever its type, so it enables the
+      // attacker's whole STAB set rather than one matching immunity.
+      const analysis = analyzeTeamCoverage([
+        { types: ['ground', 'fire'], weaknesses: ['water'], resistances: [], immunities: [], coverages: [] },
+        { types: ['psychic'], weaknesses: ['ground', 'fire'], resistances: [], immunities: [], coverages: [], immuneToAllyMoves: true }
+      ]);
+
+      expect(analysis.enabledSpreadTypes).toEqual(expect.arrayContaining(['ground', 'fire']));
+      // The partner is weak to both, but cannot be hit by them, so neither is a
+      // conflict.
+      expect(analysis.spreadConflicts).toEqual([]);
+    });
+
     it('keys on the attacker own types, not its coverage list', () => {
       // The member hits rock super-effectively but attacks with water. A partner
       // weak to rock is irrelevant; what matters is the type actually clicked.

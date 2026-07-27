@@ -19,10 +19,21 @@ const {
   teamWeaknessSummary, 
   teamCoverageSummary,
   teamSpreadSummary,
+  teamRoleSummary,
   removeFromParty,
   clearParty,
   fillRemainingSlots
 } = useTeamBuilder();
+
+const ROLE_LABELS: Record<string, string> = {
+  'intimidate': 'Intimidate',
+  'redirection': 'Redirection',
+  'ally-protection': 'Ally Protection',
+  'weather-setter': 'Weather',
+  'terrain-setter': 'Terrain'
+};
+
+const formatRole = (role: string) => ROLE_LABELS[role] || role;
 </script>
 
 <template>
@@ -226,6 +237,35 @@ const {
               </p>
             </TransitionGroup>
           </div>
+        </div>
+
+        <div class="role-row">
+          <p class="analysis-label">
+            Support Roles:
+            <span class="analysis-hint">from selected abilities</span>
+          </p>
+          <div class="role-list">
+            <span
+              v-for="role in teamRoleSummary.roles"
+              :key="role"
+              class="role-chip"
+            >
+              {{ formatRole(role) }}
+            </span>
+            <p
+              v-if="teamRoleSummary.roles.length === 0"
+              class="none-text"
+            >
+              None.
+            </p>
+          </div>
+          <p
+            v-if="teamRoleSummary.fieldConflicts.length > 0"
+            class="role-conflict"
+            role="status"
+          >
+            ⚠ {{ teamRoleSummary.conflictingAbilities.join(' vs ') }} overwrite each other.
+          </p>
         </div>
       </div>
       <div
@@ -434,6 +474,37 @@ const {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 2px dashed var(--gba-text-dark);
+}
+
+.role-row {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px dashed var(--gba-text-dark);
+}
+
+.role-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.role-chip {
+  font-family: var(--gba-font-body);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border: 2px solid var(--gba-text-dark);
+  background: var(--gba-accent-cyan);
+  color: var(--gba-text-dark);
+}
+
+.role-conflict {
+  margin-top: 8px;
+  font-family: var(--gba-font-body);
+  font-size: 0.8rem;
+  color: var(--gba-accent-magenta);
+  text-transform: uppercase;
 }
 
 @media (max-width: 600px) {
