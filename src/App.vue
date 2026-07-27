@@ -15,6 +15,11 @@
         <p v-else>
           System Online // Waiting for Scan...
         </p>
+        <p class="status-regulation">
+          {{ selectedRegulation
+            ? `${selectedRegulation.label} // ${selectedRegulation.legalSpecies.size} legal species`
+            : 'No regulation filter // all breedable species' }}
+        </p>
         <p
           v-if="fetchError"
           class="status-error"
@@ -37,6 +42,24 @@
               {{ loading ? 'Loading...' : (fetchError ? 'Retry Scan' : 'Scan Types') }}
             </button>
             
+            <label class="gba-label">
+              Regulation:
+              <select
+                v-model="regulation"
+                class="gba-select regulation-select"
+                @change="fetchTypesImmediate"
+              >
+                <option value="">Any (no legality filter)</option>
+                <option
+                  v-for="reg in REGULATIONS"
+                  :key="reg.id"
+                  :value="reg.id"
+                >
+                  {{ reg.id }}{{ reg.id === activeRegulationId ? ' (current)' : '' }}
+                </option>
+              </select>
+            </label>
+
             <label class="gba-label">
               Pokedex Region:
               <select
@@ -167,9 +190,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeUnmount, onMounted } from 'vue';
+import { computed, ref, onBeforeUnmount, onMounted } from 'vue';
 import lscache from 'lscache';
-import { getResistantTypes } from './lib/pokedex';
+import { REGULATIONS, getActiveRegulation, getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
 import GbaNotification from './components/GbaNotification.vue';
 import { useNotifications } from './composables/useNotifications';
@@ -179,6 +202,11 @@ const loading = ref(false);
 const types = ref<TypeDataLike[]>([]);
 const fetchError = ref('');
 const inPokedex = ref('national');
+// Default to whichever regulation is in force today so the tool is correct for
+// the format being played without the user having to know which one that is.
+const activeRegulationId = getActiveRegulation()?.id ?? '';
+const regulation = ref<string>(activeRegulationId);
+const selectedRegulation = computed(() => REGULATIONS.find(reg => reg.id === regulation.value));
 const minStatsTotal = ref(480);
 const minAttacks = ref(80);
 const minDefenses = ref(80);
@@ -212,10 +240,14 @@ const fetchTypes = () => {
   const pokedexFilter = {
     inPokedex: inPokedex.value,
     allowMegas: allowMegas.value,
-    includeAbilityImmunities: includeAbilityImmunities.value
+    includeAbilityImmunities: includeAbilityImmunities.value,
+    regulation: regulation.value || null
   };
 
-  const key = `heur_aegis_dex_v3_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}`;
+  // Every filter that changes the result must appear in the key, or switching it
+  // serves a cached scan from different settings. The version prefix is bumped
+  // whenever the stored shape changes.
+  const key = `heur_aegis_dex_v4_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${regulation.value || 'any'}`;
 
   const cached = lscache.get(key);
   if (cached) {
@@ -293,6 +325,13 @@ onBeforeUnmount(() => {
     color: var(--gba-accent-magenta);
     text-shadow: 2px 2px 0px var(--gba-text-dark);
   }
+}
+
+.status-regulation {
+  margin-top: 8px;
+  font-family: var(--gba-font-body);
+  font-size: 0.9rem;
+  opacity: 0.85;
 }
 
 .status-error {
@@ -385,6 +424,11 @@ onBeforeUnmount(() => {
   padding: 4px 8px;
   text-transform: uppercase;
   width: 100px;
+}
+
+.regulation-select {
+  width: auto;
+  min-width: 100px;
 }
 
 .status-ready {

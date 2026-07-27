@@ -5,7 +5,9 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'node_modules', 'public', 'vite.config.ts.timestamp-*'],
+    // 'lib' is the library build output. It is gitignored but was missing here,
+    // so running lint after build:lib reported hundreds of errors in generated code.
+    ignores: ['dist', 'lib', 'node_modules', 'public', 'vite.config.ts.timestamp-*'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
