@@ -14,7 +14,7 @@
 
 import type { PokemonStats } from './pokedexTypes';
 import type { TeamCoverageAnalysis } from './teamCoverage';
-import { ABILITY_ROLES, type TeamRoleAnalysis } from './abilityRoles';
+import { getApplicableRoles, type TeamRoleAnalysis } from './abilityRoles';
 import { BATTLE_FORMATS, DEFAULT_BATTLE_FORMAT, type BattleFormat } from './battleFormats';
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
@@ -204,6 +204,9 @@ export function scoreTeamSynergy(input: SynergyInput): number {
   const bonusWeights = SYNERGY_BONUS_WEIGHTS_BY_FORMAT[format.id];
   // With no ally on the field, neither half of the spread model can occur.
   const spreadConflictWeight = format.hasAlly ? SYNERGY_PENALTY_WEIGHTS.spreadConflict : 0;
+  // Normalizing by the roles the format can actually use keeps full breadth
+  // reachable in singles, where two of the five roles are inert.
+  const applicableRoleCount = getApplicableRoles(format.hasAlly).length;
 
   const sumBeyondFirst = (counts: Record<string, number>, names: string[]): number =>
     names.reduce((total, name) => total + (counts[name] - 1), 0);
@@ -219,7 +222,7 @@ export function scoreTeamSynergy(input: SynergyInput): number {
     (bonusWeights.resistanceBreadth * clamp01(coverage.uniqueResistances / typeCount)) +
     (bonusWeights.typeDiversity * clamp01(typesTotal / maxDistinctTypes)) +
     (bonusWeights.enabledSpread * clamp01(coverage.enabledSpreadTypes.length / maxDistinctTypes)) +
-    (bonusWeights.supportRoles * clamp01((roles?.roles.length ?? 0) / ABILITY_ROLES.length));
+    (bonusWeights.supportRoles * clamp01((roles?.roles.length ?? 0) / applicableRoleCount));
 
   const penalty =
     (SYNERGY_PENALTY_WEIGHTS.uncoveredWeakness * (coverage.uncoveredWeaknesses.length / typeCount)) +
@@ -228,7 +231,7 @@ export function scoreTeamSynergy(input: SynergyInput): number {
     (SYNERGY_PENALTY_WEIGHTS.quadrupleWeakness * (sumAll(coverage.quadrupleWeaknessCounts) / teamSize)) +
     (SYNERGY_PENALTY_WEIGHTS.sharedQuadrupleWeakness * (sumBeyondFirst(coverage.quadrupleWeaknessCounts, coverage.sharedQuadrupleWeaknesses) / teamSize)) +
     (spreadConflictWeight * clamp01(coverage.spreadConflicts.length / maxDistinctTypes)) +
-    (SYNERGY_PENALTY_WEIGHTS.fieldConflict * clamp01((roles?.fieldConflicts.length ?? 0) / ABILITY_ROLES.length));
+    (SYNERGY_PENALTY_WEIGHTS.fieldConflict * clamp01((roles?.fieldConflicts.length ?? 0) / applicableRoleCount));
 
   return Math.min(1, Math.max(-1, bonus - penalty));
 }

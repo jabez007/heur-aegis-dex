@@ -4,6 +4,7 @@ import {
   DOUBLES_ABILITIES,
   analyzeTeamRoles,
   getAbilityEffect,
+  getApplicableRoles,
   isImmuneToAllyMoves
 } from './abilityRoles';
 
@@ -108,5 +109,45 @@ describe('analyzeTeamRoles', () => {
 
     expect(analysis.roles).toEqual([]);
     expect(analysis.fieldConflicts).toEqual([]);
+  });
+});
+
+describe('format-applicable roles', () => {
+  it('drops roles that need an ally when there is none', () => {
+    expect(getApplicableRoles(true)).toEqual(ABILITY_ROLES);
+    expect(getApplicableRoles(false)).not.toContain('redirection');
+    expect(getApplicableRoles(false)).not.toContain('ally-protection');
+  });
+
+  it('keeps Intimidate and field setters in singles', () => {
+    // Intimidate still drops the opponent's Attack and weather still applies
+    // with nobody else on the field.
+    const singlesRoles = getApplicableRoles(false);
+    expect(singlesRoles).toContain('intimidate');
+    expect(singlesRoles).toContain('weather-setter');
+    expect(singlesRoles).toContain('terrain-setter');
+  });
+
+  it('ignores ally-only abilities when analysing a singles team', () => {
+    const doubles = analyzeTeamRoles([{ abilityName: 'lightning-rod' }, { abilityName: 'telepathy' }]);
+    const singles = analyzeTeamRoles(
+      [{ abilityName: 'lightning-rod' }, { abilityName: 'telepathy' }],
+      { hasAlly: false }
+    );
+
+    expect(doubles.roles).toEqual(['redirection', 'ally-protection']);
+    expect(singles.roles).toEqual([]);
+  });
+
+  it('still counts Intimidate in singles', () => {
+    expect(analyzeTeamRoles([{ abilityName: 'intimidate' }], { hasAlly: false }).roles).toEqual(['intimidate']);
+  });
+
+  it('still detects a weather clash in singles', () => {
+    const singles = analyzeTeamRoles(
+      [{ abilityName: 'drought' }, { abilityName: 'drizzle' }],
+      { hasAlly: false }
+    );
+    expect(singles.fieldConflicts).toEqual(['weather-setter']);
   });
 });

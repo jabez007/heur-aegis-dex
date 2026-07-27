@@ -36,7 +36,7 @@ export interface AbilityEffect {
   immuneToAllyMoves?: boolean;
 }
 
-/** How many distinct roles exist, used to normalize role breadth. */
+/** Every modelled role. */
 export const ABILITY_ROLES: readonly AbilityRole[] = [
   'intimidate',
   'redirection',
@@ -44,6 +44,26 @@ export const ABILITY_ROLES: readonly AbilityRole[] = [
   'weather-setter',
   'terrain-setter'
 ];
+
+/**
+ * Roles that need an ally on the field to do anything.
+ *
+ * Redirection pulls attacks away from a partner and ally protection blunts
+ * damage aimed at one. In singles there is no partner, so crediting a team for
+ * either would reward a capability the format cannot use. Intimidate and the
+ * field setters work the same in both formats.
+ */
+export const DOUBLES_ONLY_ROLES: readonly AbilityRole[] = ['redirection', 'ally-protection'];
+
+/**
+ * Roles worth scoring in a given format.
+ *
+ * @param hasAlly Whether an ally shares the field.
+ * @returns The applicable roles, used both to filter and to normalize breadth.
+ */
+export function getApplicableRoles(hasAlly: boolean): readonly AbilityRole[] {
+  return hasAlly ? ABILITY_ROLES : ABILITY_ROLES.filter((role) => !DOUBLES_ONLY_ROLES.includes(role));
+}
 
 export const DOUBLES_ABILITIES: Readonly<Record<string, AbilityEffect>> = {
   intimidate: { role: 'intimidate' },
@@ -117,15 +137,22 @@ export function isImmuneToAllyMoves(abilityName: string | undefined | null): boo
  * measure and diminishing returns fall out naturally.
  *
  * @param members Team members with their selected ability.
+ * @param options Set hasAlly false for singles, which drops the roles that need a partner.
  * @returns Covered roles, their sources, and any field-setting conflicts.
  */
-export function analyzeTeamRoles(members: TeamRoleMember[]): TeamRoleAnalysis {
+export function analyzeTeamRoles(
+  members: TeamRoleMember[],
+  options: { hasAlly?: boolean } = {}
+): TeamRoleAnalysis {
+  const { hasAlly = true } = options;
+  const applicableRoles = getApplicableRoles(hasAlly);
   const roleSources: Partial<Record<AbilityRole, string[]>> = {};
   const fieldStatesByRole: Partial<Record<AbilityRole, Map<string, string>>> = {};
 
   members.forEach((member) => {
     const effect = getAbilityEffect(member.abilityName);
     if (!effect || !member.abilityName) return;
+    if (!applicableRoles.includes(effect.role)) return;
 
     const sources = roleSources[effect.role] || [];
     if (!sources.includes(member.abilityName)) sources.push(member.abilityName);
@@ -141,7 +168,7 @@ export function analyzeTeamRoles(members: TeamRoleMember[]): TeamRoleAnalysis {
   const fieldConflicts: AbilityRole[] = [];
   const conflictingAbilities: string[] = [];
 
-  ABILITY_ROLES.forEach((role) => {
+  applicableRoles.forEach((role) => {
     const states = fieldStatesByRole[role];
     if (states && states.size > 1) {
       fieldConflicts.push(role);
@@ -150,7 +177,7 @@ export function analyzeTeamRoles(members: TeamRoleMember[]): TeamRoleAnalysis {
   });
 
   return {
-    roles: ABILITY_ROLES.filter((role) => (roleSources[role] || []).length > 0),
+    roles: applicableRoles.filter((role) => (roleSources[role] || []).length > 0),
     roleSources,
     fieldConflicts,
     conflictingAbilities

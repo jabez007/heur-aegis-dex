@@ -157,7 +157,7 @@ export function generateTeams(options: GenerateTeamsOptions = {}): GeneratedTeam
     // ability the species can have.
     const roles = analyzeTeamRoles(teamProfiles.map((entry) => ({
       abilityName: entry.pokemon?.selected_ability_name
-    })));
+    })), { hasAlly: true });
     const {
       uncoveredWeaknesses,
       uncoveredQuadrupleWeaknesses,
