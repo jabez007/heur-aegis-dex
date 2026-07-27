@@ -11,6 +11,8 @@ const mockState = vi.hoisted(() => ({
   treatSpeciesAsLegendary: false,
   /** Name the fire-type entry after a Pokemon present in the coverage-move table. */
   useCoverageTableName: false,
+  /** Add a Gigantamax, a Mega and a permanent regional form to the fire roster. */
+  includeAlternateForms: false,
   detailDelayMs: 0,
   requestCounts: new Map<string, number>(),
   activeDetailRequests: 0,
@@ -20,7 +22,9 @@ const mockState = vi.hoisted(() => ({
 const trackRequest = async <T>(url: string, factory: () => T | Promise<T>) => {
   mockState.requestCounts.set(url, (mockState.requestCounts.get(url) || 0) + 1);
 
-  const isDetailRequest = url.startsWith('/api/v2/pokemon/') || url.startsWith('/api/v2/pokemon-species/');
+  const isDetailRequest = url.startsWith('/api/v2/pokemon/')
+    || url.startsWith('/api/v2/pokemon-species/')
+    || url.startsWith('/api/v2/pokemon-form/');
   if (!isDetailRequest) {
     return await factory();
   }
@@ -96,6 +100,13 @@ vi.mock('pokedex-promise-v2', () => {
           },
           pokemon: [
             { pokemon: { name: mockState.useCoverageTableName ? 'garchomp' : 'charmander', url: 'https://pokeapi.co/api/v2/pokemon/4/' } },
+            ...(mockState.includeAlternateForms
+              ? [
+                { pokemon: { name: 'charmander-gmax', url: 'https://pokeapi.co/api/v2/pokemon/10001/' } },
+                { pokemon: { name: 'charmander-mega', url: 'https://pokeapi.co/api/v2/pokemon/10002/' } },
+                { pokemon: { name: 'charmander-alola', url: 'https://pokeapi.co/api/v2/pokemon/10003/' } }
+              ]
+              : []),
             ...extraPokemon
           ]
           };
@@ -175,10 +186,25 @@ vi.mock('pokedex-promise-v2', () => {
           };
         }
 
+        // PokeAPI numbers alternate varieties from 10000 up, so the mock uses the
+        // same convention: anything above that is a non-default form with its own
+        // /pokemon-form resource.
+        const formMatch = url.match(/^\/api\/v2\/pokemon-form\/(\d+)\/$/);
+        if (formMatch) {
+          const id = Number(formMatch[1]);
+          return {
+            is_battle_only: id === 10001 || id === 10002,
+            is_mega: id === 10002
+          };
+        }
+
         const pokemonMatch = url.match(/^\/api\/v2\/pokemon\/(\d+)\/$/);
         if (pokemonMatch) {
           const id = Number(pokemonMatch[1]);
+          const isAlternateForm = id >= 10000;
           return {
+            is_default: !isAlternateForm,
+            forms: isAlternateForm ? [{ url: `https://pokeapi.co/api/v2/pokemon-form/${id}/` }] : undefined,
             types: [{ type: { name: 'fire' } }],
             sprites: { front_default: `firemon-${id}.png` },
             stats: [
@@ -220,6 +246,7 @@ beforeEach(() => {
   mockState.useRegulationLegalSpecies = false;
   mockState.treatSpeciesAsLegendary = false;
   mockState.useCoverageTableName = false;
+  mockState.includeAlternateForms = false;
   mockState.detailDelayMs = 0;
   mockState.requestCounts.clear();
   mockState.activeDetailRequests = 0;
@@ -396,6 +423,49 @@ describe('pokedex.js API integration logic', () => {
     });
 
     expect(resistant.find(t => t.name === 'fire')!.pokemon[0].effective_move_coverages).toEqual([]);
+  });
+
+  const scanWithAlternateForms = (allowMegas: boolean) => {
+    mockState.includeAlternateForms = true;
+    return getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+  };
+
+  it('getResistantTypes should drop battle-only forms but keep permanent ones', async () => {
+    const resistant = await scanWithAlternateForms(false);
+
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+    // Gigantamax is a state a Pokemon enters mid-battle, not a team slot.
+    expect(names).not.toContain('charmander-gmax');
+    // A regional form is a Pokemon you can actually bring, so it stays.
+    expect(names).toContain('charmander-alola');
+    expect(names).toContain('charmander');
+  });
+
+  it('getResistantTypes should gate Megas on allowMegas rather than on the name', async () => {
+    const withoutMegas = await scanWithAlternateForms(false);
+    expect(withoutMegas.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name))
+      .not.toContain('charmander-mega');
+
+    __resetPokedexResourceCaches();
+    const withMegas = await scanWithAlternateForms(true);
+    const names = withMegas.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+    // Megas are battle-only by the same flag, but they are a pre-battle choice.
+    expect(names).toContain('charmander-mega');
+    expect(names).not.toContain('charmander-gmax');
+  });
+
+  it('getResistantTypes should not request a form for default varieties', async () => {
+    await scanWithAlternateForms(false);
+
+    // The extra request is confined to alternate forms; the base Pokemon is
+    // known to be registerable without asking.
+    expect(mockState.requestCounts.get('/api/v2/pokemon-form/4/')).toBeUndefined();
+    expect(mockState.requestCounts.get('/api/v2/pokemon-form/10001/')).toBe(1);
   });
 
   it('getResistantTypes should dedupe repeated pokemon and species detail fetches', async () => {

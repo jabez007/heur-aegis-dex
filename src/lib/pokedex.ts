@@ -45,6 +45,7 @@ function pairCombinations<T>(items: T[]): [T, T][] {
 
 const pokemonResourceCache = new Map<number, Promise<any>>();
 const pokemonSpeciesCache = new Map<number, Promise<any>>();
+const pokemonFormCache = new Map<number, Promise<any>>();
 
 export const pokedex = new Pokedex({
   protocol: 'https',
@@ -71,6 +72,7 @@ export type { Regulation, RegulationId, RegulationRules, MechanicId } from './re
 export function __resetPokedexResourceCaches() {
   pokemonResourceCache.clear();
   pokemonSpeciesCache.clear();
+  pokemonFormCache.clear();
 }
 
 async function mapWithConcurrency<T, R>(
@@ -125,6 +127,51 @@ function fetchPokemonSpeciesResource(id: number) {
   });
   pokemonSpeciesCache.set(id, request);
   return request;
+}
+
+function fetchPokemonFormResource(id: number) {
+  const cached = pokemonFormCache.get(id);
+  if (cached) return cached;
+
+  // Failed in-flight requests must be evicted so later scans can retry instead
+  // of reusing a permanently rejected promise from the cache.
+  const request = pokedex.getResource(`/api/v2/pokemon-form/${id}/`).catch((error) => {
+    pokemonFormCache.delete(id);
+    throw error;
+  });
+  pokemonFormCache.set(id, request);
+  return request;
+}
+
+/**
+ * Decides whether a variety is something a player can actually register.
+ *
+ * Gigantamax, Mimikyu-Busted, Eiscue-Noice and the rest only exist mid-battle:
+ * they are states a Pokemon enters, not separate Pokemon, so listing them
+ * alongside their base form invents team slots that do not exist. PokeAPI marks
+ * them with `is_battle_only` on the form resource, which is the authority here —
+ * a name-suffix denylist would silently miss whatever form ships next.
+ *
+ * Megas are battle-only by the same flag but are a real pre-battle choice under
+ * Champions, so they stay behind the caller's own switch rather than being
+ * swept up with the temporary forms.
+ *
+ * Only non-default varieties are checked, so the extra request is confined to
+ * alternate forms instead of being paid for every Pokemon in the Pokedex.
+ *
+ * @param poke Fetched `/pokemon` resource.
+ * @param allowMegas Whether Mega Evolutions are permitted by the current scan.
+ * @returns Whether the variety may appear as its own Pokemon.
+ */
+async function isRegisterableForm(poke: any, allowMegas: boolean): Promise<boolean> {
+  if (poke.is_default) return true;
+
+  const formUrl = poke.forms?.[0]?.url;
+  if (!formUrl) return true;
+
+  const form = await fetchPokemonFormResource(getPokemonIdFromUrl(formUrl));
+  if (form.is_mega) return allowMegas;
+  return !form.is_battle_only;
 }
 
 function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
@@ -341,11 +388,13 @@ export async function getResistantTypes(options: {
   const processPokemon = async (t: PokemonTypeData, offensiveChart: OffensiveTypeChart): Promise<PokemonListEntry[]> => {
     const pokemon = await Promise.all(
       (t.pokemon || []).map(async (p: PokemonListEntry) => {
-        if (!_pokemonFilters.allowMegas && p.pokemon.name.includes('-mega')) return null;
-
         if (!p.pokemon.url) return null;
         const id = getPokemonIdFromUrl(p.pokemon.url);
         const poke = await fetchPokemonResource(id);
+
+        // Battle-only forms are not team slots, and Megas are gated separately.
+        if (!await isRegisterableForm(poke, _pokemonFilters.allowMegas)) return null;
+
         const speciesId = getPokemonIdFromUrl(poke.species.url);
         const species = await fetchPokemonSpeciesResource(speciesId);
 
@@ -448,6 +497,10 @@ export async function getResistantTypes(options: {
     const poke = await fetchPokemonResource(id);
     const speciesId = getPokemonIdFromUrl(poke.species.url);
     await fetchPokemonSpeciesResource(speciesId);
+    // Warm the form cache here too, so the battle-only check in processPokemon
+    // stays inside this concurrency budget instead of fanning out per typing.
+    const formUrl = poke.is_default ? undefined : poke.forms?.[0]?.url;
+    if (formUrl) await fetchPokemonFormResource(getPokemonIdFromUrl(formUrl));
   });
 
   return (await Promise.all(
