@@ -98,7 +98,8 @@ export function scoreBring(members: RosterMember[], options: RosterScoringOption
     .map((member) => scoreMemberQuality({
       stats: member.stats,
       normalizedDamageToScore: member.normalizedDamageToScore ?? 0.5,
-      normalizedDamageFromScore: member.normalizedDamageFromScore ?? 0.5
+      normalizedDamageFromScore: member.normalizedDamageFromScore ?? 0.5,
+      abilityName: member.abilityName
     }));
 
   const synergy = scoreTeamSynergy({

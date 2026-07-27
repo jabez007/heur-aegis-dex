@@ -37,6 +37,9 @@ const FIXTURE = [
   ['sylveon', 'pixilate'],
   ['glimmora', 'toxic-debris'],
   ['sneasler', 'poison-touch'],
+  // Same Fire/Ghost typing, so the comparison is purely stats and abilities.
+  ['skeledirge', 'unaware'],
+  ['typhlosion-hisui', 'blaze'],
   ['dragonite', 'multiscale'],
 
   // Weather cores

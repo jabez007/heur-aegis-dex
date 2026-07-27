@@ -116,6 +116,14 @@ export {
 } from './lib/abilityRoles'
 export type { AbilityRole, AbilityEffect, TeamRoleAnalysis } from './lib/abilityRoles'
 
+export {
+  ABILITY_QUALITY_EFFECTS,
+  getAbilityQualityEffect,
+  getQualityMultipliers,
+  hasAbilityQualityRule
+} from './lib/abilityEffects'
+export type { AbilityQualityRule, QualityComponent } from './lib/abilityEffects'
+
 export default {
   install: (app: App) => {
     // Each app gets its own party, filters and notifications. Without this the

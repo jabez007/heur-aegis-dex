@@ -15,6 +15,7 @@
 import type { PokemonStats } from './pokedexTypes';
 import type { TeamCoverageAnalysis } from './teamCoverage';
 import { getApplicableRoles, type TeamRoleAnalysis } from './abilityRoles';
+import { getQualityMultipliers } from './abilityEffects';
 import { BATTLE_FORMATS, DEFAULT_BATTLE_FORMAT, type BattleFormat } from './battleFormats';
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
@@ -38,10 +39,22 @@ export const STAT_CEILINGS = {
 /**
  * Weights for a single member's quality. These sum to 1, so member quality is
  * always in 0..1.
+ *
+ * Bulk carries the largest share deliberately. A Pokemon has to threaten
+ * something to win, but it only gets to threaten anything on turns it is still
+ * alive — the one that survives is the one that wins. That is also the premise
+ * this project started from: it began as a theorycrafter for *defensive*
+ * typings, and weighting bulk over offence keeps the scoring pointed at the
+ * question it was built to answer.
+ *
+ * Speed is left where it is, and is the weakest part of this model: it is
+ * treated as linearly good, which is wrong for a format where Trick Room makes
+ * low Speed an asset. Correcting that needs move data the scan does not have,
+ * so the bias is recorded here rather than papered over.
  */
 export const MEMBER_WEIGHTS = {
-  offense: 0.4,
-  bulk: 0.4,
+  offense: 0.35,
+  bulk: 0.45,
   speed: 0.2
 } as const;
 
@@ -134,6 +147,12 @@ export interface MemberQualityInput {
   normalizedDamageToScore: number;
   /** Normalized defensive score, 0..1, higher is more vulnerable. */
   normalizedDamageFromScore: number;
+  /**
+   * Ability selected for battle. Some abilities change what a stat line is
+   * worth without changing the stats — see abilityEffects.ts. Omitting it
+   * scores the Pokemon as though its ability does nothing.
+   */
+  abilityName?: string;
 }
 
 /**
@@ -145,8 +164,16 @@ export interface MemberQualityInput {
 export function scoreMemberQuality(member: MemberQualityInput): number {
   const { stats, normalizedDamageToScore, normalizedDamageFromScore } = member;
 
-  const offense = clamp01((stats.attack + stats['special-attack']) / STAT_CEILINGS.offense);
-  const bulk = clamp01((stats.hp + stats.defense + stats['special-defense']) / STAT_CEILINGS.bulk);
+  // Multiscale, Unaware and their kin change what a stat line is worth without
+  // changing the stats, so they scale the component they actually affect.
+  const ability = getQualityMultipliers(member.abilityName);
+
+  const offense = clamp01(
+    ((stats.attack + stats['special-attack']) / STAT_CEILINGS.offense) * ability.offense
+  );
+  const bulk = clamp01(
+    ((stats.hp + stats.defense + stats['special-defense']) / STAT_CEILINGS.bulk) * ability.bulk
+  );
   const speed = clamp01(stats.speed / STAT_CEILINGS.speed);
 
   const modulate = (quality: number) => (1 - TYPE_MODULATION) + (TYPE_MODULATION * clamp01(quality));

@@ -22,6 +22,12 @@
 
 ### Added
 
+- **An ability-effect layer for abilities that change what a stat line is worth.** Three ability layers already existed — type immunities in `pokedexAbilities`, support roles in `abilityRoles`, stat multipliers in `statAbilities` — and between them they missed Unaware, Multiscale, Sturdy, Thick Fat and Adaptability entirely. `src/lib/abilityEffects.ts` scales the half of member quality an ability actually affects: bulk for durability abilities, offence for Adaptability. Applied to ten abilities; nine more are recorded with the condition that rules them out.
+
+  Move-dependent abilities are the largest excluded group, deliberately. Prankster is among the strongest abilities in the format, but its value is entirely in *which* moves it makes priority — and moves are not modelled here beyond coverage types, so crediting it would be scoring a moveset the tool cannot see.
+
+  The visible symptom was Skeledirge ranking below Typhlosion-Hisui. They share Fire/Ghost typing exactly, so the comparison came down to raw stats, where Typhlosion-H legitimately wins — and everything that makes Skeledirge the better Pokemon was worth zero.
+
 - **A validation fixture for the scoring weights.** Every other test checks that a formula computes what it claims to; none checked whether the formula was *right*, and every weight in `MEMBER_WEIGHTS`, `CANDIDATE_WEIGHTS`, `MIXED_ATTACKER_RATIO` and the synergy sets was argued from structure rather than measured. `src/lib/scoringValidation.test.ts` is the counterweight: six real teams — balance, sun, a defensive core, mono-Fire, junk, and frail attackers — scored against each other, plus member-ranking comparisons over 41 real Pokemon.
 
   Assertions are **ordinal**, never absolute. A team judged stronger must outscore one judged weaker; no assertion names a number, because thresholds fail on every weight change regardless of whether it was an improvement and train people to update expected values without reading them. Each team carries its reasoning inline, so a failure is a disagreement to adjudicate rather than a number to bump.
@@ -31,6 +37,12 @@
   **It found a real defect on its first run.** `supportRole: 12` and `quadrupleWeakness: 15` were carried over from the previous formula, whose terms ran to 44. The rework compressed the base to a roughly 30-point spread, so those adjuncts could swing 27 points against it — enough to rank Arbok above Garchomp. Rescaled to 4 and 5, with `coverage` to 0.75 and `moveCoverage` to 0.2. A structural assertion now pins the invariant: the largest single-Pokemon adjustment must stay under half the observed spread of member quality, measured from the fixture rather than assumed.
 
 ### Changed
+
+- **`MEMBER_WEIGHTS` shifts toward bulk**, from `0.4 / 0.4 / 0.2` to **`0.35 / 0.45 / 0.2`**. A Pokemon has to threaten something to win, but it only threatens anything on turns it is still alive. This also returns the scoring to the premise the project started from — it began as a theorycrafter for *defensive* typings, and weighting bulk over offence keeps it pointed at that question.
+
+  Speed is unchanged and is now documented as the weakest part of the model: it is treated as linearly good, which is wrong for a format where Trick Room makes low Speed an asset. Correcting that needs move data the scan does not have, so the bias is recorded rather than papered over.
+
+  Measured on Skeledirge against Typhlosion-Hisui, the reweight is the smaller of the two effects — it moves the gap from -2.1 to -1.4, and the ability layer carries it the rest of the way to +3.6.
 
 - **Candidate ranking is built on `scoreMemberQuality` instead of its own weighted sum.** `candidatePriority` added typing and stats as independent terms and paid for defensive typing three separate times — as `defensiveTyping`, again per resistance, and again per weakness. But `normalizedDamageFromScore` *is* a summary of resistances and weaknesses, since `calculateDamageFromScore` sums exactly those buckets, so all three measured one property. Comparing Klefki, Lucario and Incineroar, that came to a 27-point spread on typing against 4 points on stats — a ratio near seven to one that nobody had chosen.
 

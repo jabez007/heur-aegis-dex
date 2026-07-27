@@ -120,6 +120,17 @@ describe('scoring validation — member ranking', () => {
     expect(candidatePriority(mon('incineroar'))).toBeGreaterThan(candidatePriority(mon('klefki')));
   });
 
+  it('ranks the better Pokemon ahead when typing is identical', () => {
+    // Skeledirge and Typhlosion-Hisui are both Fire/Ghost, so typing cancels
+    // exactly and the comparison is stats and abilities alone. Typhlosion-H has
+    // the better raw line — more offence, more speed, less bulk — and used to
+    // win on that. Skeledirge is the better Pokemon because of Unaware, which
+    // nothing modelled until abilityEffects.ts existed.
+    expect(mon('skeledirge').types).toEqual(mon('typhlosion-hisui').types);
+    expect(candidatePriority(mon('skeledirge')))
+      .toBeGreaterThan(candidatePriority(mon('typhlosion-hisui')));
+  });
+
   it('ranks recognised threats above recognised filler', () => {
     const threats = ['garchomp', 'dragonite', 'metagross', 'kingambit', 'volcarona'];
     const filler = ['pikachu', 'watchog', 'emolga', 'dedenne', 'castform'];

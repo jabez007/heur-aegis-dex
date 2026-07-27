@@ -176,7 +176,8 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
   const quality = scoreMemberQuality({
     stats: entry.stats,
     normalizedDamageToScore: entry.normalizedDamageToScore,
-    normalizedDamageFromScore: entry.normalizedDamageFromScore
+    normalizedDamageFromScore: entry.normalizedDamageFromScore,
+    abilityName: entry.abilityName
   });
 
   return (quality * w.quality) +
