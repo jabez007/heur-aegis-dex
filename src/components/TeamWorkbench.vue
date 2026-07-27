@@ -18,6 +18,7 @@ const {
   isGenerating, 
   teamWeaknessSummary, 
   teamCoverageSummary,
+  teamSpreadSummary,
   removeFromParty,
   clearParty,
   fillRemainingSlots
@@ -166,6 +167,62 @@ const {
                 class="none-text"
               >
                 None yet.
+              </p>
+            </TransitionGroup>
+          </div>
+        </div>
+
+        <div
+          v-if="currentParty.length > 1"
+          class="analysis-grid spread-grid"
+        >
+          <div class="analysis-col">
+            <p class="analysis-label">
+              Free Spread Moves:
+              <span class="analysis-hint">partner is immune</span>
+            </p>
+            <TransitionGroup
+              name="badge-list"
+              tag="div"
+              class="type-badge-list"
+            >
+              <TypeBadge
+                v-for="type in teamSpreadSummary.enabled"
+                :key="type"
+                :type="type"
+                size="mini"
+              />
+              <p
+                v-if="teamSpreadSummary.enabled.length === 0"
+                key="none"
+                class="none-text"
+              >
+                None.
+              </p>
+            </TransitionGroup>
+          </div>
+          <div class="analysis-col">
+            <p class="analysis-label">
+              Unsafe Spread Moves:
+              <span class="analysis-hint">no safe partner</span>
+            </p>
+            <TransitionGroup
+              name="badge-list"
+              tag="div"
+              class="type-badge-list"
+            >
+              <TypeBadge
+                v-for="type in teamSpreadSummary.conflicts"
+                :key="type"
+                :type="type"
+                size="mini"
+              />
+              <p
+                v-if="teamSpreadSummary.conflicts.length === 0"
+                key="none"
+                class="none-text"
+              >
+                None.
               </p>
             </TransitionGroup>
           </div>
@@ -363,6 +420,26 @@ const {
   font-weight: bold;
   margin-bottom: 8px;
   border-bottom: 1px solid var(--gba-text-dark);
+}
+
+.analysis-hint {
+  font-family: var(--gba-font-body);
+  font-weight: normal;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-left: 6px;
+}
+
+.spread-grid {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px dashed var(--gba-text-dark);
+}
+
+@media (max-width: 600px) {
+  .analysis-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .type-badge-list {

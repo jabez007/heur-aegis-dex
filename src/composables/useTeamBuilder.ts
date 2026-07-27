@@ -67,6 +67,13 @@ export function useTeamBuilder() {
 
   const teamCoverageSummary = computed(() => coverageAnalysis.value.coverageCounts);
 
+  // Doubles-only signal: which spread moves a partner makes free to click, and
+  // which have no safe pairing on this team.
+  const teamSpreadSummary = computed(() => ({
+    enabled: coverageAnalysis.value.enabledSpreadTypes,
+    conflicts: coverageAnalysis.value.spreadConflicts
+  }));
+
   const addToParty = (typeData: ActiveTypeDataLike, pokemonIndex: number, abilityName?: string) => {
     if (currentParty.value.length >= 3) return;
 
@@ -183,6 +190,7 @@ export function useTeamBuilder() {
     isGenerating,
     teamWeaknessSummary,
     teamCoverageSummary,
+    teamSpreadSummary,
     addToParty,
     removeFromParty,
     clearParty,
