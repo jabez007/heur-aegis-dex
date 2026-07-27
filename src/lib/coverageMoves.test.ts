@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   COVERAGE_MOVE_TYPES,
   buildOffensiveTypeChart,
+  getAttackerBias,
   getCoverageMoveTypes,
   getMoveCoverage,
   hasCoverageMoveData
@@ -75,12 +76,89 @@ describe('coverage move table', () => {
       'fire', 'water', 'grass', 'electric', 'psychic', 'ice', 'dragon', 'dark', 'fairy'
     ]);
 
-    Object.entries(COVERAGE_MOVE_TYPES).forEach(([variety, types]) => {
-      expect(types.length, `${variety} should not be empty`).toBeGreaterThan(0);
-      types.forEach((type) => {
+    Object.entries(COVERAGE_MOVE_TYPES).forEach(([variety, entry]) => {
+      const allTypes = [...entry.physical, ...entry.special];
+      expect(allTypes.length, `${variety} should not be empty`).toBeGreaterThan(0);
+      allTypes.forEach((type) => {
         expect(validTypes, `${variety} has unexpected type ${type}`).toContain(type);
       });
     });
+  });
+
+  it('keeps each damage class sorted and free of duplicates', () => {
+    Object.entries(COVERAGE_MOVE_TYPES).forEach(([variety, entry]) => {
+      ([['physical', entry.physical], ['special', entry.special]] as const).forEach(([label, types]) => {
+        expect([...types], `${variety} ${label} should be sorted`).toEqual([...types].sort());
+        expect(new Set(types).size, `${variety} ${label} should be unique`).toBe(types.length);
+      });
+    });
+  });
+});
+
+describe('getAttackerBias', () => {
+  const stats = (attack: number, specialAttack: number) => ({
+    hp: 80, attack, defense: 80, 'special-attack': specialAttack, 'special-defense': 80, speed: 80
+  });
+
+  it('reads a one-sided attacker off its stats', () => {
+    expect(getAttackerBias(stats(50, 95))).toBe('special');
+    expect(getAttackerBias(stats(160, 106))).toBe('physical');
+  });
+
+  it('treats close attacking stats as mixed', () => {
+    // A 10% gap is not enough to rule out one of four moveslots.
+    expect(getAttackerBias(stats(100, 110))).toBe('mixed');
+    expect(getAttackerBias(stats(100, 100))).toBe('mixed');
+  });
+
+  it('falls back to mixed rather than guessing', () => {
+    // Unknown stats should yield the full "can reach" answer, not half of it.
+    expect(getAttackerBias(undefined)).toBe('mixed');
+    expect(getAttackerBias(null)).toBe('mixed');
+    expect(getAttackerBias(stats(0, 0))).toBe('mixed');
+  });
+});
+
+describe('damage class filtering', () => {
+  // Pelipper is the case that motivated the split: it learns Crunch, Iron Head,
+  // X-Scissor and Poison Jab, none of which it can use at 50 Attack.
+  const pelipperStats = {
+    hp: 60, attack: 50, defense: 100, 'special-attack': 95, 'special-defense': 70, speed: 65
+  };
+
+  it('drops types only reachable through the wrong stat', () => {
+    const special = getCoverageMoveTypes('pelipper', pelipperStats);
+
+    expect(special).not.toContain('dark');
+    expect(special).not.toContain('steel');
+    expect(special).not.toContain('poison');
+    expect(special).toContain('ice');
+    expect(special).toContain('water');
+  });
+
+  it('returns both classes when no stats are supplied', () => {
+    // The honest answer for an unknown bias, and the pre-split reading.
+    const either = getCoverageMoveTypes('pelipper');
+
+    expect(either).toContain('dark');
+    expect(either).toContain('ice');
+    expect(either.length).toBeGreaterThan(getCoverageMoveTypes('pelipper', pelipperStats).length);
+  });
+
+  it('keeps both classes for a genuinely mixed attacker', () => {
+    const mixed = { hp: 80, attack: 100, defense: 80, 'special-attack': 105, 'special-defense': 80, speed: 80 };
+    expect(getCoverageMoveTypes('pelipper', mixed)).toEqual(getCoverageMoveTypes('pelipper'));
+  });
+
+  it('narrows the coverage the type chart then expands', () => {
+    // Water is one of Pelipper's special move types and dark is physical-only,
+    // so the chart has to map both for the difference to survive expansion.
+    const chart = { water: ['fire', 'rock'], dark: ['ghost', 'psychic'] };
+    const biased = getMoveCoverage('pelipper', chart, pelipperStats);
+    const either = getMoveCoverage('pelipper', chart);
+
+    expect(biased).toEqual(['fire', 'rock']);
+    expect(either).toEqual(['fire', 'ghost', 'psychic', 'rock']);
   });
 });
 

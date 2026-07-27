@@ -511,8 +511,11 @@ export async function getResistantTypes(options: {
         p.effective_immunities = bestProfile.immunities;
         // Move coverage is a property of the Pokemon rather than its typing, so
         // it is resolved per entry from the variety name the scan already holds.
+        // The learnset belongs to the registered variety, but which half of it
+        // is worth a moveslot depends on the stats it fights with — for a merged
+        // battle form those are not the same Pokemon's numbers.
         p.effective_move_coverages = _pokemonFilters.includeMoveCoverage
-          ? getMoveCoverage(p.pokemon.name, offensiveChart)
+          ? getMoveCoverage(p.pokemon.name, offensiveChart, stats)
           : [];
         p.effective_ineffectives = bestProfile.ineffectives;
         p.effective_coverages = bestProfile.coverages;

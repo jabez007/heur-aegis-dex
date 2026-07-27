@@ -80,26 +80,57 @@ const isCoverageMove = (move) => {
   return !!meta && meta.damageClass !== 'status' && typeof meta.power === 'number' && meta.power >= MIN_POWER;
 };
 
+// Moves that pick their damage class at use time rather than carrying a fixed
+// one. PokeAPI records a single class for them, so trusting it would hide the
+// move from half the Pokemon that can genuinely use it. Counted for both.
+// Listed in full rather than filtered to the current pool, so the list stays
+// correct if a later regulation reintroduces one.
+const ADAPTIVE_MOVES = new Set([
+  'shell-side-arm',
+  'photon-geyser',
+  'tera-blast',
+  'light-that-burns-the-sky'
+]);
+
 const table = {};
 for (const [variety, moves] of varietyMoves) {
-  const types = [...new Set(moves.filter(isCoverageMove).map((m) => moveMeta.get(m).type))].sort();
-  if (types.length > 0) table[variety] = types;
+  const physical = new Set();
+  const special = new Set();
+
+  for (const move of moves.filter(isCoverageMove)) {
+    const { type, damageClass } = moveMeta.get(move);
+    const adaptive = ADAPTIVE_MOVES.has(move);
+    if (adaptive || damageClass === 'physical') physical.add(type);
+    if (adaptive || damageClass === 'special') special.add(type);
+  }
+
+  if (physical.size > 0 || special.size > 0) {
+    table[variety] = { physical: [...physical].sort(), special: [...special].sort() };
+  }
 }
 
-const counts = Object.values(table).map((t) => t.length);
-counts.sort((a, b) => a - b);
-const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
-console.log(`\nentries: ${Object.keys(table).length}`);
-console.log(`coverage types per entry — min ${counts[0]}, median ${counts[Math.floor(counts.length / 2)]}, mean ${mean.toFixed(1)}, max ${counts[counts.length - 1]}`);
+const summarize = (pick) => {
+  const counts = Object.values(table).map((entry) => pick(entry).length).sort((a, b) => a - b);
+  const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
+  return `min ${counts[0]}, median ${counts[Math.floor(counts.length / 2)]}, mean ${mean.toFixed(1)}, max ${counts[counts.length - 1]}`;
+};
+const bothTypes = (entry) => [...new Set([...entry.physical, ...entry.special])];
 
-for (const check of ['garchomp', 'incineroar', 'gholdengo', 'ditto', 'metagross']) {
-  console.log(`  ${check.padEnd(12)} ${(table[check] || []).join(', ') || '(none)'}`);
+console.log(`\nentries: ${Object.keys(table).length}`);
+console.log(`  physical — ${summarize((e) => e.physical)}`);
+console.log(`  special  — ${summarize((e) => e.special)}`);
+console.log(`  either   — ${summarize(bothTypes)}`);
+
+for (const check of ['garchomp', 'incineroar', 'pelipper', 'ditto', 'metagross']) {
+  const entry = table[check];
+  console.log(`  ${check.padEnd(12)} P:[${(entry?.physical || []).join(',')}] S:[${(entry?.special || []).join(',')}]`);
 }
 
 // 5. emit
 const lines = Object.keys(table).sort().map((variety) => {
-  const types = table[variety].map((t) => `'${t}'`).join(', ');
-  return `  '${variety}': [${types}]`;
+  const quoted = (types) => types.map((t) => `'${t}'`).join(', ');
+  const { physical, special } = table[variety];
+  return `  '${variety}': { physical: [${quoted(physical)}], special: [${quoted(special)}] }`;
 });
 writeFileSync('coverage-table.txt', lines.join(',\n') + '\n');
 writeFileSync('coverage-stats.json', JSON.stringify({
