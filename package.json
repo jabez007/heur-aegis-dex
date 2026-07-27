@@ -40,9 +40,11 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "predeploy": "npm run build",
-    "deploy": "push-dir --dir=dist --branch=main --cleanup"
+    "deploy": "push-dir --dir=dist --branch=main --cleanup",
+    "check:browser": "bash scripts/check-browser-bundle.sh"
   },
   "dependencies": {
+    "events": "^3.3.0",
     "lscache": "^1.3.2",
     "pokedex-promise-v2": "^4.2.3"
   },

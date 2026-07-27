@@ -130,7 +130,12 @@ npm run lint
 
 # Automatically fix linting issues
 npm run lint:fix
+
+# Verify the browser bundle does not externalize a Node builtin
+npm run check:browser
 ```
+
+> **Browser polyfills:** `events` is a runtime dependency even though nothing in `src/` imports it. `node-cache`, reached through `pokedex-promise-v2`, extends `EventEmitter` at module scope; Vite externalizes Node builtins for the browser, so without the polyfill the app fails to boot. The unit suite runs in Node where builtins resolve natively and cannot catch this, so `src/browserDeps.test.ts` asserts the packaging invariant and `npm run check:browser` verifies the real bundle.
 
 ## 🛡 Stability and Security
 
