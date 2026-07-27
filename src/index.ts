@@ -34,7 +34,7 @@ export { useNotifications, provideNotifications } from './composables/useNotific
 export type { PartyMember } from './composables/useTeamBuilder'
 export type { Notification } from './composables/useNotifications'
 // The scan itself, so consumers can drive the engine without mounting the app.
-export { getBaseTypes, getDualTypes, getResistantTypes } from './lib/pokedex'
+export { DEFAULT_STATS_FILTERS, getBaseTypes, getDualTypes, getResistantTypes } from './lib/pokedex'
 export type {
   PokemonTypeData,
   DamageRelations,

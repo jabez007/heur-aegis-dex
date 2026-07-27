@@ -8,7 +8,7 @@
 
   **Ability selection changed with it.** The default ability was previously chosen on defensive merit alone, which handed Azumarill Sap Sipper over the ability that doubles its Attack. A stat ability now wins the default.
 
-  **The stat floors see the ability**, which admits Furfrou — 60 Defense doubled by Fur Coat, failing both the defense and total floors before. Azumarill, Medicham and Diggersby now clear the attack floor they used to fail, but sit at 470–479 against the default 480 total, so surfacing them is a deliberate choice about that floor rather than an accident of modelling.
+  **The stat floors see the ability**, so Azumarill is measured at the 100 Attack it swings with rather than the 50 it is printed with, and Furfrou at the 120 Defense Fur Coat gives it. Together with the recalibrated floors below, that brings Azumarill, Medicham, Diggersby and Furfrou back into a default scan.
 
   Caveat recorded in the table: Hustle's ×1.5 Attack comes with an 80% physical accuracy penalty that a stat line cannot express, so Hustle Pokemon read slightly stronger here than they play.
 
@@ -20,12 +20,22 @@
 
 - **Pokemon that register as one form and fight as another are rated on the form they fight in.** `src/lib/battleForms.ts` records which battle-only forms qualify, and just as importantly which do not — each entry carries its reasoning, so a species missing from the table can be told apart from one that was considered and rejected. A form is merged only when its trigger is an ability the registered Pokemon actually has, the typing is unchanged, and the Pokemon spends the battle in it. Today that is Palafin alone: Zero to Hero converts on the first switch-out and never reverts, a 193-point swing that took Palafin from below the default stat floor to a 650 base stat total. Aegislash, Castform, Greninja, Mimikyu and Morpeko are recorded as deliberately not merged. Affected cards disclose the form the numbers came from.
 
+### Changed
+
+- **The stat floors are an either/or, and the defaults are recalibrated.** `minimumAttacks` and `minimumDefenses` were applied together, so a Pokemon had to clear both — which asked it to be unremarkable at nothing rather than good at something. That excluded Toxapex for its 63 Attack and Excadrill for its 62 bulk: two Pokemon that are strong *because* they specialise. A Pokemon is now kept when it reaches **either** floor. The total remains a separate requirement.
+
+  Defaults move from `480 / 80 / 80` to **`440 / 80 / 80`**. The two stat numbers are unchanged; what changed is that they no longer have to be satisfied simultaneously. The total drops because the old figure cut Pelipper (440) and Torkoal (470) — weather setters are low-total by design, which is what makes them affordable — along with Azumarill and Medicham at 470.
+
+  Measured against Regulation M-B: the old defaults kept 126 of 266 breedable, non-Mega legal varieties; the new ones keep 231. Grimmsnarl, Sneasler, Talonflame, Farigiraf, Basculegion, Whimsicott, Skarmory, Forretress and Klefki all return. These floors exist to skip Pokemon that cannot hold a slot, not to rank the ones that can — scoring does the ranking — and the regulation filter now does the bulk pruning they were originally sized for. Loosening them costs no extra requests, because the detail prefetch runs ahead of every filter.
+
+  `DEFAULT_STATS_FILTERS` is exported, and `getResistantTypes` now derives its defaults from it. Previously an omitted `statsFilters` produced `500 / 90 / 80` from one default while a partial object was merged against a different `480 / 80 / 80` — two disagreeing sources for the same setting.
+
 ### Fixed
 
 - **Battle-only forms no longer appear as their own Pokemon.** Gigantamax, Mimikyu-Busted, Eiscue-Noice and the like are states a Pokemon enters mid-battle, so listing them beside their base form invented team slots. Detected via `is_battle_only` on PokeAPI's form resource rather than by name suffix. Megas are battle-only by the same flag but remain a real pre-battle choice, so `allowMegas` still governs them — via `is_mega` now, replacing the `-mega` substring check. Where dropping a form would have understated the Pokemon, the battle-form rating above covers it.
 - **Form controls look the same everywhere.** `.gba-label` / `.gba-select` / `.gba-input` were defined in `App.vue`'s scoped style block, so the Team Workbench's Format select rendered unstyled. They now live in `assets/scss/main.scss`.
 
-The scan cache key moved to `v9`, so stored results containing battle-only forms — or rating Palafin as its registered form — are discarded rather than served.
+The scan cache key moved to `v10`, so stored results containing battle-only forms — or rating Palafin as its registered form — are discarded rather than served.
 
 ## 0.3.0
 

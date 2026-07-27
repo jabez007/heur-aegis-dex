@@ -27,6 +27,30 @@ const BASESCORE = DEFAULT_BASE_SCORE;
 const POKEMON_DETAIL_CONCURRENCY = 12;
 
 /**
+ * Stat floors a Pokemon must clear to appear in a scan.
+ *
+ * These exist to skip Pokemon that cannot hold a slot, not to rank the ones
+ * that can — scoring does the ranking. They were calibrated when a scan swept
+ * the whole national Pokedex; the regulation filter now cuts that to a few
+ * hundred varieties before these ever apply, and loosening them costs nothing
+ * in requests because the detail prefetch runs ahead of every filter.
+ *
+ * `minimumAttacks` and `minimumDefenses` are an **either/or**. Requiring both
+ * asked a Pokemon to be unremarkable at nothing, which is the opposite of what
+ * wins games: it excluded Toxapex for its 63 Attack and Excadrill for its 62
+ * bulk, two Pokemon that are strong precisely because they specialise. A
+ * Pokemon now earns its slot by being good at *something*.
+ *
+ * Measured against the Regulation M-B roster on 2026-07-27, these keep 231 of
+ * the 266 breedable, non-Mega legal varieties.
+ */
+export const DEFAULT_STATS_FILTERS = {
+  minimumStatsTotal: 440,
+  minimumAttacks: 80,
+  minimumDefenses: 80
+} as const;
+
+/**
  * Returns every unordered pair drawn from the supplied items.
  *
  * Replaces lodash.combinations, which pulled all of lodash into the browser
@@ -394,6 +418,10 @@ export async function getResistantTypes(options: {
      */
     regulation?: string | null;
   };
+  /**
+   * Stat floors. `minimumAttacks` and `minimumDefenses` are an *either/or*:
+   * a Pokemon is kept when it reaches one of them. See DEFAULT_STATS_FILTERS.
+   */
   statsFilters?: {
     minimumStatsTotal?: number;
     minimumAttacks?: number;
@@ -404,12 +432,12 @@ export async function getResistantTypes(options: {
     baseScore = BASESCORE,
     typeFilters = { maxDamageFromScore: true, allowQuadrupleDamage: true, limitQuadrupleDamage: true },
     pokemonFilters = { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
-    statsFilters = { minimumStatsTotal: 500, minimumAttacks: 90, minimumDefenses: 80 }
+    statsFilters
   } = options;
 
   const _typeFilters = { maxDamageFromScore: true, allowQuadrupleDamage: true, limitQuadrupleDamage: true, ...typeFilters };
   const _pokemonFilters = { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, includeMoveCoverage: true, regulation: null, ...pokemonFilters };
-  const _statsFilters = { minimumStatsTotal: 480, minimumAttacks: 80, minimumDefenses: 80, ...statsFilters };
+  const _statsFilters = { ...DEFAULT_STATS_FILTERS, ...statsFilters };
 
   // An unknown regulation id must not silently degrade into an unfiltered scan,
   // which would quietly hand back an illegal roster.
@@ -496,8 +524,12 @@ export async function getResistantTypes(options: {
         p.stats = stats;
         p.stat_ability_name = getStatAbilityName(abilityNames);
 
-        if (stats.attack < _statsFilters.minimumAttacks && stats['special-attack'] < _statsFilters.minimumAttacks) return null;
-        if ((stats.defense + stats['special-defense']) / 2 < _statsFilters.minimumDefenses) return null;
+        // Either/or, not both. A Pokemon holds a slot by being good at
+        // something; demanding it clear both floors selected for Pokemon that
+        // are unremarkable at nothing, which is not how teams are built.
+        const bestAttack = Math.max(stats.attack, stats['special-attack']);
+        const averageDefenses = (stats.defense + stats['special-defense']) / 2;
+        if (bestAttack < _statsFilters.minimumAttacks && averageDefenses < _statsFilters.minimumDefenses) return null;
 
         const statsTotal = totalStats(stats);
         p.stats_total = statsTotal;

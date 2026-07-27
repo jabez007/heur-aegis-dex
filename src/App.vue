@@ -135,6 +135,10 @@
                 @change="fetchTypesImmediate"
               >
             </label>
+            <p class="filter-hint">
+              Attacks and Defenses are either/or — a Pokemon is kept when it reaches
+              one of them, so specialists count.
+            </p>
           </div>
         </section>
 
@@ -201,7 +205,7 @@
 <script setup lang="ts">
 import { computed, ref, onBeforeUnmount, onMounted } from 'vue';
 import lscache from 'lscache';
-import { REGULATIONS, getActiveRegulation, getResistantTypes } from './lib/pokedex';
+import { DEFAULT_STATS_FILTERS, REGULATIONS, getActiveRegulation, getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
 import GbaNotification from './components/GbaNotification.vue';
 import { useNotifications } from './composables/useNotifications';
@@ -216,9 +220,9 @@ const inPokedex = ref('national');
 const activeRegulationId = getActiveRegulation()?.id ?? '';
 const regulation = ref<string>(activeRegulationId);
 const selectedRegulation = computed(() => REGULATIONS.find(reg => reg.id === regulation.value));
-const minStatsTotal = ref(480);
-const minAttacks = ref(80);
-const minDefenses = ref(80);
+const minStatsTotal = ref(DEFAULT_STATS_FILTERS.minimumStatsTotal);
+const minAttacks = ref(DEFAULT_STATS_FILTERS.minimumAttacks);
+const minDefenses = ref(DEFAULT_STATS_FILTERS.minimumDefenses);
 const allowMegas = ref(false);
 const includeAbilityImmunities = ref(true);
 const includeMoveCoverage = ref(true);
@@ -258,7 +262,7 @@ const fetchTypes = () => {
   // Every filter that changes the result must appear in the key, or switching it
   // serves a cached scan from different settings. The version prefix is bumped
   // whenever the stored shape changes.
-  const key = `heur_aegis_dex_v9_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
+  const key = `heur_aegis_dex_v10_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
 
   const cached = lscache.get(key);
   if (cached) {
@@ -396,6 +400,13 @@ onBeforeUnmount(() => {
 .stat-controls .gba-input {
   width: 100%;
   box-sizing: border-box;
+}
+
+.filter-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.75;
 }
 
 .stat-controls .checkbox-label {
