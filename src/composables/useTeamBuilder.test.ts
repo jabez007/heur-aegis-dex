@@ -192,6 +192,83 @@ describe('useTeamBuilder', () => {
     expect(builder.bringIndices.value).toHaveLength(3);
   });
 
+  it('cycles through the roster distinct lines and wraps', () => {
+    fillRoster(addPokemon, 6);
+
+    const lines = builder.bringLines.value;
+    expect(lines.length).toBe(builder.rosterEvaluation.value.targetLines);
+    expect(builder.currentLineIndex.value).toBe(0);
+
+    builder.cycleBringLine(1);
+    expect(builder.currentLineIndex.value).toBe(1);
+    expect(builder.bringIndices.value).toHaveLength(4);
+
+    // Wrapping forward from the last line lands back on the best one, which is
+    // the suggestion rather than a manual pick of the same indices.
+    builder.cycleBringLine(lines.length - 1);
+    expect(builder.currentLineIndex.value).toBe(0);
+    expect(builder.isSuggestedBring.value).toBe(true);
+
+    builder.cycleBringLine(-1);
+    expect(builder.currentLineIndex.value).toBe(lines.length - 1);
+  });
+
+  it('steps onto the best line from a bring that is not one', () => {
+    fillRoster(addPokemon, 6);
+
+    // Move the bring to a specific set, one member at a time so the format's
+    // size cap is never exceeded mid-way.
+    const setBring = (target: number[]) => {
+      [...builder.bringIndices.value]
+        .filter((index) => !target.includes(index))
+        .forEach(builder.toggleBring);
+      target
+        .filter((index) => !builder.bringIndices.value.includes(index))
+        .forEach(builder.toggleBring);
+    };
+
+    const isLine = (indices: number[]) => builder.bringLines.value.some((line) =>
+      line.indices.length === indices.length && line.indices.every((i) => indices.includes(i))
+    );
+    const offLine = builder.rosterEvaluation.value.bringOptions
+      .map((option) => option.indices)
+      .find((indices) => !isLine(indices));
+
+    // With six registered there are fifteen bring-fours and only three lines, so
+    // this always exists; asserted rather than assumed.
+    expect(offLine).toBeDefined();
+    setBring(offLine!);
+    expect(builder.currentLineIndex.value).toBe(-1);
+
+    builder.cycleBringLine(1);
+    expect(builder.currentLineIndex.value).toBe(0);
+
+    setBring(offLine!);
+    builder.cycleBringLine(-1);
+    expect(builder.currentLineIndex.value).toBe(builder.bringLines.value.length - 1);
+  });
+
+  it('scores the bring on the field, and every line', () => {
+    fillRoster(addPokemon, 6);
+
+    expect(builder.currentBringScore.value).toBe(builder.rosterEvaluation.value.best!.score);
+
+    builder.cycleBringLine(1);
+    expect(builder.currentBringScore.value).toBe(builder.bringLines.value[1].score);
+    // Line 1 is the best by construction, so nothing behind it can beat it.
+    expect(builder.currentBringScore.value).toBeLessThanOrEqual(
+      builder.rosterEvaluation.value.best!.score
+    );
+  });
+
+  it('has nothing to cycle before a bring can be fielded', () => {
+    fillRoster(addPokemon, 3);
+
+    expect(builder.bringLines.value).toEqual([]);
+    expect(builder.currentLineIndex.value).toBe(-1);
+    expect(() => builder.cycleBringLine(1)).not.toThrow();
+  });
+
   it('reports whether a species is already registered', () => {
     expect(builder.hasSpecies('charizard')).toBe(false);
     addPokemon(pokemon('charizard'));

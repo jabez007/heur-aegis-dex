@@ -95,6 +95,60 @@ export function useTeamBuilder() {
   const isSuggestedBring = computed(() => manualBringIndices.value === null);
   const broughtTeam = computed(() => bringIndices.value.map((index) => roster.value[index]).filter(Boolean));
 
+  /**
+   * The brings worth stepping through: the roster's meaningfully different teams.
+   *
+   * Deliberately the distinct lines rather than every legal subset. A roster of
+   * six offers fifteen bring-fours, and the top of that list is the same team
+   * with one Pokemon swapped over and over — stepping through it would mostly
+   * show the same four. `selectDistinctLines` already reduces that to the brings
+   * differing by at least two members, which is the same set the "lines" readout
+   * counts, so cycling shows exactly what the score is built from.
+   */
+  const bringLines = computed(() => rosterEvaluation.value.lines);
+
+  /** Which line is on the field, or -1 for a pick that is not one of them. */
+  const currentLineIndex = computed(() => {
+    const current = bringIndices.value;
+    if (current.length === 0) return -1;
+    return bringLines.value.findIndex((line) =>
+      line.indices.length === current.length &&
+      line.indices.every((index) => current.includes(index))
+    );
+  });
+
+  /** Score of the bring on the field, or null when it is not a scored line. */
+  const currentBringScore = computed(() => {
+    const current = bringIndices.value;
+    const option = rosterEvaluation.value.bringOptions.find((bring) =>
+      bring.indices.length === current.length &&
+      bring.indices.every((index) => current.includes(index))
+    );
+    return option ? option.score : null;
+  });
+
+  /**
+   * Steps to another line, wrapping in both directions.
+   *
+   * A hand-picked bring that is not a line counts as before the first one, so
+   * stepping forward from it lands on the best line rather than nowhere.
+   *
+   * @param step How many lines to move, negative to go back.
+   */
+  const cycleBringLine = (step: number) => {
+    const lines = bringLines.value;
+    if (lines.length === 0) return;
+
+    const from = currentLineIndex.value;
+    const next = from === -1
+      ? (step > 0 ? 0 : lines.length - 1)
+      : (from + step + lines.length) % lines.length;
+
+    // Line 0 is the best bring, which is what following the suggestion means, so
+    // landing there clears the manual pick rather than pinning the same indices.
+    manualBringIndices.value = next === 0 ? null : [...lines[next].indices].sort((a, b) => a - b);
+  };
+
   const isBrought = (index: number) => bringIndices.value.includes(index);
 
   // Analysis describes the brought team, not the whole roster: the other members
@@ -315,6 +369,10 @@ export function useTeamBuilder() {
     addPokemon,
     hasSpecies,
     useSuggestedBring,
+    bringLines,
+    currentLineIndex,
+    currentBringScore,
+    cycleBringLine,
     teamWeaknessSummary,
     teamCoverageSummary,
     teamSpreadSummary,

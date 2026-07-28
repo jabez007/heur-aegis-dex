@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- **The workbench steps through the brings it scores you on.** A bring bar under the roster names the team on the field, its score out of 100, and which line it is — with `‹` / `›` to cycle. `useTeamBuilder` gains `bringLines`, `currentLineIndex`, `currentBringScore` and `cycleBringLine`.
+
+  Cycles the **distinct lines**, not all fifteen bring-fours. The top of that fifteen is the same team with one Pokémon swapped over and over, so stepping through it would mostly show the same four; `selectDistinctLines` already reduces it to brings differing by at least two members. That is also the set the "lines" readout counts, so cycling now shows exactly what the roster score is built from.
+
+  Wraps in both directions, and landing on line 1 clears the manual pick rather than pinning the same indices — line 1 *is* the suggestion. A hand-picked bring that matches no line reads as "Your pick" and steps onto the best line from either direction. Per-slot BRINGING/BENCH toggles are unchanged.
+
+### Changed
+
+- **The two roster numbers say what they are.** They were rendered as bare figures — `72/100` and `2/3 lines` — with nothing to say what either measured. Now labelled "roster 72/100" and "2 of 3 lines hold up", each carrying a tooltip explaining the split behind it: six parts the best team you can bring against four parts the strength of the lines behind it, and what makes two brings count as different lines.
+
 ### Fixed
 
 - **A generated roster no longer spends a slot on a type combination it already has.** Reported: seeding Goodra-Hisui and clicking Fill Roster added Archaludon, also Steel/Dragon.

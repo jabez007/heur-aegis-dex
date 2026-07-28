@@ -18,9 +18,14 @@ const {
   maxRosterSize,
   bringSize,
   bringIndices,
+  broughtTeam,
   isBrought,
   isSuggestedBring,
   rosterEvaluation,
+  bringLines,
+  currentLineIndex,
+  currentBringScore,
+  cycleBringLine,
   setFormat,
   toggleBring,
   useSuggestedBring,
@@ -39,9 +44,17 @@ const canFieldATeam = computed(() => bringIndices.value.length === bringSize.val
 // Under open team list the opponent picks against all six, so what matters is
 // how many *different* teams the roster can field — not how many subsets exist.
 const linesHint = computed(() =>
-  `Meaningfully different teams of ${bringSize.value} that hold up against your best, ` +
-  `out of the ${rosterEvaluation.value.targetLines} a full roster could offer. ` +
-  'Two brings count separately only when they differ by at least two Pokemon.'
+  `A "line" is a meaningfully different team of ${bringSize.value} — two brings count ` +
+  'separately only when they differ by at least two Pokemon, since swapping one slot ' +
+  `leaves you playing the same game plan. A full roster of ${maxRosterSize.value} can offer ` +
+  `${rosterEvaluation.value.targetLines}. This counts how many of yours score within 5 points of your best.`
+);
+
+const scoreHint = computed(() =>
+  'How good this roster is, out of 100. Six parts the best team you can bring, four parts ' +
+  `how strong the other lines are behind it — so a roster with one good team and ${rosterEvaluation.value.targetLines - 1} weak ` +
+  'ones scores below its own best bring. Under open team list the opponent sees all ' +
+  `${maxRosterSize.value} and picks against them, so having a fallback matters.`
 );
 
 const ROLE_LABELS: Record<string, string> = {
@@ -96,23 +109,61 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
     <p class="roster-status">
       Roster {{ roster.length }}/{{ maxRosterSize }}
       <span v-if="canFieldATeam">
-        // bringing {{ bringSize }}
-        <template v-if="isSuggestedBring">(suggested)</template>
-        <template v-else>(your pick)</template>
-        // {{ Math.round(rosterEvaluation.score) }}/100
-        // <span :title="linesHint">{{ rosterEvaluation.viableLines }}/{{ rosterEvaluation.targetLines }} lines</span>
+        // <span :title="scoreHint">roster {{ Math.round(rosterEvaluation.score) }}/100</span>
+        // <span :title="linesHint">{{ rosterEvaluation.viableLines }} of {{ rosterEvaluation.targetLines }} lines hold up</span>
       </span>
       <span v-else>
         // select {{ bringSize }} to bring
       </span>
+    </p>
+
+    <div
+      v-if="canFieldATeam"
+      class="bring-bar"
+    >
+      <button
+        class="gba-btn mini step-btn"
+        :disabled="bringLines.length < 2"
+        aria-label="Previous line"
+        @click="cycleBringLine(-1)"
+      >
+        ‹
+      </button>
+      <p class="bring-label">
+        <template v-if="currentLineIndex >= 0">
+          <strong>Line {{ currentLineIndex + 1 }} of {{ bringLines.length }}</strong>
+          <span
+            v-if="currentLineIndex === 0"
+            class="bring-tag"
+          >best</span>
+        </template>
+        <template v-else>
+          <strong>Your pick</strong>
+        </template>
+        <span class="bring-names">{{ broughtTeam.map((m) => m.name).join(' · ') }}</span>
+        <span
+          v-if="currentBringScore !== null"
+          class="bring-score"
+        >
+          {{ Math.round(currentBringScore) }}/100
+        </span>
+      </p>
+      <button
+        class="gba-btn mini step-btn"
+        :disabled="bringLines.length < 2"
+        aria-label="Next line"
+        @click="cycleBringLine(1)"
+      >
+        ›
+      </button>
       <button
         v-if="!isSuggestedBring"
         class="link-btn"
         @click="useSuggestedBring"
       >
-        Use suggested
+        Best
       </button>
-    </p>
+    </div>
     
     <div class="party-grid">
       <div
@@ -587,8 +638,75 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
 .roster-status {
   font-family: var(--gba-font-body);
   font-size: 0.85rem;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   opacity: 0.9;
+
+  // These carry an explanation nobody can guess from the number alone.
+  span[title] {
+    border-bottom: 1px dotted currentColor;
+    cursor: help;
+  }
+}
+
+.bring-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 6px 8px;
+  border: 2px solid var(--gba-text-dark);
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.step-btn {
+  font-family: var(--gba-font-heading);
+  line-height: 1;
+  padding: 2px 10px;
+  flex: 0 0 auto;
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}
+
+.bring-label {
+  font-family: var(--gba-font-body);
+  font-size: 0.85rem;
+  margin: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bring-names {
+  text-transform: capitalize;
+  opacity: 0.85;
+  overflow-wrap: anywhere;
+}
+
+.bring-score {
+  margin-left: auto;
+  font-family: var(--gba-font-heading);
+  white-space: nowrap;
+}
+
+.bring-tag {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border: 2px solid var(--gba-text-dark);
+  background: var(--gba-accent-cyan);
+  color: var(--gba-text-dark);
+}
+
+@media (max-width: 560px) {
+  .bring-score {
+    margin-left: 0;
+  }
 }
 
 .link-btn {
