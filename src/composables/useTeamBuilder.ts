@@ -362,6 +362,25 @@ export function useTeamBuilder() {
         .map((member) => byName.get(member.name))
         .filter((entry): entry is PokemonEntry => entry !== undefined);
 
+      // Anything the scan cannot resolve would drop out of the seed silently,
+      // and runGeneration replaces roster.value wholesale — so a member this
+      // function promises to keep would be quietly swapped for something the
+      // search preferred. A rescan under a different regulation is enough to
+      // get here. Refuse rather than destroy a registration the user made:
+      // they can remove it deliberately, which is a choice, or rescan.
+      const unresolved = roster.value
+        .filter((member) => !byName.has(member.name))
+        .map((member) => member.name);
+
+      if (unresolved.length > 0) {
+        notify(
+          `Cannot fill: ${unresolved.join(', ')} ${unresolved.length === 1 ? 'is' : 'are'} `
+          + 'not in the current scan. Rescan or remove them first.',
+          "error"
+        );
+        return;
+      }
+
       if (!runGeneration(pool, seed, 'Roster filled')) {
         notify("No compatible partners found for this roster.", "error");
       }

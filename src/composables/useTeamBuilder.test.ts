@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useTeamBuilder } from './useTeamBuilder';
+import { useNotifications } from './useNotifications';
 import type { PokemonEntry } from '../lib/pokemonEntry';
 
 const stats = { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 };
@@ -61,6 +62,7 @@ const fillRoster = (add: (entry: PokemonEntry) => boolean, count: number) => {
 describe('useTeamBuilder', () => {
   const builder = useTeamBuilder();
   const { addPokemon, clearParty, roster, setFormat, teamWeaknessSummary } = builder;
+  const { notifications } = useNotifications();
 
   beforeEach(() => {
     clearParty();
@@ -285,6 +287,45 @@ describe('useTeamBuilder', () => {
     expect(builder.bringLines.value).toEqual([]);
     expect(builder.currentLineIndex.value).toBe(-1);
     expect(() => builder.cycleBringLine(1)).not.toThrow();
+  });
+
+  describe('fillRemainingSlots', () => {
+    const scanOf = (types: string[]) =>
+      types.map((type, index) => pokemon(`mon-${index}`, { typeName: type, types: [type] }));
+
+    it('keeps the registered members and adds to them', () => {
+      fillRoster(addPokemon, 3);
+      const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock']);
+
+      builder.fillRemainingSlots(scan, scan);
+
+      expect(roster.value).toHaveLength(6);
+      expect(roster.value.map((member) => member.name)).toEqual(
+        expect.arrayContaining(['mon-0', 'mon-1', 'mon-2'])
+      );
+    });
+
+    // The seed used to drop anything the scan could not resolve, and
+    // runGeneration replaces roster.value wholesale — so a member this function
+    // documents as kept was quietly swapped for whatever the search preferred.
+    it('refuses rather than dropping a member the scan no longer holds', () => {
+      fillRoster(addPokemon, 3);
+      const before = roster.value.map((member) => member.name);
+
+      // A rescan under a different regulation is enough to lose mon-0. The rest
+      // of the scan is wide enough to fill a roster of six without it, so the
+      // unguarded path really does overwrite mon-0 rather than merely failing.
+      const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark'])
+        .filter((entry) => entry.name !== 'mon-0');
+
+      builder.fillRemainingSlots(scan, scan);
+
+      expect(roster.value.map((member) => member.name)).toEqual(before);
+      expect(notifications.value[notifications.value.length - 1]).toMatchObject({
+        type: 'error',
+        message: expect.stringContaining('mon-0')
+      });
+    });
   });
 
   it('reports whether a species is already registered', () => {

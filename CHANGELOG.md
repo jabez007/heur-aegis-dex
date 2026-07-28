@@ -313,6 +313,10 @@
 
   Also routes `coverageAnalysis` through `toRosterMember` instead of spreading the `PartyMember`. The analysis reads snake\_case, so a spread supplies nothing for any field whose two names differ; that asymmetry is how the field went missing while every neighbouring one worked.
 
+- **Fill Roster no longer silently replaces a member it promised to keep.** `fillRemainingSlots` resolved each registered member against the scan and filtered out anything it could not find, then handed the survivors to a generation that overwrites `roster.value` wholesale. A rescan under a different regulation is enough to lose one — and the member did not merely fail to seed, it was replaced by whatever the search preferred, with a success notification.
+
+  It now refuses, naming the members it cannot resolve. Removing a Pokémon from the roster is a decision the user is entitled to make; it is not a decision the tool should make on their behalf and report as a fill.
+
 - **Four lookups and reductions made total.** None had a reachable trigger in the app today; all four were one edit away from having one, and three sit on the published library surface.
 
   `getBattleFormat` tested membership with `in`, which answers true for everything on `Object.prototype` — `getBattleFormat('constructor')` returned the `Object` constructor typed as a `BattleFormat`. The failure would have surfaced far from the lookup, where `SYNERGY_BONUS_WEIGHTS_BY_FORMAT[format.id]` and `COMPOSITE_BOUNDS[format.id]` read undefined. New exported `isBattleFormatId` guard, used by `setFormat` too. Format ids reach these from persisted settings, so "no caller passes a bad one" was never a property this module could rely on.
