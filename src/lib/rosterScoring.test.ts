@@ -85,6 +85,24 @@ describe('evaluateRoster', () => {
     );
   });
 
+  it('reports a depth that reconstructs the score exactly', () => {
+    // The workbench shows the score as `best x 0.6 + depth x 0.4`. If this field
+    // ever stopped being the number the score was built from, the tooltip would
+    // display arithmetic that does not add up to the figure beside it.
+    const evaluation = evaluateRoster(sixRoster, doubles);
+
+    expect(evaluation.depth).toBeCloseTo(
+      evaluation.lines.reduce((total, line) => total + line.score, 0) / evaluation.targetLines
+    );
+    expect(
+      (ROSTER_WEIGHTS.best * evaluation.best!.score) + (ROSTER_WEIGHTS.depth * evaluation.depth)
+    ).toBeCloseTo(evaluation.score);
+  });
+
+  it('reports zero depth when no bring is possible', () => {
+    expect(evaluateRoster([member('a')], doubles).depth).toBe(0);
+  });
+
   it('opens the line list with the best bring', () => {
     const evaluation = evaluateRoster(sixRoster, doubles);
     expect(evaluation.lines[0]).toBe(evaluation.best);

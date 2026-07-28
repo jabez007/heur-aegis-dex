@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
 import { BATTLE_FORMAT_LIST, type BattleFormatId } from '../lib/battleFormats';
+import { ROSTER_WEIGHTS, VIABLE_LINE_MARGIN } from '../lib/rosterScoring';
 import TypeBadge from './TypeBadge.vue';
 import type { PokemonEntry } from '../lib/pokemonEntry';
 
@@ -43,19 +44,66 @@ const canFieldATeam = computed(() => bringIndices.value.length === bringSize.val
 
 // Under open team list the opponent picks against all six, so what matters is
 // how many *different* teams the roster can field — not how many subsets exist.
-const linesHint = computed(() =>
-  `A "line" is a meaningfully different team of ${bringSize.value} — two brings count ` +
-  'separately only when they differ by at least two Pokemon, since swapping one slot ' +
-  `leaves you playing the same game plan. A full roster of ${maxRosterSize.value} can offer ` +
-  `${rosterEvaluation.value.targetLines}. This counts how many of yours score within 5 points of your best.`
-);
+const linesHint = computed(() => {
+  const { best, lines, targetLines } = rosterEvaluation.value;
+  if (!best) return '';
 
-const scoreHint = computed(() =>
-  'How good this roster is, out of 100. Six parts the best team you can bring, four parts ' +
-  `how strong the other lines are behind it — so a roster with one good team and ${rosterEvaluation.value.targetLines - 1} weak ` +
-  'ones scores below its own best bring. Under open team list the opponent sees all ' +
-  `${maxRosterSize.value} and picks against them, so having a fallback matters.`
-);
+  const rows = lines.map((line, index) => {
+    const behind = best.score - line.score;
+    const note = index === 0
+      ? 'best'
+      : behind <= VIABLE_LINE_MARGIN
+        ? `${behind.toFixed(1)} behind`
+        : `${behind.toFixed(1)} behind — too far to count`;
+    return `  line ${index + 1}   ${line.score.toFixed(1)}   ${note}`;
+  });
+
+  const shortfall = lines.length < targetLines
+    ? [`  ${targetLines - lines.length} more possible from a full roster of ${maxRosterSize.value}`]
+    : [];
+
+  return [
+    ...rows,
+    ...shortfall,
+    '',
+    `A line is a meaningfully different team of ${bringSize.value}. Two brings count separately only `
+    + 'when they differ by at least two Pokemon — swapping a single slot leaves you playing the '
+    + 'same game plan with a worse piece, so it is not a real alternative.',
+    '',
+    `Counted here if it scores within ${VIABLE_LINE_MARGIN} points of your best. The count is a readout only; `
+    + 'the roster score already uses each line\'s actual score, so a weak line is charged in '
+    + 'proportion rather than by this cutoff.'
+  ].join('\n');
+});
+
+// Shows the sum rather than describing it. The prose version said "six parts the
+// best team, four parts the lines behind it", which is accurate and still leaves
+// you unable to work out where your own number came from.
+const scoreHint = computed(() => {
+  const { best, lines, targetLines, depth, score } = rosterEvaluation.value;
+  if (!best) return '';
+
+  const counted = lines.map((line) => line.score.toFixed(1)).join(' + ');
+  const shortfall = targetLines - lines.length;
+
+  return [
+    `${score.toFixed(1)} out of 100`,
+    `  = ${ROSTER_WEIGHTS.best} x ${best.score.toFixed(1)}   your best line`,
+    `  + ${ROSTER_WEIGHTS.depth} x ${depth.toFixed(1)}   the lines behind it`,
+    '',
+    `That ${depth.toFixed(1)} is (${counted}) / ${targetLines}`,
+    shortfall > 0
+      ? `— divided by the ${targetLines} lines a full roster of ${maxRosterSize.value} offers, not by the ${lines.length} you have, `
+        + `so the ${shortfall} you are missing count as zero. Registering more Pokemon raises this.`
+      : `— your best line is in both halves, so it carries `
+        + `${(ROSTER_WEIGHTS.best + (ROSTER_WEIGHTS.depth / targetLines)).toFixed(2)} of the score `
+        + `and the other ${targetLines - 1} carry ${(ROSTER_WEIGHTS.depth / targetLines).toFixed(2)} each.`,
+    '',
+    'The roster can never score above its own best bring: a line weaker than your best '
+    + 'always pulls the total down. Under open team list the opponent sees everything you '
+    + 'registered and picks against it, so a second and third answer are worth real points.'
+  ].join('\n');
+});
 
 const ROLE_LABELS: Record<string, string> = {
   'intimidate': 'Intimidate',

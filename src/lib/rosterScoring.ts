@@ -51,6 +51,15 @@ export interface RosterEvaluation {
   viableLines: number;
   /** How many lines a full roster of this shape could offer. */
   targetLines: number;
+  /**
+   * The depth half of `score`, before its weight is applied: the lines' total
+   * over the number a full roster could offer.
+   *
+   * Returned rather than left for callers to recompute, so the workbench can
+   * show the arithmetic behind the score without keeping a second copy of the
+   * formula that could drift from this one.
+   */
+  depth: number;
   /** Aggregate roster score in 0..100, blending peak and depth. */
   score: number;
   /** How many bring subsets exist at all. Mostly a constant of the shape. */
@@ -271,7 +280,10 @@ export function evaluateRoster(roster: RosterMember[], options: RosterScoringOpt
   const targetLines = countTargetLines(format.maxRosterSize, format.broughtToBattle);
 
   if (subsets.length === 0) {
-    return { bringOptions: [], best: null, lines: [], viableLines: 0, targetLines, score: 0, optionCount: 0 };
+    return {
+      bringOptions: [], best: null, lines: [], viableLines: 0, targetLines,
+      depth: 0, score: 0, optionCount: 0
+    };
   }
 
   const bringOptions: BringOption[] = subsets
@@ -298,6 +310,7 @@ export function evaluateRoster(roster: RosterMember[], options: RosterScoringOpt
     lines,
     viableLines: lines.filter((line) => line.score >= best.score - VIABLE_LINE_MARGIN).length,
     targetLines,
+    depth,
     score: (ROSTER_WEIGHTS.best * best.score) + (ROSTER_WEIGHTS.depth * depth),
     optionCount: bringOptions.length
   };

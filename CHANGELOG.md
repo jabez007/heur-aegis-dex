@@ -12,7 +12,23 @@
 
 ### Changed
 
-- **The two roster numbers say what they are.** They were rendered as bare figures — `72/100` and `2/3 lines` — with nothing to say what either measured. Now labelled "roster 72/100" and "2 of 3 lines hold up", each carrying a tooltip explaining the split behind it: six parts the best team you can bring against four parts the strength of the lines behind it, and what makes two brings count as different lines.
+- **The two roster numbers say what they are, and show their own arithmetic.** They were rendered as bare figures — `72/100` and `2/3 lines` — with nothing to say what either measured. Now labelled "roster 72/100" and "2 of 3 lines hold up".
+
+  The first tooltips described the sums in words: *"six parts the best team you can bring, four parts how strong the other lines are behind it"*. Accurate, and still no help working out where your own number came from. They now show it:
+
+  ```
+  77.2 out of 100
+    = 0.6 x 80.5   your best line
+    + 0.4 x 72.1   the lines behind it
+
+  That 72.1 is (80.5 + 71.2 + 64.8) / 3
+  ```
+
+  followed by why the best line carries 0.73 of the total and the other two 0.13 each — derived from `targetLines`, so singles correctly reads 0.70 and 0.10 across four. A roster short of the maximum instead explains that the divisor is the lines a *full* roster offers, so the missing ones count as zero and registering more raises the score.
+
+  The lines tooltip lists each line with its score and how far behind the best it sits, marking the ones too far back to count.
+
+  `RosterEvaluation` gains `depth` so the workbench can show the arithmetic without keeping a second copy of the formula that could drift from the real one; a test pins that `best x 0.6 + depth x 0.4` reconstructs `score` exactly.
 
 ### Fixed
 
