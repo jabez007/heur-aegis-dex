@@ -150,8 +150,8 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
 // scoreMemberQuality use the range MEMBER_WEIGHTS assumes they do?
 //
 // Computed exactly as scoreMemberQuality computes them, ability multipliers
-// included -- Fur Coat and Multiscale move the bulk term, and a bound measured
-// without them would be too narrow at the top.
+// included -- Fur Coat and Multiscale move the bulk term, Speed Boost moves the
+// speed term, and a bound measured without them would be too narrow at the top.
 {
   const clamp01 = (v) => Math.min(1, Math.max(0, v));
   const terms = { offense: [], bulk: [], speed: [] };
@@ -160,7 +160,7 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
     const s = m.stats;
     terms.offense.push(clamp01((effectiveOffense(s) / STAT_CEILINGS.offense) * a.offense));
     terms.bulk.push(clamp01(((s.hp + s.defense + s['special-defense']) / STAT_CEILINGS.bulk) * a.bulk));
-    terms.speed.push(clamp01(s.speed / STAT_CEILINGS.speed));
+    terms.speed.push(clamp01((s.speed / STAT_CEILINGS.speed) * a.speed));
   });
   process.stdout.write('\nmember-quality stat terms across the legal pool (BEFORE rescaling -- these\nare the numbers OBSERVED_STAT_TERMS is set from):\n');
   const swings = {};

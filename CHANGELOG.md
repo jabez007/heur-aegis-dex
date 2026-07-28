@@ -4,6 +4,18 @@
 
 ### Added
 
+- **Speed Boost and Protean are scored.** An audit of every ability the 208 legal species carry found 182 distinct abilities, of which 30 were modelled and applied. Most of the remainder genuinely do nothing this tool can measure — Keen Eye, Gluttony, Frisk — but four Pokémon were carrying Speed Boost and two Protean with no credit at all.
+
+  Worse than uncredited: **unrecognised abilities lost the default-ability choice on PokeAPI slot order.** `chooseDefaultAbility` scores each profile through `scoreMemberQuality`, so an ability in none of the tables ties with its alternatives and the first one listed wins. Blaziken was being scored with Blaze instead of Speed Boost, Greninja with Torrent instead of Protean. Adding a rule is enough to fix that — Basculegion already resolved to Adaptability for exactly this reason.
+
+  Ranked by member quality across the legal pool: Blaziken 39 → 16, Greninja 55 → 29, Meowscarada 56 → 28, Scolipede 129 → 53, Espathra 162 → 81, Sharpedo 164 → 94.
+
+  `abilityEffects.ts` gains a third quality component, **speed**. Speed Boost is sized 1.4 rather than the 1.5 a second turn implies, because turn one collects nothing and its carriers are frail enough that turn four is not a plan. It lives here rather than in `statAbilities` deliberately: that file applies a multiplier only when the Pokémon switches in and the stat is *already* changed, which Speed Boost fails outright. `statAbilities` says what a stat **is**; this says what a stat line is **worth**, which is where an effect that accrues belongs.
+
+  Protean and Libero are sized 1.12, **below** Adaptability's 1.15. Recent generations limit the retype to once per switch-in and it is not settled which behaviour Champions uses; the retype also overwrites a defensive typing this tool scores statically, usually costing resistances, which nothing here charges for. Both unknowns point the same way, so the multiplier is set where being wrong is cheap. Libero carries no legal species today and is included anyway, on the same reasoning that keeps Ice Scales in the stat table.
+
+  **Technician stays recorded and unapplied**, and there is a structural reason beyond the standing "no move data" position: `COVERAGE_MOVE_MIN_POWER` is 60 and Technician boosts moves at 60 *or below*. Bullet Punch — the whole reason to run it on Scizor — is 40 BP and sits beneath anything the generated coverage table records, so the condition could not be verified even if it were wanted.
+
 - **The workbench steps through the brings it scores you on.** A bring bar under the roster names the team on the field, its score out of 100, and which line it is — with `‹` / `›` to cycle. `useTeamBuilder` gains `bringLines`, `currentLineIndex`, `currentBringScore` and `cycleBringLine`.
 
   Cycles the **distinct lines**, not all fifteen bring-fours. The top of that fifteen is the same team with one Pokémon swapped over and over, so stepping through it would mostly show the same four; `selectDistinctLines` already reduces it to brings differing by at least two members. That is also the set the "lines" readout counts, so cycling now shows exactly what the roster score is built from.
@@ -41,6 +53,20 @@
   **It found a real defect on its first run.** `supportRole: 12` and `quadrupleWeakness: 15` were carried over from the previous formula, whose terms ran to 44. The rework compressed the base to a roughly 30-point spread, so those adjuncts could swing 27 points against it — enough to rank Arbok above Garchomp. Rescaled to 4 and 5, with `coverage` to 0.75 and `moveCoverage` to 0.2. A structural assertion now pins the invariant: the largest single-Pokemon adjustment must stay under half the observed spread of member quality, measured from the fixture rather than assumed.
 
 ### Changed
+
+- **Both empirical bound tables re-measured for the new abilities.** They are measured on `scoreMemberQuality`'s output, so any ability that moves a term invalidates them.
+
+  `OBSERVED_STAT_TERMS.speed` rises from a max of 0.9467 to **1** — the one bound now set by an ability rather than a stat line, since Speed Boost takes Scolipede's 112 past `STAT_CEILINGS.speed` and `clamp01` catches it. The cost is named rather than absorbed: widening the denominator from 0.8134 to 0.8667 compresses every *other* Pokémon's speed term by about 6%. Correct in direction — the range genuinely got wider — but four Pokémon gaining an ability slightly discounted the speed of the other 204.
+
+  `COMPOSITE_BOUNDS` quality moves to 0.1491–0.5711 (doubles) and 0.1307–0.5790 (singles). Residual composite ratio 1.89:1 doubles / 1.74:1 singles, against 1.87:1 / 1.73:1 before.
+
+  **A rerun rule is now recorded, because the two halves are not alike.** Quality bounds are replaced outright — the closed form makes new numbers strictly more correct. Synergy maxima are **only ever widened**: 200,000 samples out of C(208,4) is a small fraction of the space and the observed maximum wanders between runs, with doubles reading 0.8124, 0.7629 and 0.7770 across three. Taking the latest would narrow the bound on nothing but the luck of the draw, clamping teams a previous run proved reachable.
+
+- **The ability-multiplier invariant measures the effect instead of the number.** It capped the raw multiplier at 1.25, which fails on Speed Boost at 1.4 — and failed for the wrong reason. The components carry different `MEMBER_WEIGHTS` and are rescaled against different observed ranges, so the same multiplier means different amounts depending on where it lands: Speed Boost at 1.4 moves quality *less* in absolute terms than Multiscale at 1.25 does.
+
+  Capping the raw delta is no better. The speed term's entire budget is 0.20, so no speed ability can move quality further than that however absurd its multiplier, and the cap would be vacuous for two components of three. The test now asserts the delta as a share of the component's own budget, across three stat lines spanning the pool — a single fixture cannot catch inflation, because past a certain size the term clamps and the delta stops responding. Verified by inflating each of the three components to 1.95 in turn and confirming the invariant trips on each.
+
+  On that comparable scale the ordering inverts: **Speed Boost is the largest applied ability at 0.29**, above Multiscale's 0.235. Recorded rather than smoothed over — it is the intended ordering, and the raw-multiplier view had been hiding it.
 
 - **The two roster numbers say what they are, and show their own arithmetic.** They were rendered as bare figures — `72/100` and `2/3 lines` — with nothing to say what either measured. Now labelled "roster 72/100" and "2 of 3 lines hold up".
 

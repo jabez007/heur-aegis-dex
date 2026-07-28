@@ -162,6 +162,20 @@ export const MEMBER_WEIGHTS = {
  * of the pool, which is the part anyone is choosing between. These bounds clamp
  * nothing and land within 0.02 of nominal anyway.
  *
+ * ## Why speed tops out at exactly 1
+ *
+ * It is the one bound set by an ability rather than by a stat line. Speed Boost
+ * takes Scolipede's 112 past the ceiling `STAT_CEILINGS.speed` establishes, and
+ * `clamp01` catches it — so the reachable top of the term really is 1, not the
+ * 0.9467 that Dragapult's 142 base speed used to define.
+ *
+ * The cost is worth naming: widening the denominator from 0.8134 to 0.8667
+ * compresses every *other* Pokemon's speed term by about 6%. That is the correct
+ * direction — the range genuinely got wider, so the same base speed is a smaller
+ * share of it — but it means four Pokemon gaining an ability slightly discounted
+ * the speed of the other 204. The effect is small and it is not a side effect
+ * nobody chose.
+ *
  * Measured 2026-07-28 by `npm run measure:composite-bounds` over all 208 legal
  * species of Regulation M-B, computed exactly as `scoreMemberQuality` computes
  * them with ability multipliers applied. Rerun after changing STAT_CEILINGS,
@@ -170,7 +184,7 @@ export const MEMBER_WEIGHTS = {
 export const OBSERVED_STAT_TERMS = {
   offense: { min: 0.32, max: 0.9923 },
   bulk: { min: 0.3125, max: 0.9882 },
-  speed: { min: 0.1333, max: 0.9467 }
+  speed: { min: 0.1333, max: 1 }
 } as const;
 
 /**
@@ -348,6 +362,15 @@ export const COMPOSITE_WEIGHTS = {
  * sits at exactly -1 because `scoreTeamSynergy` already clamps there; teams worse
  * than that are indistinguishable, which costs nothing worth having.
  *
+ * That difference decides what happens on a rerun. The quality bounds are
+ * replaced outright, because the closed form makes the new numbers strictly more
+ * correct than the old ones. **The synergy maxima are only ever widened.** 200,000
+ * samples out of C(208,4) is a small fraction of the space, so its observed
+ * maximum wanders between runs — doubles has read 0.8124, 0.7629 and 0.7770 across
+ * three — and taking the latest would narrow the bound on nothing but the luck of
+ * the draw, clamping teams a previous run proved reachable. Widen on evidence,
+ * never narrow on its absence.
+ *
  * ## What this does and does not fix
  *
  * Percentile bounds would land the ratio on the nominal 1.22:1, and were
@@ -356,7 +379,7 @@ export const COMPOSITE_WEIGHTS = {
  * percentile of 0.635. Clamping there would blind the search at exactly the point
  * it does its work. These bounds clamp nothing.
  *
- * The residual is **1.87:1 in doubles and 1.73:1 in singles**, against a nominal
+ * The residual is **1.89:1 in doubles and 1.74:1 in singles**, against a nominal
  * 1.22:1 — recorded rather than tuned away. Synergy keeps roughly half again the
  * influence the weights claim, because its own -1 clamp compresses the bottom of
  * its range and normalizing cannot undo that. Closing the rest means changing
@@ -364,11 +387,11 @@ export const COMPOSITE_WEIGHTS = {
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.1531, max: 0.5776 },
+    quality: { min: 0.1491, max: 0.5711 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1351, max: 0.5849 },
+    quality: { min: 0.1307, max: 0.579 },
     synergy: { min: -1, max: 0.8078 }
   }
 } as const;
@@ -396,8 +419,11 @@ export interface MemberQualityInput {
 export function scoreMemberQuality(member: MemberQualityInput): number {
   const { stats, normalizedDamageToScore, normalizedDamageFromScore } = member;
 
-  // Multiscale, Unaware and their kin change what a stat line is worth without
-  // changing the stats, so they scale the component they actually affect.
+  // Multiscale, Speed Boost and their kin change what a stat line is worth
+  // without changing the stats, so they scale the component they actually
+  // affect. Applied before the rescale, so an ability cannot push a term past
+  // the reachable ceiling the pool was measured against — which is also what
+  // gives an already-fast Speed Boost carrier less credit than a slow one.
   const ability = getQualityMultipliers(member.abilityName);
 
   // Each term is put on its own reachable range, not on 0..1. Every one of them
@@ -415,7 +441,10 @@ export function scoreMemberQuality(member: MemberQualityInput): number {
     ((stats.hp + stats.defense + stats['special-defense']) / STAT_CEILINGS.bulk) * ability.bulk,
     OBSERVED_STAT_TERMS.bulk
   );
-  const speed = rescale(stats.speed / STAT_CEILINGS.speed, OBSERVED_STAT_TERMS.speed);
+  const speed = rescale(
+    (stats.speed / STAT_CEILINGS.speed) * ability.speed,
+    OBSERVED_STAT_TERMS.speed
+  );
 
   const modulate = (quality: number) => (1 - TYPE_MODULATION) + (TYPE_MODULATION * clamp01(quality));
   const offensiveTyping = modulate(normalizedDamageToScore);

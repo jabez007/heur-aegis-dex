@@ -34,11 +34,25 @@
  * close — the same budget discipline `CANDIDATE_WEIGHTS` documents — and like
  * every other weight here they are reasoned rather than measured.
  *
+ * ## Why speed is scored here rather than in statAbilities
+ *
+ * `statAbilities` applies a multiplier only when the Pokemon switches in and the
+ * stat is *already* changed. Speed Boost fails that bar outright — turn one it is
+ * a Pokemon at its printed Speed, and the ability has done nothing. It passes the
+ * bar this file uses instead, which asks whether the effect lands without setup,
+ * without a moveset assumption and without the opponent cooperating. Staying on
+ * the field is not setup; it is the default.
+ *
+ * The distinction is worth keeping sharp, because the two files answer different
+ * questions. `statAbilities` says what the stat *is*, and a Huge Power Azumarill
+ * really does have 100 Attack from the first turn. This file says what a stat
+ * line is *worth*, which is where an effect that accrues belongs.
+ *
  * Enumerated on 2026-07-27 by walking the Regulation M-B roster's abilities, so
  * the recorded entries are ones a legal Pokemon actually carries.
  */
 
-export type QualityComponent = 'bulk' | 'offense';
+export type QualityComponent = 'bulk' | 'offense' | 'speed';
 
 export interface AbilityQualityRule {
   /** PokeAPI ability name. */
@@ -145,6 +159,45 @@ export const ABILITY_QUALITY_EFFECTS: readonly AbilityQualityRule[] = [
     reason:
       'Raises STAB from 1.5x to 2x. It needs no setup and no specific move beyond one of the Pokemon\'s own types, '
       + 'which every attacker runs — the one offensive ability here that does not assume a moveset.'
+  },
+  {
+    ability: 'protean',
+    component: 'offense',
+    multiplier: 1.12,
+    applied: true,
+    reason:
+      'Retypes the user to the move it is about to use, so an attack that would have been neutral is fired at STAB. '
+      + 'Like Adaptability it assumes no particular move — whatever Greninja clicks is the move that gets boosted — '
+      + 'which is what separates it from Sheer Force and Technician below.\n\n'
+      + 'Sized *below* Adaptability rather than above it, for two reasons. Recent generations restrict the retype to '
+      + 'once per switch-in, turning it from an every-turn multiplier into roughly one free STAB per entry, and it is '
+      + 'not settled which behaviour Champions uses. The retype also overwrites the defensive typing this tool scores '
+      + 'statically, usually costing resistances — a real downside that nothing here charges for. Both unknowns point '
+      + 'the same way, so the multiplier is set where being wrong is cheap.'
+  },
+  {
+    ability: 'libero',
+    component: 'offense',
+    multiplier: 1.12,
+    applied: true,
+    reason:
+      'Identical in effect to Protean; a separate ability only for flavour, and sized identically. No Regulation M-B '
+      + 'species carries it today, but omitting it would be an oversight rather than a decision — the same reasoning '
+      + 'that keeps Ice Scales in the stat-ability table.'
+  },
+  {
+    ability: 'speed-boost',
+    component: 'speed',
+    multiplier: 1.4,
+    applied: true,
+    reason:
+      'Raises Speed a stage at the end of every turn, with no setup, no item and nothing asked of the opponent. By '
+      + 'turn two the holder is at 1.5x and climbing, and Speed is the stat that decides who acts at all.\n\n'
+      + 'Set at 1.4 rather than the 1.5 a second turn would imply, because turn one collects nothing — the boost '
+      + 'lands at end of turn — and the Pokemon carrying it are frail enough that turn four is not a plan. The '
+      + 'already-fast carriers get proportionally less than the slow ones, since the term clamps at its observed '
+      + 'ceiling: Espathra at 105 base is near the top of the range before the ability applies, while Blaziken at 80 '
+      + 'has room to climb. That is the right shape. Speed past the point where you outrun the field buys nothing.'
   },
 
   // Recorded, not applied.
@@ -269,18 +322,16 @@ export function hasAbilityQualityRule(abilityName: string | undefined | null): b
 }
 
 /**
- * Multipliers to apply to each half of member quality.
+ * Multipliers to apply to each component of member quality.
  *
  * @param abilityName Ability selected for battle.
- * @returns Bulk and offense multipliers, both 1 when nothing applies.
+ * @returns Bulk, offense and speed multipliers, each 1 when nothing applies.
  */
 export function getQualityMultipliers(
   abilityName: string | undefined | null
-): { bulk: number; offense: number } {
+): Record<QualityComponent, number> {
+  const neutral: Record<QualityComponent, number> = { bulk: 1, offense: 1, speed: 1 };
   const rule = getAbilityQualityEffect(abilityName);
-  if (!rule) return { bulk: 1, offense: 1 };
-  return {
-    bulk: rule.component === 'bulk' ? rule.multiplier : 1,
-    offense: rule.component === 'offense' ? rule.multiplier : 1
-  };
+  if (!rule) return neutral;
+  return { ...neutral, [rule.component]: rule.multiplier };
 }
