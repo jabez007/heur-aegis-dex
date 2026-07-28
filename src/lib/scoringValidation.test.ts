@@ -29,8 +29,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { SCORING_FIXTURE_POKEMON } from './scoring.fixture';
+import { SCORING_FIXTURE_POKEMON, SCORING_FIXTURE_RAW_SCORES } from './scoring.fixture';
 import { CANDIDATE_WEIGHTS, candidatePriority } from './rosterGeneration';
+import {
+  DEFAULT_BASE_SCORE, normalizeDamageFromScore, normalizeDamageToScore
+} from './pokedexScoring';
 import { scoreMemberQuality } from './teamScoring';
 import { evaluateRoster, type RosterMember } from './rosterScoring';
 import { BATTLE_FORMATS } from './battleFormats';
@@ -143,6 +146,65 @@ describe('scoring validation — member ranking', () => {
     expect(worstThreat).toBeGreaterThan(bestFiller);
   });
 
+  it('ranks defensive walls above bulky Pokemon with ordinary typing', () => {
+    // The reported symptom of the compressed typing signal, kept as the case
+    // that has to stay fixed.
+    //
+    // Skarmory and Corviknight resist ten types and are immune to two. Blastoise
+    // and Feraligatr resist four and are immune to none — but carry comparable
+    // raw bulk, and more offence. Under the old formula-extreme normalization
+    // that twelve-versus-four difference was worth a 3.6% multiplier on one
+    // term, so the water starters won on offence and led both walls.
+    //
+    // This is the assertion the tool exists to get right: resisting most of the
+    // chart is what defensive typing *is*, and it has to outweigh being merely
+    // bulky. If it fails, check pokedexScoring's bounds before touching a weight.
+    const walls = ['skarmory', 'corviknight'];
+    const bulky = ['blastoise', 'feraligatr'];
+
+    const worstWall = Math.min(...walls.map((n) => candidatePriority(mon(n))));
+    const bestBulky = Math.max(...bulky.map((n) => candidatePriority(mon(n))));
+
+    expect(worstWall).toBeGreaterThan(bestBulky);
+  });
+
+  it('does not demote a Pokemon for the weakness its typing already pays for', () => {
+    // Scizor is nine resistances, one immunity and exactly one weakness. That
+    // weakness being 4x Fire was charged three times over: by the defensive
+    // score, by a flat penalty in candidatePriority, and again by team scoring.
+    // The middle one put Scizor below Blastoise, Feraligatr and Klefki despite
+    // beating all three on member quality, and has been removed.
+    //
+    // The assertion is on quality *and* rank together on purpose. If a later
+    // change reintroduces a flat penalty, rank alone could be restored by
+    // inflating something else; requiring the quality ordering to agree with the
+    // final ordering is what makes this a claim about the model rather than a
+    // claim about one number.
+    const scizor = mon('scizor');
+    ['blastoise', 'feraligatr', 'klefki'].forEach((name) => {
+      expect(scoreMemberQuality(scizor)).toBeGreaterThan(scoreMemberQuality(mon(name)));
+      expect(
+        candidatePriority(scizor),
+        `Scizor beats ${name} on member quality but not on final rank`
+      ).toBeGreaterThan(candidatePriority(mon(name)));
+    });
+  });
+
+  it('does not let a support role outrank a real quality gap', () => {
+    // Staraptor has the lowest member quality of these three and led both, on
+    // Intimidate paying +4 while their quadruple weaknesses charged -5 each.
+    // Both weights were sized against a compressed quality scale; neither was
+    // wrong in isolation, and the pair of them inverted a 4-point gap.
+    //
+    // Deliberately not asserting that Staraptor ranks last — it is a genuinely
+    // fast attacker with a real ability, and the claim is only that a role does
+    // not buy a Pokemon past two that beat it on the merits.
+    expect(candidatePriority(mon('swampert')))
+      .toBeGreaterThan(candidatePriority(mon('staraptor')));
+    expect(candidatePriority(mon('scizor')))
+      .toBeGreaterThan(candidatePriority(mon('staraptor')));
+  });
+
   it('does not rank a support Pokemon above a comparable one without a role', () => {
     // Intimidate should be worth something, but not enough to invert a real
     // gap in stats and typing.
@@ -166,9 +228,13 @@ describe('scoring validation — member ranking', () => {
       .map((entry) => scoreMemberQuality(entry) * CANDIDATE_WEIGHTS.quality);
     const spread = Math.max(...qualities) - Math.min(...qualities);
 
-    // The worst case for one Pokemon: it gains a role while another loses a
-    // quadruple weakness.
-    const largestSwing = CANDIDATE_WEIGHTS.supportRole + CANDIDATE_WEIGHTS.quadrupleWeakness;
+    // The worst case for one Pokemon, now that the flat quadruple penalty is
+    // gone: it gains a role and the full breadth of both coverage terms while a
+    // rival has neither. Coverage is bounded by the eighteen types, but the
+    // realistic spread between a broad Pokemon and a narrow one is a few of each.
+    const largestSwing = CANDIDATE_WEIGHTS.supportRole
+      + (4 * CANDIDATE_WEIGHTS.coverage)
+      + (6 * CANDIDATE_WEIGHTS.moveCoverage);
 
     expect(
       largestSwing,
@@ -257,6 +323,37 @@ describe('scoring validation — fixture integrity', () => {
       expect(entry.normalizedDamageFromScore).toBeLessThanOrEqual(1);
       expect(entry.normalizedDamageToScore).toBeGreaterThanOrEqual(0);
       expect(entry.normalizedDamageToScore).toBeLessThanOrEqual(1);
+    });
+  });
+
+  it('was generated under the normalization the tests are running against', () => {
+    // Without this the fixture is blind to the stage most likely to be wrong.
+    //
+    // Every ordinal assertion above reads `normalizedDamageFromScore` straight
+    // out of the fixture, so it exercises the weights but never the bounds those
+    // numbers came from. Reverting `pokedexScoring` to the old formula-extreme
+    // bounds — the miscalibration this whole rework exists to fix — left all
+    // fifteen assertions green, because they were comparing values frozen under
+    // the new bounds against each other.
+    //
+    // Re-normalizing the raw scores restores the link. Change the bounds without
+    // running `npm run gen:scoring-fixture` and this fails, rather than the suite
+    // quietly validating a scale that is no longer in use.
+    Object.entries(SCORING_FIXTURE_POKEMON).forEach(([name, entry]) => {
+      const raw = SCORING_FIXTURE_RAW_SCORES[name];
+      expect(raw, `${name} has no raw scores — regenerate the fixture`).toBeDefined();
+
+      expect(
+        entry.normalizedDamageFromScore,
+        `${name}: fixture holds ${entry.normalizedDamageFromScore}, current bounds give `
+        + `${normalizeDamageFromScore(raw.from, DEFAULT_BASE_SCORE)}. Run npm run gen:scoring-fixture.`
+      ).toBeCloseTo(normalizeDamageFromScore(raw.from, DEFAULT_BASE_SCORE));
+
+      expect(
+        entry.normalizedDamageToScore,
+        `${name}: fixture holds ${entry.normalizedDamageToScore}, current bounds give `
+        + `${normalizeDamageToScore(raw.to, DEFAULT_BASE_SCORE)}. Run npm run gen:scoring-fixture.`
+      ).toBeCloseTo(normalizeDamageToScore(raw.to, DEFAULT_BASE_SCORE));
     });
   });
 

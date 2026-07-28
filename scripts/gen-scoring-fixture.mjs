@@ -44,6 +44,17 @@ const FIXTURE = [
   'whimsicott', 'grimmsnarl', 'klefki', 'skarmory', 'forretress', 'farigiraf',
   'azumarill', 'lucario', 'talonflame',
 
+  // Defensive walls against bulky-but-plain Pokemon. These were the reported
+  // symptom of the compressed typing signal: Blastoise and Feraligatr have bulk
+  // comparable to Skarmory's and four resistances to its twelve, and outranked
+  // it anyway because twelve-versus-four was worth 3.6% of one term.
+  'blastoise', 'feraligatr', 'corviknight',
+
+  // A fast frail attacker with a support ability against two Pokemon that beat
+  // it on quality. Staraptor led both because Intimidate paid +4 while their
+  // quadruple weaknesses charged -5, on a scale where quality spans about 30.
+  'staraptor', 'swampert', 'scizor',
+
   // Deliberately weak: low stats, poor typing, no role
   'pikachu', 'castform', 'watchog', 'emolga', 'dedenne', 'liepard', 'audino',
   'arbok', 'simisear', 'camerupt', 'salazzle', 'scovillain'
@@ -68,6 +79,7 @@ const getJson = async (url) => {
 
 const seen = new Set();
 const entries = [];
+const rawScoreByName = new Map();
 
 for (const name of FIXTURE) {
   if (seen.has(name)) continue;
@@ -117,6 +129,11 @@ for (const name of FIXTURE) {
     normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, BASE),
     normalizedDamageFromScore: normalizeDamageFromScore(profile.damage_from_score, BASE)
   });
+
+  // Kept beside the entries rather than on them: PokemonEntry has no field for
+  // raw scores, and the fixture needs them to check itself against the current
+  // bounds. See SCORING_FIXTURE_RAW_SCORES in the emitted file.
+  rawScoreByName.set(name, { from: profile.damage_from_score, to: profile.damage_to_score });
 }
 
 entries.sort((a, b) => a.name.localeCompare(b.name));
@@ -141,6 +158,10 @@ const format = (value, indent = '') => {
 };
 
 const today = new Date().toISOString().slice(0, 10);
+const rawScores = entries.map((e) => {
+  const raw = rawScoreByName.get(e.name);
+  return `  ${JSON.stringify(e.name)}: { from: ${raw.from}, to: ${raw.to} }`;
+}).join(',\n');
 const body = entries
   .map((e) => `  ${JSON.stringify(e.name)}: ${format(e, '  ')}`)
   .join(',\n');
@@ -165,5 +186,23 @@ import type { PokemonEntry } from './pokemonEntry';
 
 export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
 ${body}
+};
+
+/**
+ * Raw damage scores, before normalization.
+ *
+ * The entries above store *normalized* scores, which means the fixture bakes in
+ * the output of the very stage most likely to be miscalibrated — and cannot see
+ * a regression in it. Reverting \`pokedexScoring\`'s bounds left every ordinal
+ * assertion passing, because they were reading numbers computed under the old
+ * bounds and frozen into this file.
+ *
+ * These raw values are the fixture's link back to the live normalization.
+ * \`scoringValidation.test.ts\` asserts the stored normalized values still match
+ * what the current bounds produce, so changing the bounds without regenerating
+ * fails loudly instead of quietly testing a scale that no longer exists.
+ */
+export const SCORING_FIXTURE_RAW_SCORES: Readonly<Record<string, { from: number; to: number }>> = {
+${rawScores}
 };
 `);

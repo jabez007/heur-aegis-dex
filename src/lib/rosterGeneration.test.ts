@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BATTLE_FORMATS } from './battleFormats';
 import { candidatePriority, generateRosters } from './rosterGeneration';
+import { DEFAULT_BASE_SCORE, normalizeDamageFromScore } from './pokedexScoring';
 import type { PokemonEntry } from './pokemonEntry';
 
 const stats = { hp: 80, attack: 100, defense: 90, 'special-attack': 100, 'special-defense': 90, speed: 80 };
@@ -28,6 +29,16 @@ const mon = (name: string, overrides: Partial<PokemonEntry> = {}): PokemonEntry 
   ...overrides
 });
 
+// A quadruple weakness is charged twice over: `calculateDamageFromScore` adds 3
+// for it, which reaches the score through normalization and the bulk term, and
+// `CANDIDATE_WEIGHTS.quadrupleWeakness` adds a flat penalty beside it. A fixture
+// that sets the weakness lists without moving the defensive score carries only
+// the flat half, so it reads any rebalance between the two as a regression —
+// which is exactly what it did when the empirical bounds landed and the flat
+// penalty halved to match. These keep both halves in step.
+const QUAD_FREE = normalizeDamageFromScore(19, DEFAULT_BASE_SCORE);
+const WITH_QUAD = normalizeDamageFromScore(19 + 3, DEFAULT_BASE_SCORE);
+
 const pool = (count: number) =>
   Array.from({ length: count }, (_, i) => mon(`mon-${i}`, { typeName: `t${i}`, types: [`t${i}`] }));
 
@@ -43,8 +54,10 @@ describe('candidatePriority', () => {
   });
 
   it('punishes a quadruple weakness heavily', () => {
-    const clean = mon('clean');
-    const fragile = mon('fragile', { weaknesses: ['fire'], quadrupleWeaknesses: ['fire'] });
+    const clean = mon('clean', { normalizedDamageFromScore: QUAD_FREE });
+    const fragile = mon('fragile', {
+      weaknesses: ['fire'], quadrupleWeaknesses: ['fire'], normalizedDamageFromScore: WITH_QUAD
+    });
 
     expect(candidatePriority(fragile)).toBeLessThan(candidatePriority(clean));
   });
@@ -161,11 +174,17 @@ describe('candidatePriority', () => {
   it('does not let one role outrank a quadruple weakness', () => {
     // A support role is worth real points, but not enough to promote a Pokemon
     // that folds to a common type.
+    // The invariant is on the *total* charge, not the flat penalty alone: the
+    // defensive score carries 2.52 points of it and the flat penalty 2.5, which
+    // together clear the 4 a role is worth. Asserting it against the flat half
+    // by itself would forbid ever moving charge between the two.
     const fragileSupporter = mon('fragile', {
-      abilityName: 'intimidate', weaknesses: ['fire'], quadrupleWeaknesses: ['fire']
+      abilityName: 'intimidate', weaknesses: ['fire'], quadrupleWeaknesses: ['fire'],
+      normalizedDamageFromScore: WITH_QUAD
     });
 
-    expect(candidatePriority(fragileSupporter)).toBeLessThan(candidatePriority(mon('clean')));
+    expect(candidatePriority(fragileSupporter))
+      .toBeLessThan(candidatePriority(mon('clean', { normalizedDamageFromScore: QUAD_FREE })));
   });
 });
 

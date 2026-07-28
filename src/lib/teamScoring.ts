@@ -64,8 +64,32 @@ export const MEMBER_WEIGHTS = {
  * Typing scales its stat term between (1 - modulation) and 1 rather than
  * multiplying it outright. A poor offensive typing should discount a big
  * attack stat, not erase it.
+ *
+ * ## Why this moved from 0.5 to 0.4
+ *
+ * It did not move because 0.5 was too strong. It moved because 0.5 was never
+ * actually in effect: the scores feeding it were normalized against formula
+ * extremes no real typing approaches, so the defensive signal occupied 17.7% of
+ * its nominal range and this constant halved what survived. The best defensive
+ * typing in the game beat the worst by 2.7 points of final ranking — less than a
+ * quarter of the Speed spread — in a tool built to rank defensive typings.
+ *
+ * `pokedexScoring.ts` now bounds those scores empirically, which widens the
+ * defensive signal to 86% of range. At the old 0.5 that alone would swing 13.4
+ * points and make typing the single largest term in the model, overshooting in
+ * the opposite direction. 0.4 puts the defensive-typing swing at 10.7 points,
+ * against 12.7 for bulk, 12.1 for Speed and 10.6 for offence.
+ *
+ * The intent is that typing is a **peer** of the stats: able to decide between
+ * Pokemon whose stats are close, never able on its own to overturn a large stat
+ * gap. That is what this project's premise asks for — typing central, stats
+ * real. Raising it back toward 0.5 makes typing lead outright, which is now a
+ * knob with a known consequence rather than a setting that quietly did nothing.
+ *
+ * Reasoned against measured term swings, not validated against match outcomes —
+ * the same standing as MEMBER_WEIGHTS.
  */
-export const TYPE_MODULATION = 0.5;
+export const TYPE_MODULATION = 0.4;
 
 /**
  * Positive synergy weights per format. Each set sums to 1, so the bonus is

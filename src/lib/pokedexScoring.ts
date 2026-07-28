@@ -27,20 +27,69 @@ export const calculateDamageToScore = (dr: DamageRelations, baseScore: number): 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 /**
- * Absolute bounds of calculateDamageFromScore for a given baseline.
+ * Baseline the bounds below were measured at. The standard chart has 18 types,
+ * and `baseScore` doubles as the type count, so this is the full chart.
+ */
+const MEASURED_AT_BASE_SCORE = 18;
+
+/**
+ * Reachable extremes of the two scores, measured rather than derived.
  *
- * Every attacking type lands in exactly one bucket, so the worst case is all
- * types dealing quadruple damage (+3 each) and the best is all types being
- * fully resisted (-1 each). Bounds come from the formula rather than from the
- * types present in a scan, so an entry always normalizes to the same value.
+ * These were the model's largest calibration error, and the argument against the
+ * old bounds is already written down in `teamScoring.ts` — under `STAT_CEILINGS`,
+ * which explains that normalizing against a theoretical maximum "would compress
+ * every realistic Pokemon into a narrow band and cost the model most of its
+ * discrimination". The stats got competitive ceilings on that reasoning. These
+ * scores did not, and the identical mistake sat unnoticed twenty lines away.
+ *
+ * The old bounds were formula extremes: 0 to `4 * baseScore` defensively, the
+ * hypothetical typing that takes quadruple damage from all eighteen types. Real
+ * typings occupy a sliver of it. Measured across all 171 combinations the scan
+ * produces, `damage_from_score` ran 13.25 to 26 — **17.7% of its nominal 0..1
+ * range** — and `TYPE_MODULATION` then halved what little was left. The result:
+ * the best defensive typing in the game beat the worst by 2.7 points of final
+ * ranking, against 12.1 points for the Speed gap between Toxapex and Talonflame.
+ * A tool built to rank defensive typings had made typing its smallest term.
+ *
+ * ## How these were measured
+ *
+ * Every one of the 171 type combinations, crossed with each of the eleven
+ * abilities granting a type immunity plus the no-ability case. That is a
+ * superset of what any roster holds, which is the property a bound needs: a
+ * Pokemon cannot fall outside it. Abilities never touch the offensive buckets,
+ * so `to` is the typing range unmodified.
+ *
+ * Including abilities moves the defensive minimum from 13.25 to 11.25 — Steel/
+ * Fairy with Earth Eater. Pinning the bound at the bare-typing 13.25 would have
+ * saturated the entire top of the range to zero, losing exactly the
+ * discrimination this change exists to recover.
+ *
+ * ## Scaling, and its limit
+ *
+ * Expressed as multiples of `baseScore` because both the baseline and the bucket
+ * sums scale with the number of types in play. That scaling is a reasonable
+ * extrapolation, not a measurement: these were observed on the full chart, and a
+ * scan run with fewer types is a different chart whose real extremes nobody has
+ * checked. Values outside the bounds clamp, as they do for `STAT_CEILINGS`.
+ */
+const OBSERVED_DAMAGE_FROM = { min: 11.25, max: 26 } as const;
+const OBSERVED_DAMAGE_TO = { min: 16, max: 27 } as const;
+
+/**
+ * Bounds of calculateDamageFromScore for a given baseline.
+ *
+ * Bounds come from the measurement above rather than from the types present in a
+ * scan, so an entry always normalizes to the same value regardless of which
+ * Pokemon it was scanned alongside. That determinism is why these are constants
+ * rather than a pass over the current results.
  *
  * @param baseScore Baseline score, which is also the number of types in play.
- * @returns The minimum and maximum achievable defensive score.
+ * @returns The minimum and maximum defensive score a real Pokemon reaches.
  */
-export const damageFromScoreBounds = (baseScore: number) => ({
-  min: baseScore - baseScore,
-  max: baseScore + (3 * baseScore)
-});
+export const damageFromScoreBounds = (baseScore: number) => {
+  const scale = baseScore / MEASURED_AT_BASE_SCORE;
+  return { min: OBSERVED_DAMAGE_FROM.min * scale, max: OBSERVED_DAMAGE_FROM.max * scale };
+};
 
 /**
  * Absolute bounds of calculateDamageToScore for a given baseline.
@@ -48,10 +97,10 @@ export const damageFromScoreBounds = (baseScore: number) => ({
  * @param baseScore Baseline score, which is also the number of types in play.
  * @returns The minimum and maximum achievable offensive score.
  */
-export const damageToScoreBounds = (baseScore: number) => ({
-  min: baseScore - baseScore,
-  max: baseScore + baseScore
-});
+export const damageToScoreBounds = (baseScore: number) => {
+  const scale = baseScore / MEASURED_AT_BASE_SCORE;
+  return { min: OBSERVED_DAMAGE_TO.min * scale, max: OBSERVED_DAMAGE_TO.max * scale };
+};
 
 /**
  * Normalizes a defensive score to 0..1 where 0 is the best possible defensive

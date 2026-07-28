@@ -217,15 +217,20 @@ describe('damage score normalization', () => {
     // Same raw score, same baseline, same normalized value — regardless of what
     // else the user has filtered in or out.
     expect(normalizeDamageFromScore(18, 18)).toBeCloseTo(normalizeDamageFromScore(18, 18));
-    expect(normalizeDamageFromScore(18, 18)).toBeCloseTo(0.25);
-    expect(normalizeDamageToScore(18, 18)).toBeCloseTo(0.5);
+    // Bounds are the observed extremes (11.25..26 and 16..27 at baseScore 18),
+    // not the formula's, so a median typing sits near the middle of the range
+    // instead of bunched against one end. See pokedexScoring.ts.
+    expect(normalizeDamageFromScore(18, 18)).toBeCloseTo((18 - 11.25) / (26 - 11.25));
+    expect(normalizeDamageToScore(18, 18)).toBeCloseTo((18 - 16) / (27 - 16));
   });
 
-  it('maps the formula extremes onto 0 and 1', () => {
-    expect(normalizeDamageFromScore(0, 18)).toBeCloseTo(0);
-    expect(normalizeDamageFromScore(72, 18)).toBeCloseTo(1);
-    expect(normalizeDamageToScore(0, 18)).toBeCloseTo(0);
-    expect(normalizeDamageToScore(36, 18)).toBeCloseTo(1);
+  it('maps the observed extremes onto 0 and 1', () => {
+    // The best and worst a real Pokemon reaches, which is what the scale is
+    // anchored to. The formula extremes (0 and 72) are unreachable and clamp.
+    expect(normalizeDamageFromScore(11.25, 18)).toBeCloseTo(0);
+    expect(normalizeDamageFromScore(26, 18)).toBeCloseTo(1);
+    expect(normalizeDamageToScore(16, 18)).toBeCloseTo(0);
+    expect(normalizeDamageToScore(27, 18)).toBeCloseTo(1);
   });
 
   it('clamps out-of-range scores and defaults unknown ones to the midpoint', () => {

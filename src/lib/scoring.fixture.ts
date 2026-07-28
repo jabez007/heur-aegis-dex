@@ -11,7 +11,7 @@
  * Each entry's ability is pinned in the generator rather than derived, so the
  * fixture cannot drift when the ability-selection rule changes.
  *
- * Regenerate with scripts/gen-scoring-fixture.mjs. Generated 2026-07-27.
+ * Regenerate with scripts/gen-scoring-fixture.mjs. Generated 2026-07-28.
  */
 
 import type { PokemonEntry } from './pokemonEntry';
@@ -57,8 +57,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.6944444444444444,
-    "normalizedDamageFromScore": 0.2534722222222222
+    "normalizedDamageToScore": 0.8181818181818182,
+    "normalizedDamageFromScore": 0.4745762711864407
   },
   "arbok": {
     "name": "arbok",
@@ -100,8 +100,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.4722222222222222,
-    "normalizedDamageFromScore": 0.24305555555555555
+    "normalizedDamageToScore": 0.09090909090909091,
+    "normalizedDamageFromScore": 0.423728813559322
   },
   "arcanine": {
     "name": "arcanine",
@@ -144,8 +144,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.5555555555555556,
-    "normalizedDamageFromScore": 0.25
+    "normalizedDamageToScore": 0.36363636363636365,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "audino": {
     "name": "audino",
@@ -188,8 +188,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.4444444444444444,
-    "normalizedDamageFromScore": 0.25
+    "normalizedDamageToScore": 0,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "azumarill": {
     "name": "azumarill",
@@ -232,8 +232,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "rock",
       "steel"
     ],
-    "normalizedDamageToScore": 0.6666666666666666,
-    "normalizedDamageFromScore": 0.2361111111111111
+    "normalizedDamageToScore": 0.7272727272727273,
+    "normalizedDamageFromScore": 0.3898305084745763
   },
   "basculegion-male": {
     "name": "basculegion-male",
@@ -270,8 +270,47 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "psychic",
       "rock"
     ],
-    "normalizedDamageToScore": 0.6388888888888888,
-    "normalizedDamageFromScore": 0.2361111111111111
+    "normalizedDamageToScore": 0.6363636363636364,
+    "normalizedDamageFromScore": 0.3898305084745763
+  },
+  "blastoise": {
+    "name": "blastoise",
+    "speciesName": "blastoise",
+    "typeName": "water",
+    "types": ["water"],
+    "sprite": "",
+    "stats": {"hp":79,"attack":83,"defense":100,"special-attack":85,"special-defense":105,"speed":78},
+    "baseStats": {"hp":79,"attack":83,"defense":100,"special-attack":85,"special-defense":105,"speed":78},
+    "statsTotal": 530,
+    "abilities": [{"name":"torrent","is_hidden":false},{"name":"rain-dish","is_hidden":true}],
+    "abilityName": "torrent",
+    "abilityProfiles": {},
+    "weaknesses": ["grass","electric"],
+    "quadrupleWeaknesses": [],
+    "resistances": ["steel","fire","water","ice"],
+    "immunities": [],
+    "coverages": ["ground","rock","fire"],
+    "moveCoverages": [
+      "bug",
+      "dark",
+      "dragon",
+      "electric",
+      "fairy",
+      "fighting",
+      "fire",
+      "flying",
+      "ghost",
+      "grass",
+      "ground",
+      "ice",
+      "normal",
+      "poison",
+      "psychic",
+      "rock",
+      "steel"
+    ],
+    "normalizedDamageToScore": 0.3181818181818182,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "camerupt": {
     "name": "camerupt",
@@ -313,8 +352,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.7222222222222222,
-    "normalizedDamageFromScore": 0.2569444444444444
+    "normalizedDamageToScore": 0.9090909090909091,
+    "normalizedDamageFromScore": 0.4915254237288136
   },
   "castform": {
     "name": "castform",
@@ -349,8 +388,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.4444444444444444,
-    "normalizedDamageFromScore": 0.25
+    "normalizedDamageToScore": 0,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "charizard": {
     "name": "charizard",
@@ -386,8 +425,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.625,
-    "normalizedDamageFromScore": 0.2569444444444444
+    "normalizedDamageToScore": 0.5909090909090909,
+    "normalizedDamageFromScore": 0.4915254237288136
   },
   "clefable": {
     "name": "clefable",
@@ -428,8 +467,33 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.5416666666666666,
-    "normalizedDamageFromScore": 0.24305555555555555
+    "normalizedDamageToScore": 0.3181818181818182,
+    "normalizedDamageFromScore": 0.423728813559322
+  },
+  "corviknight": {
+    "name": "corviknight",
+    "speciesName": "corviknight",
+    "typeName": "flying/steel",
+    "types": ["flying","steel"],
+    "sprite": "",
+    "stats": {"hp":98,"attack":87,"defense":105,"special-attack":53,"special-defense":85,"speed":67},
+    "baseStats": {"hp":98,"attack":87,"defense":105,"special-attack":53,"special-defense":85,"speed":67},
+    "statsTotal": 495,
+    "abilities": [
+      {"name":"pressure","is_hidden":false},
+      {"name":"unnerve","is_hidden":false},
+      {"name":"mirror-armor","is_hidden":true}
+    ],
+    "abilityName": "pressure",
+    "abilityProfiles": {},
+    "weaknesses": ["electric","fire"],
+    "quadrupleWeaknesses": [],
+    "resistances": ["ground","poison","bug","grass","normal","flying","steel","psychic","dragon","fairy"],
+    "immunities": ["ground","poison"],
+    "coverages": ["fighting","bug","grass","rock","ice","fairy"],
+    "moveCoverages": ["bug","dark","fairy","fighting","ghost","grass","ice","normal","psychic","rock","steel"],
+    "normalizedDamageToScore": 0.6363636363636364,
+    "normalizedDamageFromScore": 0.15254237288135594
   },
   "dedenne": {
     "name": "dedenne",
@@ -453,8 +517,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": ["dragon"],
     "coverages": ["flying","water","fighting","dragon","dark"],
     "moveCoverages": ["dark","dragon","fighting","flying","water"],
-    "normalizedDamageToScore": 0.6388888888888888,
-    "normalizedDamageFromScore": 0.22916666666666666
+    "normalizedDamageToScore": 0.6363636363636364,
+    "normalizedDamageFromScore": 0.3559322033898305
   },
   "dragonite": {
     "name": "dragonite",
@@ -493,8 +557,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.5972222222222222,
-    "normalizedDamageFromScore": 0.28125
+    "normalizedDamageToScore": 0.5,
+    "normalizedDamageFromScore": 0.6101694915254238
   },
   "emolga": {
     "name": "emolga",
@@ -514,8 +578,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": ["ground","electric"],
     "coverages": ["fighting","bug","grass","flying","water"],
     "moveCoverages": ["bug","dark","fairy","fighting","flying","grass","ground","ice","psychic","rock","water"],
-    "normalizedDamageToScore": 0.625,
-    "normalizedDamageFromScore": 0.2152777777777778
+    "normalizedDamageToScore": 0.5909090909090909,
+    "normalizedDamageFromScore": 0.288135593220339
   },
   "farigiraf": {
     "name": "farigiraf",
@@ -539,8 +603,47 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": ["ghost","grass"],
     "coverages": ["fighting","poison"],
     "moveCoverages": ["dark","dragon","fighting","flying","ghost","ground","poison","psychic","rock","water"],
-    "normalizedDamageToScore": 0.5416666666666666,
-    "normalizedDamageFromScore": 0.24305555555555555
+    "normalizedDamageToScore": 0.3181818181818182,
+    "normalizedDamageFromScore": 0.423728813559322
+  },
+  "feraligatr": {
+    "name": "feraligatr",
+    "speciesName": "feraligatr",
+    "typeName": "water",
+    "types": ["water"],
+    "sprite": "",
+    "stats": {"hp":85,"attack":105,"defense":100,"special-attack":79,"special-defense":83,"speed":78},
+    "baseStats": {"hp":85,"attack":105,"defense":100,"special-attack":79,"special-defense":83,"speed":78},
+    "statsTotal": 530,
+    "abilities": [{"name":"torrent","is_hidden":false},{"name":"sheer-force","is_hidden":true}],
+    "abilityName": "torrent",
+    "abilityProfiles": {},
+    "weaknesses": ["grass","electric"],
+    "quadrupleWeaknesses": [],
+    "resistances": ["steel","fire","water","ice"],
+    "immunities": [],
+    "coverages": ["ground","rock","fire"],
+    "moveCoverages": [
+      "bug",
+      "dark",
+      "dragon",
+      "electric",
+      "fairy",
+      "fighting",
+      "fire",
+      "flying",
+      "ghost",
+      "grass",
+      "ground",
+      "ice",
+      "normal",
+      "poison",
+      "psychic",
+      "rock",
+      "steel"
+    ],
+    "normalizedDamageToScore": 0.3181818181818182,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "forretress": {
     "name": "forretress",
@@ -577,8 +680,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.6388888888888888,
-    "normalizedDamageFromScore": 0.21875
+    "normalizedDamageToScore": 0.6363636363636364,
+    "normalizedDamageFromScore": 0.3050847457627119
   },
   "garchomp": {
     "name": "garchomp",
@@ -617,8 +720,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.6666666666666666,
-    "normalizedDamageFromScore": 0.2847222222222222
+    "normalizedDamageToScore": 0.7272727272727273,
+    "normalizedDamageFromScore": 0.6271186440677966
   },
   "glimmora": {
     "name": "glimmora",
@@ -654,8 +757,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.6388888888888888,
-    "normalizedDamageFromScore": 0.2881944444444444
+    "normalizedDamageToScore": 0.6363636363636364,
+    "normalizedDamageFromScore": 0.6440677966101694
   },
   "grimmsnarl": {
     "name": "grimmsnarl",
@@ -697,8 +800,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.6388888888888888,
-    "normalizedDamageFromScore": 0.2465277777777778
+    "normalizedDamageToScore": 0.6363636363636364,
+    "normalizedDamageFromScore": 0.4406779661016949
   },
   "hydreigon": {
     "name": "hydreigon",
@@ -734,8 +837,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "rock",
       "steel"
     ],
-    "normalizedDamageToScore": 0.5694444444444444,
-    "normalizedDamageFromScore": 0.2777777777777778
+    "normalizedDamageToScore": 0.4090909090909091,
+    "normalizedDamageFromScore": 0.5932203389830508
   },
   "incineroar": {
     "name": "incineroar",
@@ -773,8 +876,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.6666666666666666,
-    "normalizedDamageFromScore": 0.25
+    "normalizedDamageToScore": 0.7272727272727273,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "kingambit": {
     "name": "kingambit",
@@ -814,8 +917,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "rock",
       "steel"
     ],
-    "normalizedDamageToScore": 0.6388888888888888,
-    "normalizedDamageFromScore": 0.22916666666666666
+    "normalizedDamageToScore": 0.6363636363636364,
+    "normalizedDamageFromScore": 0.3559322033898305
   },
   "klefki": {
     "name": "klefki",
@@ -835,8 +938,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": ["poison","dragon"],
     "coverages": ["rock","ice","fairy","fighting","dragon","dark"],
     "moveCoverages": ["dark","dragon","fairy","fighting","ghost","grass","ice","poison","psychic","rock"],
-    "normalizedDamageToScore": 0.6388888888888888,
-    "normalizedDamageFromScore": 0.1840277777777778
+    "normalizedDamageToScore": 0.6363636363636364,
+    "normalizedDamageFromScore": 0.13559322033898305
   },
   "liepard": {
     "name": "liepard",
@@ -876,8 +979,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.5138888888888888,
-    "normalizedDamageFromScore": 0.2638888888888889
+    "normalizedDamageToScore": 0.22727272727272727,
+    "normalizedDamageFromScore": 0.5254237288135594
   },
   "lucario": {
     "name": "lucario",
@@ -920,8 +1023,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.6666666666666666,
-    "normalizedDamageFromScore": 0.2152777777777778
+    "normalizedDamageToScore": 0.7272727272727273,
+    "normalizedDamageFromScore": 0.288135593220339
   },
   "metagross": {
     "name": "metagross",
@@ -960,8 +1063,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.625,
-    "normalizedDamageFromScore": 0.22569444444444445
+    "normalizedDamageToScore": 0.5909090909090909,
+    "normalizedDamageFromScore": 0.3389830508474576
   },
   "milotic": {
     "name": "milotic",
@@ -985,8 +1088,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": [],
     "coverages": ["ground","rock","fire"],
     "moveCoverages": ["dark","dragon","fighting","fire","flying","grass","ground","rock"],
-    "normalizedDamageToScore": 0.5416666666666666,
-    "normalizedDamageFromScore": 0.25
+    "normalizedDamageToScore": 0.3181818181818182,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "ninetales": {
     "name": "ninetales",
@@ -1021,8 +1124,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.5555555555555556,
-    "normalizedDamageFromScore": 0.25
+    "normalizedDamageToScore": 0.36363636363636365,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "ninetales-alola": {
     "name": "ninetales-alola",
@@ -1042,8 +1145,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": ["dragon"],
     "coverages": ["flying","ground","grass","dragon","fighting","dark"],
     "moveCoverages": ["dark","dragon","fighting","flying","ghost","grass","ground","poison","psychic"],
-    "normalizedDamageToScore": 0.6388888888888888,
-    "normalizedDamageFromScore": 0.2986111111111111
+    "normalizedDamageToScore": 0.6363636363636364,
+    "normalizedDamageFromScore": 0.6949152542372882
   },
   "pelipper": {
     "name": "pelipper",
@@ -1067,8 +1170,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": ["ground"],
     "coverages": ["fighting","bug","grass","ground","rock","fire"],
     "moveCoverages": ["bug","dragon","fighting","fire","flying","grass","ground","rock"],
-    "normalizedDamageToScore": 0.6666666666666666,
-    "normalizedDamageFromScore": 0.2569444444444444
+    "normalizedDamageToScore": 0.7272727272727273,
+    "normalizedDamageFromScore": 0.4915254237288136
   },
   "pikachu": {
     "name": "pikachu",
@@ -1105,8 +1208,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.4861111111111111,
-    "normalizedDamageFromScore": 0.2361111111111111
+    "normalizedDamageToScore": 0.13636363636363635,
+    "normalizedDamageFromScore": 0.3898305084745763
   },
   "salazzle": {
     "name": "salazzle",
@@ -1126,8 +1229,46 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": [],
     "coverages": ["grass","fairy","bug","steel","ice"],
     "moveCoverages": ["bug","dragon","fairy","grass","ice","steel"],
-    "normalizedDamageToScore": 0.625,
-    "normalizedDamageFromScore": 0.2673611111111111
+    "normalizedDamageToScore": 0.5909090909090909,
+    "normalizedDamageFromScore": 0.5423728813559322
+  },
+  "scizor": {
+    "name": "scizor",
+    "speciesName": "scizor",
+    "typeName": "bug/steel",
+    "types": ["bug","steel"],
+    "sprite": "",
+    "stats": {"hp":70,"attack":130,"defense":100,"special-attack":55,"special-defense":80,"speed":65},
+    "baseStats": {"hp":70,"attack":130,"defense":100,"special-attack":55,"special-defense":80,"speed":65},
+    "statsTotal": 500,
+    "abilities": [
+      {"name":"swarm","is_hidden":false},
+      {"name":"technician","is_hidden":false},
+      {"name":"light-metal","is_hidden":true}
+    ],
+    "abilityName": "swarm",
+    "abilityProfiles": {},
+    "weaknesses": ["fire"],
+    "quadrupleWeaknesses": ["fire"],
+    "resistances": ["poison","grass","normal","bug","steel","psychic","ice","dragon","fairy"],
+    "immunities": ["poison"],
+    "coverages": ["grass","psychic","dark","rock","ice","fairy"],
+    "moveCoverages": [
+      "bug",
+      "dark",
+      "fairy",
+      "fighting",
+      "ghost",
+      "grass",
+      "ice",
+      "normal",
+      "poison",
+      "psychic",
+      "rock",
+      "steel"
+    ],
+    "normalizedDamageToScore": 0.6363636363636364,
+    "normalizedDamageFromScore": 0.3050847457627119
   },
   "scovillain": {
     "name": "scovillain",
@@ -1166,8 +1307,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.6666666666666666,
-    "normalizedDamageFromScore": 0.2604166666666667
+    "normalizedDamageToScore": 0.7272727272727273,
+    "normalizedDamageFromScore": 0.5084745762711864
   },
   "simisear": {
     "name": "simisear",
@@ -1204,8 +1345,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.5555555555555556,
-    "normalizedDamageFromScore": 0.25
+    "normalizedDamageToScore": 0.36363636363636365,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "skarmory": {
     "name": "skarmory",
@@ -1245,8 +1386,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "rock",
       "steel"
     ],
-    "normalizedDamageToScore": 0.6388888888888888,
-    "normalizedDamageFromScore": 0.1875
+    "normalizedDamageToScore": 0.6363636363636364,
+    "normalizedDamageFromScore": 0.15254237288135594
   },
   "skeledirge": {
     "name": "skeledirge",
@@ -1283,8 +1424,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.6666666666666666,
-    "normalizedDamageFromScore": 0.23958333333333334
+    "normalizedDamageToScore": 0.7272727272727273,
+    "normalizedDamageFromScore": 0.4067796610169492
   },
   "sneasler": {
     "name": "sneasler",
@@ -1324,8 +1465,67 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "rock",
       "steel"
     ],
-    "normalizedDamageToScore": 0.6666666666666666,
-    "normalizedDamageFromScore": 0.2743055555555556
+    "normalizedDamageToScore": 0.7272727272727273,
+    "normalizedDamageFromScore": 0.576271186440678
+  },
+  "staraptor": {
+    "name": "staraptor",
+    "speciesName": "staraptor",
+    "typeName": "normal/flying",
+    "types": ["normal","flying"],
+    "sprite": "",
+    "stats": {"hp":85,"attack":120,"defense":70,"special-attack":50,"special-defense":60,"speed":100},
+    "baseStats": {"hp":85,"attack":120,"defense":70,"special-attack":50,"special-defense":60,"speed":100},
+    "statsTotal": 485,
+    "abilities": [{"name":"intimidate","is_hidden":false},{"name":"reckless","is_hidden":true}],
+    "abilityName": "intimidate",
+    "abilityProfiles": {},
+    "weaknesses": ["rock","electric","ice"],
+    "quadrupleWeaknesses": [],
+    "resistances": ["ghost","ground","bug","grass"],
+    "immunities": ["ghost","ground"],
+    "coverages": ["fighting","bug","grass"],
+    "moveCoverages": ["bug","dark","fairy","fighting","ghost","grass","ice","normal","psychic","rock","steel"],
+    "normalizedDamageToScore": 0.36363636363636365,
+    "normalizedDamageFromScore": 0.4576271186440678
+  },
+  "swampert": {
+    "name": "swampert",
+    "speciesName": "swampert",
+    "typeName": "ground/water",
+    "types": ["water","ground"],
+    "sprite": "",
+    "stats": {"hp":100,"attack":110,"defense":90,"special-attack":85,"special-defense":90,"speed":60},
+    "baseStats": {"hp":100,"attack":110,"defense":90,"special-attack":85,"special-defense":90,"speed":60},
+    "statsTotal": 535,
+    "abilities": [{"name":"torrent","is_hidden":false},{"name":"damp","is_hidden":true}],
+    "abilityName": "torrent",
+    "abilityProfiles": {},
+    "weaknesses": ["grass"],
+    "quadrupleWeaknesses": ["grass"],
+    "resistances": ["electric","poison","rock","steel","fire"],
+    "immunities": ["electric"],
+    "coverages": ["poison","rock","steel","fire","electric","ground"],
+    "moveCoverages": [
+      "bug",
+      "dark",
+      "dragon",
+      "electric",
+      "fairy",
+      "fire",
+      "flying",
+      "ghost",
+      "grass",
+      "ground",
+      "ice",
+      "normal",
+      "poison",
+      "psychic",
+      "rock",
+      "steel"
+    ],
+    "normalizedDamageToScore": 0.6818181818181818,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "sylveon": {
     "name": "sylveon",
@@ -1345,8 +1545,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": ["dragon"],
     "coverages": ["fighting","dragon","dark"],
     "moveCoverages": ["bug","dark","dragon","fighting","ghost","grass","ice","poison","psychic","steel"],
-    "normalizedDamageToScore": 0.5416666666666666,
-    "normalizedDamageFromScore": 0.24305555555555555
+    "normalizedDamageToScore": 0.3181818181818182,
+    "normalizedDamageFromScore": 0.423728813559322
   },
   "talonflame": {
     "name": "talonflame",
@@ -1380,8 +1580,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.625,
-    "normalizedDamageFromScore": 0.2569444444444444
+    "normalizedDamageToScore": 0.5909090909090909,
+    "normalizedDamageFromScore": 0.4915254237288136
   },
   "torkoal": {
     "name": "torkoal",
@@ -1421,8 +1621,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.5555555555555556,
-    "normalizedDamageFromScore": 0.25
+    "normalizedDamageToScore": 0.36363636363636365,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "typhlosion-hisui": {
     "name": "typhlosion-hisui",
@@ -1456,8 +1656,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.6666666666666666,
-    "normalizedDamageFromScore": 0.23958333333333334
+    "normalizedDamageToScore": 0.7272727272727273,
+    "normalizedDamageFromScore": 0.4067796610169492
   },
   "tyranitar": {
     "name": "tyranitar",
@@ -1496,8 +1696,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.6527777777777778,
-    "normalizedDamageFromScore": 0.3194444444444444
+    "normalizedDamageToScore": 0.6818181818181818,
+    "normalizedDamageFromScore": 0.7966101694915254
   },
   "venusaur": {
     "name": "venusaur",
@@ -1517,8 +1717,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": [],
     "coverages": ["grass","fairy","ground","rock","water"],
     "moveCoverages": ["electric","fairy","fire","grass","ground","poison","rock","steel","water"],
-    "normalizedDamageToScore": 0.6111111111111112,
-    "normalizedDamageFromScore": 0.2673611111111111
+    "normalizedDamageToScore": 0.5454545454545454,
+    "normalizedDamageFromScore": 0.5423728813559322
   },
   "volcarona": {
     "name": "volcarona",
@@ -1538,8 +1738,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": [],
     "coverages": ["grass","psychic","dark","bug","steel","ice"],
     "moveCoverages": ["bug","dark","fighting","grass","ground","ice","poison","psychic","rock","steel","water"],
-    "normalizedDamageToScore": 0.6527777777777778,
-    "normalizedDamageFromScore": 0.2743055555555556
+    "normalizedDamageToScore": 0.6818181818181818,
+    "normalizedDamageFromScore": 0.576271186440678
   },
   "watchog": {
     "name": "watchog",
@@ -1580,8 +1780,8 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
       "steel",
       "water"
     ],
-    "normalizedDamageToScore": 0.4444444444444444,
-    "normalizedDamageFromScore": 0.25
+    "normalizedDamageToScore": 0,
+    "normalizedDamageFromScore": 0.4576271186440678
   },
   "whimsicott": {
     "name": "whimsicott",
@@ -1605,7 +1805,75 @@ export const SCORING_FIXTURE_POKEMON: Readonly<Record<string, PokemonEntry>> = {
     "immunities": ["dragon"],
     "coverages": ["ground","rock","water","fighting","dragon","dark"],
     "moveCoverages": ["bug","dark","dragon","fighting","ghost","grass","ground","poison","psychic","rock","water"],
-    "normalizedDamageToScore": 0.625,
-    "normalizedDamageFromScore": 0.2916666666666667
+    "normalizedDamageToScore": 0.5909090909090909,
+    "normalizedDamageFromScore": 0.6610169491525424
   }
+};
+
+/**
+ * Raw damage scores, before normalization.
+ *
+ * The entries above store *normalized* scores, which means the fixture bakes in
+ * the output of the very stage most likely to be miscalibrated — and cannot see
+ * a regression in it. Reverting `pokedexScoring`'s bounds left every ordinal
+ * assertion passing, because they were reading numbers computed under the old
+ * bounds and frozen into this file.
+ *
+ * These raw values are the fixture's link back to the live normalization.
+ * `scoringValidation.test.ts` asserts the stored normalized values still match
+ * what the current bounds produce, so changing the bounds without regenerating
+ * fails loudly instead of quietly testing a scale that no longer exists.
+ */
+export const SCORING_FIXTURE_RAW_SCORES: Readonly<Record<string, { from: number; to: number }>> = {
+  "annihilape": { from: 18.25, to: 25 },
+  "arbok": { from: 17.5, to: 17 },
+  "arcanine": { from: 18, to: 20 },
+  "audino": { from: 18, to: 16 },
+  "azumarill": { from: 17, to: 24 },
+  "basculegion-male": { from: 17, to: 23 },
+  "blastoise": { from: 18, to: 19.5 },
+  "camerupt": { from: 18.5, to: 26 },
+  "castform": { from: 18, to: 16 },
+  "charizard": { from: 18.5, to: 22.5 },
+  "clefable": { from: 17.5, to: 19.5 },
+  "corviknight": { from: 13.5, to: 23 },
+  "dedenne": { from: 16.5, to: 23 },
+  "dragonite": { from: 20.25, to: 21.5 },
+  "emolga": { from: 15.5, to: 22.5 },
+  "farigiraf": { from: 17.5, to: 19.5 },
+  "feraligatr": { from: 18, to: 19.5 },
+  "forretress": { from: 15.75, to: 23 },
+  "garchomp": { from: 20.5, to: 24 },
+  "glimmora": { from: 20.75, to: 23 },
+  "grimmsnarl": { from: 17.75, to: 23 },
+  "hydreigon": { from: 20, to: 20.5 },
+  "incineroar": { from: 18, to: 24 },
+  "kingambit": { from: 16.5, to: 23 },
+  "klefki": { from: 13.25, to: 23 },
+  "liepard": { from: 19, to: 18.5 },
+  "lucario": { from: 15.5, to: 24 },
+  "metagross": { from: 16.25, to: 22.5 },
+  "milotic": { from: 18, to: 19.5 },
+  "ninetales": { from: 18, to: 20 },
+  "ninetales-alola": { from: 21.5, to: 23 },
+  "pelipper": { from: 18.5, to: 24 },
+  "pikachu": { from: 17, to: 17.5 },
+  "salazzle": { from: 19.25, to: 22.5 },
+  "scizor": { from: 15.75, to: 23 },
+  "scovillain": { from: 18.75, to: 24 },
+  "simisear": { from: 18, to: 20 },
+  "skarmory": { from: 13.5, to: 23 },
+  "skeledirge": { from: 17.25, to: 24 },
+  "sneasler": { from: 19.75, to: 24 },
+  "staraptor": { from: 18, to: 20 },
+  "swampert": { from: 18, to: 23.5 },
+  "sylveon": { from: 17.5, to: 19.5 },
+  "talonflame": { from: 18.5, to: 22.5 },
+  "torkoal": { from: 18, to: 20 },
+  "typhlosion-hisui": { from: 17.25, to: 24 },
+  "tyranitar": { from: 23, to: 23.5 },
+  "venusaur": { from: 19.25, to: 22 },
+  "volcarona": { from: 19.75, to: 23.5 },
+  "watchog": { from: 18, to: 16 },
+  "whimsicott": { from: 21, to: 22.5 }
 };

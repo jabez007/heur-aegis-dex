@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### Changed
+
+- **Typing scores are normalized against the range real Pokemon occupy, not the formula's extremes.** This was the model's largest calibration error, and the argument against it was already written down in the same file that made it. `STAT_CEILINGS` explains that normalizing against a theoretical maximum "would compress every realistic Pokemon into a narrow band and cost the model most of its discrimination" — the stats got competitive ceilings on that reasoning, and the typing scores never did.
+
+  `damageFromScoreBounds` ran 0 to `4 * baseScore`: the hypothetical typing that takes quadruple damage from all eighteen types. Measured across all 171 combinations the scan produces, real typings occupied **17.7%** of that range, and `TYPE_MODULATION` then halved what survived.
+
+  **What that cost, in final ranking points:** the best defensive typing in the game beat the worst by **2.7 points**. Against 12.7 for the bulk spread between Staraptor and Toxapex, 12.1 for Speed, and 10.6 for offence. A tool built to rank defensive typings had made typing its smallest term — smaller than half of one 4× weakness penalty.
+
+  The bounds are now measured: every type combination crossed with each of the eleven abilities granting a type immunity, plus the no-ability case. That is a superset of any roster, which is the property a bound needs. Including abilities matters — it moves the defensive minimum from 13.25 to 11.25 (Steel/Fairy with Earth Eater), and pinning to the bare-typing figure would have saturated the top of the range to zero, losing exactly the discrimination this recovers. The defensive signal now spans **86%** of its range.
+
+- **`TYPE_MODULATION` 0.5 → 0.4.** Not because 0.5 was too strong, but because it was never in effect. With the widened signal, 0.5 would swing 13.4 points and make typing the single largest term — overshooting in the opposite direction. 0.4 puts defensive typing at 10.7 points, a peer of the stat terms rather than a rounding error or a dominator.
+
+- **BREAKING: `CANDIDATE_WEIGHTS.quadrupleWeakness` is removed**, and `supportRole` falls 4 → 2. Both were sized to compensate for the compression, so leaving them would have converted an under-count into a double count — the exact failure the previous rework of that file was written to remove, reintroduced from the other side.
+
+  The quadruple penalty turned out not to need resizing but deleting: it was the **third** charge for one property. A 4× weakness is paid for by `calculateDamageFromScore`, again by that flat penalty, and again by team scoring through `quadrupleWeakness`, `uncoveredQuadrupleWeakness` and `sharedQuadrupleWeakness`. Same shape as the defect the previous rework removed, where defensive typing was counted three times; it had simply gone unnoticed on a different property.
+
+  It was also the worst-placed of the three. Whether a 4× weakness matters is a question about the *team* — is it covered, is it shared — which team scoring can ask and a solo ranking cannot. And it was the most expensive place to be wrong: this ranking prunes to `DEFAULT_CANDIDATE_LIMIT`, so a Pokemon dropped here is never seen by the scorer that could have judged the risk properly.
+
+  The symptom was Scizor — nine resistances, one immunity, one weakness — ranking below Blastoise, Feraligatr and Klefki despite beating all three on member quality. Its entire deficit was this penalty. Removing it does not make the model blind to 4× weaknesses: Dragonite and Garchomp still carry a materially worse defensive score than Skarmory for exactly that reason.
+
+  `supportRole` was the other half, found by checking the weight's own stated unit. Its comment claimed "about three resistances" — but that unit came from a formula where resistances were explicit terms, and the rework onto `scoreMemberQuality` folded them into the defensive score without restating it. A resistance is now worth 0.42 points, so 4 was buying **9.5** of them. The comment had been wrong for two reworks.
+
+  **The reported symptoms, all fixed.** Skarmory and Corviknight (ten resistances, two immunities) now rank above Blastoise and Feraligatr (four resistances, comparable bulk, more offence), which previously led them because twelve-versus-four was worth a 3.6% multiplier on one term. Swampert and Scizor now rank above Staraptor, which previously led both despite the lowest member quality of the three. Scizor rises from twelfth to eighth, above Klefki, Blastoise and Feraligatr.
+
+  All three orderings are now ordinal assertions in `scoringValidation.test.ts`, and each was verified to fail against the calibration it replaces rather than assumed to. The Scizor assertion deliberately pins member quality *and* final rank together: if a later change reintroduces a flat penalty, rank alone could be restored by inflating something else, and requiring the two orderings to agree is what makes it a claim about the model rather than about one number.
+
+- **The scoring fixture can see the normalization it was generated under.** A structural gap found while verifying the above: the fixture stores *normalized* scores, so it bakes in the output of the stage most likely to be miscalibrated. Reverting the bounds to the old formula extremes left all fifteen ordinal assertions green, because they were comparing values frozen under the new bounds against each other.
+
+  The generator now emits `SCORING_FIXTURE_RAW_SCORES` alongside, and an integrity test re-normalizes them against the live bounds. Changing the bounds without regenerating now fails loudly instead of quietly validating a scale no longer in use.
+
+  Cache key bumped to v15: scan results store normalized scores, so cached scans are on the old scale.
+
 ### Fixed
 
 - **Breedability is asked at the variety level, not only the species level.** The scan's breedable-only rule read `/pokemon-species` — egg groups plus the legendary and mythical flags — which is the right place for almost every Pokemon. It is the wrong place for Floette-Eternal, a variety of a perfectly ordinary Fairy-egg-group species that has never been obtainable in any released game. Nothing upstream rejected it either: the form is neither battle-only nor Mega, the regulation filter is species-keyed and `floette` is on the M-B roster, and its 551 base stat total clears the floors easily.

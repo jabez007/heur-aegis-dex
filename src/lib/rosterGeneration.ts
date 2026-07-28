@@ -96,27 +96,70 @@ export const CANDIDATE_WEIGHTS = {
    * Weather and terrain setters earn a fraction of this — see soloRoleValue.
    * Their payoff depends on teammates that want the field changed, which team
    * scoring evaluates and a solo ranking cannot.
+   *
+   * ## Why this fell from 4 to 2
+   *
+   * The same calibration defect as the removed quadruple penalty, found by checking
+   * this weight's own stated unit. It claimed to be "about three resistances" —
+   * but that unit came from an older formula where resistances were explicit
+   * terms, and the rework onto `scoreMemberQuality` folded them into the
+   * defensive score without anyone restating what a resistance costs. Under the
+   * empirical bounds a resistance is worth 0.42 points, so 4 was buying **9.5**
+   * of them, and the comment describing it had been wrong for two reworks.
+   *
+   * 2 is roughly five resistances. Still more than the stale claim, and
+   * deliberately so: this ranking's job is to keep supporters from being pruned
+   * out of the candidate pool before team synergy — which weighs roles properly —
+   * ever sees them. It is not meant to rank them first on its own.
+   *
+   * The invariant worth holding is that a role never offsets a quadruple
+   * weakness. With the flat quadruple penalty removed, that charge is the 2.52
+   * the defensive score applies, so this has to stay below 2.52 outright rather
+   * than below a combined figure. 2.5 would technically hold it by 0.02, which is
+   * a margin no one should rely on; 2 holds it with room to move either weight
+   * without silently inverting the guarantee.
    */
-  supportRole: 4,
+  supportRole: 2,
   /** Breadth of STAB coverage, which the offensive score measures as strength rather than spread. */
   coverage: 0.75,
   /** Reachable coverage. A tiebreak: it says "can learn", never "would run". */
-  moveCoverage: 0.2,
-  /**
-   * A 4x weakness is a discrete build risk rather than a worse average: one
-   * common attacking type removes the Pokemon from the game.
-   *
-   * The defensive score does charge for it — `calculateDamageFromScore` adds 3
-   * for a quadruple against 1 for a double — but measured through normalization
-   * and the bulk term that difference is worth **0.35 points** on this scale.
-   * So this is not the reinforcement of an existing charge, which an earlier
-   * version of this comment claimed; it is very nearly the whole charge, and
-   * should be read that way when tuning it.
-   *
-   * Kept just above `supportRole`, so a role can never offset one.
-   */
-  quadrupleWeakness: 5
+  moveCoverage: 0.2
 } as const;
+
+// There is deliberately no `quadrupleWeakness` term in CANDIDATE_WEIGHTS.
+//
+// ## Why it was removed
+//
+// It was the third charge for one property. A 4x weakness was paid for by
+// `calculateDamageFromScore`, which adds 3 against 1 for a double; again by a
+// flat penalty in CANDIDATE_WEIGHTS; and again by team scoring, which charges it
+// three separate ways — `quadrupleWeakness`, `uncoveredQuadrupleWeakness` and
+// `sharedQuadrupleWeakness`. That is the same shape as the defect the previous
+// rework of this file removed, where defensive typing was paid for three times
+// over; it simply went unnoticed on a different property.
+//
+// The flat charge was also the worst-placed of the three. Whether a quadruple
+// weakness matters is a question about the *team*: is the weakness covered, is
+// it shared with another member, does anything switch into it. Team scoring can
+// ask all of that. Ranking a Pokemon alone cannot, and the honest charge in
+// isolation is the average-case one the defensive score already applies.
+//
+// It was also the most expensive place to be wrong. This ranking prunes the
+// pool to `DEFAULT_CANDIDATE_LIMIT`, so a Pokemon dropped here is never seen by
+// the scorer that could have judged the risk properly. Wrongly excluding
+// Scizor — nine resistances, one immunity, one weakness — costs more than
+// wrongly including it, because the team scorer can still reject it later and
+// can never recover it.
+//
+// The visible symptom was Scizor ranking below Blastoise, Feraligatr and
+// Klefki despite beating all three on member quality. Its entire deficit was
+// this penalty.
+//
+// Removing it does not make the model blind to quadruple weaknesses: Dragonite
+// and Garchomp still carry a materially worse defensive score than Skarmory for
+// exactly this reason, and a roster that stacks the weakness is still penalised
+// where the stacking can be seen.
+
 
 export interface GenerateRostersOptions {
   /** Eligible Pokemon, already filtered by the scan. */
@@ -191,8 +234,7 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
   return (quality * w.quality) +
     (roleValue * w.supportRole) +
     (entry.coverages.length * w.coverage) +
-    (entry.moveCoverages.length * w.moveCoverage) -
-    (entry.quadrupleWeaknesses.length * w.quadrupleWeakness);
+    (entry.moveCoverages.length * w.moveCoverage);
 }
 
 /**

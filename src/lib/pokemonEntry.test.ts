@@ -59,7 +59,8 @@ describe('toPokemonEntry', () => {
 
     expect(entry.normalizedDamageFromScore).toBeGreaterThanOrEqual(0);
     expect(entry.normalizedDamageFromScore).toBeLessThanOrEqual(1);
-    expect(entry.normalizedDamageToScore).toBeCloseTo(20 / 36);
+    // Anchored to the observed offensive range, 16..27 at baseScore 18.
+    expect(entry.normalizedDamageToScore).toBeCloseTo((20 - 16) / (27 - 16));
   });
 
   it('computes a stats total when the scan did not', () => {
