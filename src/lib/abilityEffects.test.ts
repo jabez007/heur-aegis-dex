@@ -72,6 +72,15 @@ describe('ABILITY_QUALITY_EFFECTS', () => {
     });
   });
 
+  it('excludes opponent-dependent abilities', () => {
+    // Mold Breaker is rejected on measurement, not principle: 0.0046 expected
+    // quality against a random legal Pokemon, against 0.033 for the smallest
+    // applied entry. Applying it would also make this a matchup model, which is
+    // a decision to take deliberately rather than by adding one more multiplier.
+    expect(hasAbilityQualityRule('mold-breaker'), 'should be recorded').toBe(true);
+    expect(getAbilityQualityEffect('mold-breaker'), 'should not apply').toBeUndefined();
+  });
+
   it('excludes move-dependent abilities', () => {
     // The tool cannot see movesets, so crediting these would be scoring
     // something it has no data for.

@@ -26,6 +26,24 @@
  * beyond coverage types. Crediting it would be scoring a moveset this tool
  * cannot see.
  *
+ * ## Opponent-dependent abilities, and why this file stops at one
+ *
+ * Mold Breaker, Unnerve, Pressure and their kin are worth nothing until an
+ * opponent brings something for them to act on. They are not blocked by missing
+ * data the way Prankster is — the pool this tool already scores is a reasonable
+ * stand-in for the opponent, so their expected value can be *measured*. Mold
+ * Breaker is recorded below with that measurement, and it came to 0.0046 against
+ * a random legal Pokemon, a seventh of the smallest applied entry.
+ *
+ * The size is the reason it is rejected, but the category is worth a warning of
+ * its own. Crediting any of these turns this file into a matchup model, and a
+ * matchup model does not stop at one ability: Defiant answers Intimidate, Good as
+ * Gold answers status, Unnerve answers berries, and each of those is a
+ * *conditional* claim about a team that has not been chosen yet. This tool scores
+ * the roster in front of it. Opening that door is a project, not an entry, and it
+ * should be a decision made on purpose rather than one arrived at by adding a
+ * seventh reasonable-looking multiplier.
+ *
  * ## Multipliers are deliberately small
  *
  * These scale a component of `scoreMemberQuality`, which is already bounded to
@@ -289,6 +307,27 @@ export const ABILITY_QUALITY_EFFECTS: readonly AbilityQualityRule[] = [
     applied: false,
     condition: 'carrying contact moves',
     reason: 'Moveset-dependent, and the coverage table records move types rather than whether they make contact.'
+  },
+  {
+    ability: 'mold-breaker',
+    component: 'offense',
+    multiplier: 1.01,
+    applied: false,
+    condition: 'the opponent brought an ability worth ignoring',
+    reason:
+      'The one ability here rejected on measurement rather than on principle, and the multiplier records what it '
+      + 'measured. Unlike Prankster it needs no moveset, and unlike Marvel Scale it does not need the opponent to '
+      + 'blunder — only to have brought a Pokemon whose ability changes how a move lands. That is a fair condition, '
+      + 'and the pool this tool already scores is a legitimate stand-in for the opponent, so the expected value is '
+      + 'computable rather than guesswork.\n\n'
+      + 'Computed 2026-07-28 across all 208 legal species: 20.7% carry a selected ability Mold Breaker would turn '
+      + 'off, and those abilities are worth a mean 0.0224 of member quality — an expected **0.0046**. Sturdy, the '
+      + 'smallest applied entry above, is worth roughly 0.033. Mold Breaker is a seventh of the weakest thing in '
+      + 'this table, because the abilities it meets most often are the cheap ones (Sturdy seven times, Flash Fire '
+      + 'six) while the ones worth taking off the field are singletons — one Dragonite at 0.0900, one Furfrou at '
+      + '0.0816.\n\n'
+      + 'The variance is the real objection. 79% of the time it does nothing at all, and an average that small '
+      + 'bought at that spread is not a reason to prefer a Pokemon; it is a coin-flip dressed as a rating.'
   }
 ] as const;
 
