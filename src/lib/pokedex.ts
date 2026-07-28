@@ -701,8 +701,42 @@ export async function getResistantTypes(options: {
   return (await Promise.all(
     baseAndDualTypes
       .filter((t: PokemonTypeData) => {
+        // `<= baseScore` is not a tuned cutoff. `calculateDamageFromScore`
+        // returns exactly `baseScore` for a typing that takes neutral damage
+        // from every type, so this reads: keep typings that are **net-neutral or
+        // better** defensively, netting resistances against weaknesses. Normal
+        // sits exactly on the line — one weakness to Fighting, one immunity to
+        // Ghost. That it also lands near the median of the observed range is a
+        // consequence of the type chart being roughly balanced, not the reason
+        // for the number, so do not "recalibrate" it against a distribution.
+        //
+        // This is the filter that makes the tool a defensive-typing finder
+        // rather than a general Pokedex, which is what it was built to be.
         const meetsScoreFilter = !_typeFilters.maxDamageFromScore || (t.damage_relations.damage_from_score || 0) <= baseScore;
 
+        // This asks a different question from the score filter above, on purpose,
+        // and the two are meant to disagree.
+        //
+        // `damage_from_score` is a **net** measure: it trades weaknesses against
+        // resistances and reports an average. It therefore cannot express the
+        // thing this rule exists for, which is discrete survivability — whether
+        // the Pokemon can be removed from the field before it acts. A quadruple
+        // weakness already makes a Pokemon straightforward to OHKO with the right
+        // move. Add any second weakness, and in doubles — where two attackers
+        // pick their targets each turn — it is close to guaranteed that it does
+        // not last a turn. No amount of resistance elsewhere buys that back.
+        //
+        // Hence the asymmetry, which is intentional: zero quadruples passes with
+        // any number of doubles, because nothing there is a one-shot. One
+        // quadruple passes only with no doubles at all, because the quadruple is
+        // the OHKO enabler and a second weakness means it cannot be switched in
+        // safely either.
+        //
+        // The consequence is that this rejects typings the score filter rates
+        // well — Poison/Steel at 15.75 against Normal's 18, among seven such.
+        // That is the rule doing its job rather than a bug: `damage_from_score`
+        // is the better answer to "how much does this typing suffer on average",
+        // and it is the wrong answer to "can this be erased in one turn".
         let meetsQuadFilter = true;
         if (_typeFilters.allowQuadrupleDamage) {
           if (_typeFilters.limitQuadrupleDamage) {

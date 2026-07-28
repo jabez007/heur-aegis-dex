@@ -7,6 +7,24 @@ import type { DamageRelations, NamedResource } from './pokedexTypes';
  */
 export const DEFAULT_BASE_SCORE = 18;
 
+/**
+ * Scores how much a typing suffers on defence. Lower is better.
+ *
+ * **`baseScore` is the neutral line, and that is load-bearing.** A typing with
+ * nothing in any bucket — no weaknesses, no resistances, no immunities, taking
+ * 1x from all eighteen types — scores exactly `baseScore`, because every term
+ * below adds or subtracts from it and all of them are zero. So the number is not
+ * an arbitrary baseline: it is "takes neutral damage from everything", and a
+ * score reads as the distance from that in weakness-weights.
+ *
+ * Real typings land on it too, by cancellation rather than by having empty
+ * buckets. Normal is the clean case: one weakness to Fighting against one
+ * immunity to Ghost, netting to exactly `baseScore`. Fourteen of the 171
+ * combinations sit on the line, 42 beat it and 115 fall short.
+ *
+ * This is what makes `maxDamageFromScore` in `getResistantTypes` a principled
+ * filter rather than a tuned threshold — see the comment at that call site.
+ */
 export const calculateDamageFromScore = (dr: DamageRelations, baseScore: number): number => {
   let score = baseScore;
   if (dr.quadruple_damage_from) score += (3 * dr.quadruple_damage_from.length);
