@@ -4,6 +4,26 @@
 
 ### Changed
 
+- **Offence is measured on the stat a Pokemon actually attacks with.** `scoreMemberQuality` computed offence as `attack + special-attack`, which assumes both halves are usable. Azumarill swings the 100 Attack Huge Power built for it and never touches its 60 Special Attack; Blastoise has 83/85, neither notable. Summed, that is 160 against 168 — **Blastoise scored higher on offence**, describing a Pokemon that does not exist.
+
+  `coverageMoves.ts` had already rejected this reasoning one layer up. Its `getAttackerBias` reads Azumarill's movepool as physical, on the argument that crediting Pelipper with physical coverage it cannot use at 50 Attack is dishonest. That argument stopped at the coverage layer and never reached the term scoring the stats themselves.
+
+  There was a second half: the 300 ceiling on the sum is only approachable by a mixed attacker — the highest sum anywhere in the fixture is 234 — so a one-sided attacker was capped near its own total however elite its real attacking stat, because half the numerator was a stat it never used.
+
+  `effectiveOffense` now takes the primary attacking stat plus the weaker one discounted to `SECONDARY_OFFENSE_WEIGHT` (0.3), against a rescaled ceiling of 195. The weaker side is the angle a Pokemon has left when something walls its primary — real, but not a second attacker.
+
+  **Deliberately smooth rather than a classification.** Reusing `getAttackerBias` would put a cliff at `MIXED_ATTACKER_RATIO`, where two Pokemon a single point apart score very differently. A category is right for "which moves would this Pokemon run", where the answer is genuinely discrete; it is wrong for a magnitude.
+
+  The ceiling is chosen so mixed attackers land where they already did — Lucario 0.750 → 0.759, Simisear 0.653 → 0.653 — and only one-sided attackers move. This stops under-rating them; it does not re-scale everything.
+
+  **Who moves.** Up: Staraptor +9, Azumarill +8, Sneasler +7, Volcarona +6, Kingambit +5, Milotic +5 — every one a one-sided attacker. Down: Lucario −8, Klefki −7, Blastoise −6, Ninetales −5 — every one balanced-stat. `rosterGeneration.ts` already recorded "Klefki's unusable 80/80 offences counted the same as Lucario's 110/115" as a defect it had fixed, but it only fixed the stat-blind half; the offence term went on crediting 80/80 as a threat until now.
+
+  Incineroar now ranks above Lucario, a deliberate reversal recorded in the test rather than dropped. They share a primary attacking stat of 115; Lucario's entire edge was a 110 secondary against 80, worth 9 points once discounted, while Incineroar carries 65 more bulk on a term weighted 0.45 against offence's 0.35.
+
+  **What this does not fix, recorded as its own assertion.** Azumarill still has the *lowest* member quality of its comparison group — 260 bulk and 50 Speed are genuinely worse than Blastoise's 284 and 78, and the model is right about that. It outranks them on coverage breadth, not on quality. What actually makes Azumarill good is Belly Drum and Aqua Jet, a setup move and a priority move that between them answer the low Speed the model penalises, and neither is visible to a scan that sees no moves beyond coverage types. `scoringValidation.test.ts` asserts the limitation explicitly so no future weight is tuned to compensate for a missing move model — the same trap as the documented Trick Room bias.
+
+  Cache key bumped to v16: `chooseDefaultAbility` ranks on `scoreMemberQuality`, so a cached scan can hold an ability chosen under the old term.
+
 - **Typing scores are normalized against the range real Pokemon occupy, not the formula's extremes.** This was the model's largest calibration error, and the argument against it was already written down in the same file that made it. `STAT_CEILINGS` explains that normalizing against a theoretical maximum "would compress every realistic Pokemon into a narrow band and cost the model most of its discrimination" — the stats got competitive ceilings on that reasoning, and the typing scores never did.
 
   `damageFromScoreBounds` ran 0 to `4 * baseScore`: the hypothetical typing that takes quadruple damage from all eighteen types. Measured across all 171 combinations the scan produces, real typings occupied **17.7%** of that range, and `TYPE_MODULATION` then halved what survived.

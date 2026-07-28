@@ -34,7 +34,7 @@ import { CANDIDATE_WEIGHTS, candidatePriority } from './rosterGeneration';
 import {
   DEFAULT_BASE_SCORE, normalizeDamageFromScore, normalizeDamageToScore
 } from './pokedexScoring';
-import { scoreMemberQuality } from './teamScoring';
+import { effectiveOffense, scoreMemberQuality } from './teamScoring';
 import { evaluateRoster, type RosterMember } from './rosterScoring';
 import { BATTLE_FORMATS } from './battleFormats';
 import type { PokemonEntry } from './pokemonEntry';
@@ -166,6 +166,46 @@ describe('scoring validation — member ranking', () => {
     const bestBulky = Math.max(...bulky.map((n) => candidatePriority(mon(n))));
 
     expect(worstWall).toBeGreaterThan(bestBulky);
+  });
+
+  it('rates a one-sided attacker on the stat it actually attacks with', () => {
+    // Azumarill swings the 100 Attack Huge Power built for it and never touches
+    // its 60 Special Attack. Blastoise has 83/85, neither notable. Under the old
+    // `attack + special-attack` term that was 160 against 168 — Blastoise scored
+    // *higher* on offence, describing a Pokemon that does not exist. It is the
+    // same objection coverageMoves.ts already raised one layer up, where
+    // getAttackerBias refuses to credit Pelipper with physical coverage.
+    expect(effectiveOffense(mon('azumarill').stats))
+      .toBeGreaterThan(effectiveOffense(mon('blastoise').stats));
+
+    // Klefki is the sharper case. rosterGeneration.ts records "Klefki's unusable
+    // 80/80 offences counted the same as Lucario's 110/115" as a defect it fixed
+    // — but it only fixed the stat-blind half. The offence term went on crediting
+    // 80/80 as a threat until effectiveOffense landed.
+    expect(effectiveOffense(mon('azumarill').stats))
+      .toBeGreaterThan(effectiveOffense(mon('klefki').stats));
+
+    // And it carries through to the order the browser actually shows.
+    ['blastoise', 'feraligatr', 'klefki'].forEach((name) => {
+      expect(candidatePriority(mon('azumarill'))).toBeGreaterThan(candidatePriority(mon(name)));
+    });
+  });
+
+  it('does not pretend Azumarill wins on member quality', () => {
+    // The counterweight to the assertion above, and the honest limit of it.
+    //
+    // Azumarill has the *lowest* member quality of that group — 260 bulk and 50
+    // Speed are genuinely worse than Blastoise's 284 and 78, and the model is
+    // right about that. It outranks them on coverage breadth, not on quality.
+    //
+    // What actually makes Azumarill good is Belly Drum and Aqua Jet: a setup
+    // move and a priority move that between them answer the low Speed the model
+    // penalises. Neither is visible to a scan that sees no moves beyond coverage
+    // types, so no weight should be tuned until this reads "correct" — that
+    // would be fitting the stat model to compensate for a missing move model.
+    // The same trap as the documented Trick Room bias in MEMBER_WEIGHTS.
+    expect(scoreMemberQuality(mon('azumarill')))
+      .toBeLessThan(scoreMemberQuality(mon('blastoise')));
   });
 
   it('does not demote a Pokemon for the weakness its typing already pays for', () => {

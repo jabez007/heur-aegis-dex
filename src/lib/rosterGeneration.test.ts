@@ -92,8 +92,20 @@ describe('candidatePriority', () => {
       normalizedDamageFromScore: 0.25
     });
 
-    expect(candidatePriority(lucario)).toBeGreaterThan(candidatePriority(incineroar));
+    // The assertion this test exists for: both beat Klefki comfortably.
+    expect(candidatePriority(lucario)).toBeGreaterThan(candidatePriority(klefki));
     expect(candidatePriority(incineroar)).toBeGreaterThan(candidatePriority(klefki));
+
+    // Incineroar above Lucario is a deliberate reversal, recorded rather than
+    // dropped. It used to go the other way on the old `attack + special-attack`
+    // offence term, which paid Lucario in full for a second attacking stat.
+    //
+    // The two have the *same* primary attacking stat, 115. Lucario's whole edge
+    // was its 110 secondary against Incineroar's 80 — worth 9 effective points
+    // once discounted — while Incineroar carries 65 more bulk on a term weighted
+    // 0.45 against offence's 0.35. Bulk winning that trade is the model doing
+    // what MEMBER_WEIGHTS says it should.
+    expect(candidatePriority(incineroar)).toBeGreaterThan(candidatePriority(lucario));
   });
 
   it('does not pay for resistances or weaknesses twice', () => {
