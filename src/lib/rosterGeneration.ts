@@ -120,13 +120,53 @@ export const CANDIDATE_WEIGHTS = {
    * without silently inverting the guarantee.
    */
   supportRole: 2,
-  /** Breadth of STAB coverage, which the offensive score measures as strength rather than spread. */
-  coverage: 0.75,
-  /** Reachable coverage. A tiebreak: it says "can learn", never "would run". */
+  /**
+   * Reachable coverage. A tiebreak: it says "can learn", never "would run".
+   *
+   * Not duplicated by anything, unlike the STAB `coverage` term that used to sit
+   * beside it: this comes from `getMoveCoverage` reading the Champions movepool,
+   * not from the type chart, and it is already read against the attacker's stats.
+   */
   moveCoverage: 0.2
 } as const;
 
-// There is deliberately no `quadrupleWeakness` term in CANDIDATE_WEIGHTS.
+// There is deliberately no `coverage` term in CANDIDATE_WEIGHTS.
+//
+// ## Why it was removed
+//
+// It paid a second time for a count the offensive score already contains.
+// `coverages` is exactly `damage_relations.double_damage_to`, and
+// `calculateDamageToScore` is `baseScore + double_damage_to.length - ...`. The
+// same list fed both: 0.89 points per super-effective type through the score
+// into the offence term, and 0.75 again on its own line. STAB breadth was
+// charged at 1.84x.
+//
+// Its docstring claimed the offensive score "measures strength rather than
+// spread". It counts the length of a list of types; that is spread. The
+// justification had been wrong for as long as the weight existed — the same way
+// `supportRole` claimed to be worth "about three resistances" while buying nine.
+//
+// This is the offensive mirror of the defect the rework above removed. That one
+// found defensive typing being paid three times, once as its own term and twice
+// more as the resistance and weakness lists `normalizedDamageFromScore` already
+// summarises. Nobody checked whether the offensive side had the same shape. It
+// did.
+//
+// Removing it rather than shrinking it, because the duplicate was also the
+// worse-behaved of the two. The explicit term was **stat-independent**: it paid
+// Klefki for hitting seven types super-effectively off an 80 Special Attack at
+// the same rate it paid Kingambit. Routing the charge through the offence term
+// scales it by `effectiveOffense`, which is the whole argument behind the
+// damage-class split in `coverageMoves.ts` and behind `effectiveOffense` itself.
+// Coverage a Pokemon cannot back with an attacking stat describes a threat that
+// does not exist.
+//
+// STAB breadth is not thereby unmeasured. `normalizedDamageToScore` is the
+// measure, and it is the offensive counterpart of `normalizedDamageFromScore` —
+// modulating stats rather than sitting beside them, which is what this file
+// already decided typing should do.
+//
+// There is deliberately no `quadrupleWeakness` term either.
 //
 // ## Why it was removed
 //
@@ -233,7 +273,6 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
 
   return (quality * w.quality) +
     (roleValue * w.supportRole) +
-    (entry.coverages.length * w.coverage) +
     (entry.moveCoverages.length * w.moveCoverage);
 }
 

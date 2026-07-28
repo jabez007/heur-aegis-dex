@@ -4,6 +4,20 @@
 
 ### Changed
 
+- **BREAKING: `CANDIDATE_WEIGHTS.coverage` is removed.** It paid a second time for a count the offensive score already contains. `coverages` is exactly `damage_relations.double_damage_to`, and `calculateDamageToScore` is `baseScore + double_damage_to.length - …`. The same list fed both paths: **0.89 points** per super-effective type through the score into the offence term, and **0.75** again on its own line. STAB breadth was charged at **1.84×**.
+
+  Its docstring claimed the offensive score "measures strength rather than spread". It counts the length of a list of types, which is spread. The justification had been wrong for as long as the weight existed — the same way `supportRole` claimed to be worth "about three resistances" while buying nine.
+
+  This is the offensive mirror of the defect the earlier rework removed. That one found defensive typing paid three times — once as its own term and twice more as the resistance and weakness lists `normalizedDamageFromScore` already summarises. Nobody checked whether the offensive side had the same shape. It did.
+
+  **Removed rather than shrunk, because the duplicate was also the worse-behaved of the two.** The explicit term was *stat-independent*: it paid Klefki for hitting seven types super-effectively off an 80 Special Attack at the same rate it paid Kingambit. Routing the charge through the offence term scales it by `effectiveOffense` — the whole argument behind the damage-class split and behind `effectiveOffense` itself. Coverage a Pokemon cannot back with an attacking stat describes a threat that does not exist. `moveCoverage` stays: it comes from the Champions movepool rather than the type chart, duplicates nothing, and is already read against stats.
+
+  **This partly reverses the Azumarill result from the previous entry**, and that is the correct outcome rather than a regression. Azumarill went 34th to 26th on the offence fix, and back to 33rd once STAB was priced once instead of 1.84 times. Water/Fairy's six super-effective types are still paid — through the offence term, where they are scaled by the 100 Attack Huge Power builds — but at that price they no longer overcome Blastoise's Speed and bulk. The ordering had been resting on an arithmetic error rather than on anything the model believed, and the test now records that explicitly.
+
+  Azumarill against **Klefki** is the assertion kept, and it is the sharper case: the two hit the *same number* of types super-effectively, so the old stat-independent term paid them identically for a 100 Attack and an 80/80. Rank correlation with the previous ordering is 0.975, so this reorders rather than upends.
+
+- **The adjunct budget guard now measures its own maxima.** `rosterGeneration.ts` states the adjuncts should swing about a third of the observed quality spread. Measured on the roster the browser actually shows, they could swing 12.4 against a spread of 25.3 — 49%. The guard did not catch it because it hardcoded "a few of each", 4 coverage types and 6 move types, where the real maxima are 7 and 18. It now derives them from the fixture, which is the discipline the spread in the same assertion already used.
+
 - **Offence is measured on the stat a Pokemon actually attacks with.** `scoreMemberQuality` computed offence as `attack + special-attack`, which assumes both halves are usable. Azumarill swings the 100 Attack Huge Power built for it and never touches its 60 Special Attack; Blastoise has 83/85, neither notable. Summed, that is 160 against 168 — **Blastoise scored higher on offence**, describing a Pokemon that does not exist.
 
   `coverageMoves.ts` had already rejected this reasoning one layer up. Its `getAttackerBias` reads Azumarill's movepool as physical, on the argument that crediting Pelipper with physical coverage it cannot use at 50 Attack is dishonest. That argument stopped at the coverage layer and never reached the term scoring the stats themselves.

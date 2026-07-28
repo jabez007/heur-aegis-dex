@@ -26,6 +26,22 @@
  * The pairs are deliberately uneven in difficulty. Some are wide, to catch a
  * scoring change that breaks something basic. The narrow ones near the bottom
  * are where the weights actually get tested.
+ *
+ * ## Scope: the scoring, not the browser
+ *
+ * These judge `scoreMemberQuality` and `candidatePriority` **in general**, with
+ * no type filter applied. That is why Garchomp, Dragonite, Kingambit and
+ * Annihilape appear here despite `typeFilters` keeping them out of a default
+ * scan: `maxDamageFromScore` and `limitQuadrupleDamage` are a lens the user
+ * chooses over a sound ranking, not part of the ranking itself.
+ *
+ * Restricting the fixture to typings that survive those filters would be a
+ * mistake in both directions. It would stop the fixture catching a scoring bug
+ * that only shows on an excluded Pokemon, and it would quietly couple the
+ * scoring's correctness to one particular filter setting — so changing a filter
+ * default would read as a scoring regression. Recorded because it is not
+ * obvious from the code, and reading the two files together suggests the
+ * opposite conclusion.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -185,10 +201,17 @@ describe('scoring validation — member ranking', () => {
     expect(effectiveOffense(mon('azumarill').stats))
       .toBeGreaterThan(effectiveOffense(mon('klefki').stats));
 
-    // And it carries through to the order the browser actually shows.
-    ['blastoise', 'feraligatr', 'klefki'].forEach((name) => {
-      expect(candidatePriority(mon('azumarill'))).toBeGreaterThan(candidatePriority(mon(name)));
-    });
+    // Klefki is where it has to carry through to the final order, and it is the
+    // cleanest test in this file for why the STAB `coverage` term was removed.
+    //
+    // Azumarill and Klefki hit the *same number* of types super-effectively off
+    // their STAB — six each. The old stat-independent coverage term therefore
+    // paid them identically, 4.5 points apiece, for Azumarill's 100 Attack and
+    // Klefki's 80/80. Routing that charge through the offence term instead
+    // scales it by effectiveOffense, so identical breadth stops being identical
+    // value when one Pokemon cannot back it.
+    expect(mon('azumarill').coverages.length).toBe(mon('klefki').coverages.length);
+    expect(candidatePriority(mon('azumarill'))).toBeGreaterThan(candidatePriority(mon('klefki')));
   });
 
   it('does not pretend Azumarill wins on member quality', () => {
@@ -204,8 +227,16 @@ describe('scoring validation — member ranking', () => {
     // types, so no weight should be tuned until this reads "correct" — that
     // would be fitting the stat model to compensate for a missing move model.
     // The same trap as the documented Trick Room bias in MEMBER_WEIGHTS.
+    //
+    // Azumarill did briefly outrank Blastoise outright, on the STAB `coverage`
+    // term that charged offensive breadth at 1.84x. Removing that double count
+    // handed most of it back, which is the correct outcome and worth recording:
+    // the ordering had been resting on an arithmetic error rather than on
+    // anything the model believed.
     expect(scoreMemberQuality(mon('azumarill')))
       .toBeLessThan(scoreMemberQuality(mon('blastoise')));
+    expect(candidatePriority(mon('azumarill')))
+      .toBeLessThan(candidatePriority(mon('blastoise')));
   });
 
   it('does not demote a Pokemon for the weakness its typing already pays for', () => {
@@ -268,13 +299,19 @@ describe('scoring validation — member ranking', () => {
       .map((entry) => scoreMemberQuality(entry) * CANDIDATE_WEIGHTS.quality);
     const spread = Math.max(...qualities) - Math.min(...qualities);
 
-    // The worst case for one Pokemon, now that the flat quadruple penalty is
-    // gone: it gains a role and the full breadth of both coverage terms while a
-    // rival has neither. Coverage is bounded by the eighteen types, but the
-    // realistic spread between a broad Pokemon and a narrow one is a few of each.
+    // The worst case for one Pokemon: it gains a role and the broadest move
+    // coverage in the pool while a rival has neither.
+    //
+    // The maxima are *measured* off the fixture rather than guessed. An earlier
+    // version of this guard hardcoded "a few of each" — 4 coverage types and 6
+    // move types — which understated the real spread and let the budget be
+    // exceeded while the test stayed green. Deriving them is the same discipline
+    // the spread below already uses, and it was inconsistent not to.
+    const maxMoveCoverage = Math.max(
+      ...Object.values(SCORING_FIXTURE_POKEMON).map((entry) => entry.moveCoverages.length)
+    );
     const largestSwing = CANDIDATE_WEIGHTS.supportRole
-      + (4 * CANDIDATE_WEIGHTS.coverage)
-      + (6 * CANDIDATE_WEIGHTS.moveCoverage);
+      + (maxMoveCoverage * CANDIDATE_WEIGHTS.moveCoverage);
 
     expect(
       largestSwing,
