@@ -1,0 +1,62 @@
+name: Verify
+
+# The gate every other workflow stands on. `deploy` and `publish` call this one
+# rather than repeating its steps, so there is a single answer to "is this
+# commit shippable" and no second copy to drift out of agreement with it.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - development # the working branch, where commits land without a PR
+  workflow_call: # so deploy and publish can gate on these exact steps
+
+# Least privilege by default. A job that needs more re-grants it for itself.
+permissions:
+  contents: read
+
+# Superseded runs on the same ref are waste, and nothing here writes anything,
+# so cancelling one is free. Deployment is the opposite case and queues instead.
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          # Read from .nvmrc so local and CI cannot disagree about the version.
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Test
+        # `npm test` is `vitest`, which is watch mode. Vitest does detect CI and
+        # run once, but a gate whose termination depends on env detection is not
+        # a gate worth reasoning about. `test:run` is explicit.
+        run: npm run test:run
+
+      - name: Build app and library
+        # Both, and the library build is the one that earns its place here.
+        # `vue-tsc --noEmit` checks the app; `build:lib` additionally runs
+        # vite-plugin-dts with rollupTypes, which flattens every public type into
+        # the single lib/index.d.ts that package.json points `types` at. That
+        # rollup can fail where --noEmit passes — a non-exported type reached
+        # through an exported signature is the usual cause — and src/index.ts has
+        # a wide enough surface to trip on it. A broken rollup is a broken
+        # package, so it should fail on the pull request, not on the release tag.
+        run: npm run build:all
