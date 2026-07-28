@@ -42,7 +42,9 @@ Format also decides which synergy applies. Spread-move safety, redirection and a
 
 `src/lib/coverageMoveData.ts` is generated, not hand-written. It records which move types each Pokémon can bring, derived from PokeAPI's `champions` version group — the actual Champions movepool rather than a union across older games. A move counts when it is damaging with base power ≥ 60.
 
-Rebuild it with `node scripts/gen-coverage-moves.mjs` when a regulation changes the roster.
+Rebuild it with `npm run gen:coverage-moves` when a regulation changes the roster. That writes `coverage-table.txt` and `coverage-stats.json` at the repository root; paste the table into the `COVERAGE_MOVE_TYPES` literal in `src/lib/coverageMoveData.ts` and update the generated-on line in its header. The step is manual on purpose — the header records the roster size and reasoning the table was built against, and a generator that overwrote it would drop the part a reader needs.
+
+`npm run gen:scoring-fixture` differs: it writes `src/lib/scoring.fixture.ts` directly, because that file is data with no hand-written commentary to lose.
 
 Move reach is kept **separate** from STAB coverage rather than replacing it. The median roster Pokémon has qualifying moves of ten types out of eighteen, so merging the two would flatten the offensive signal almost to nothing. Reach answers "does the team have an answer to this weakness"; STAB stays the measure of how hard the team threatens it.
 

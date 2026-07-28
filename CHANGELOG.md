@@ -313,6 +313,16 @@
 
   Also routes `coverageAnalysis` through `toRosterMember` instead of spreading the `PartyMember`. The analysis reads snake\_case, so a spread supplies nothing for any field whose two names differ; that asymmetry is how the field went missing while every neighbouring one worked.
 
+- **The generators fail loudly instead of quietly destroying what they were meant to produce.** Three tooling faults, all the same shape — the failure path was silent where it should have been noisy.
+
+  `gen:scoring-fixture` piped stdout into `src/lib/scoring.fixture.ts` with `>`. The shell truncates the destination when it sets the redirection up, before the script has fetched anything, and there is no retry around the fetches. One PokeAPI hiccup emptied the file every ordinal assertion is read against. The generator now writes the file itself, as `gen-coverage-moves.mjs` already did.
+
+  `measure-composite-bounds.mjs` spun forever on an empty pool. Every species in its walk can `continue` on a fetch failure and `getActiveRegulation()` falls back to an empty set, so an offline run reached `while (picked.size < broughtToBattle)` with nothing to pick from — and `Math.random() * 0` is always 0, so the set sticks at one index. It printed `scored pool: 0` and then sat at full CPU looking busy. It now exits non-zero.
+
+  `check-browser-bundle.sh` ran `cd "$(dirname "$0")/.."` unguarded under `set -u` with no `set -e`, and the next line is `rm -rf node_modules/.vite`. Guarded, and its vite log moved from a fixed `/tmp` path to `mktemp` — kept and named on failure, since it is the only diagnostic when the check comes back inconclusive.
+
+  README and the `coverageMoveData.ts` header now describe what `gen:coverage-moves` actually does: it emits `coverage-table.txt` for a human to paste in. That step is manual on purpose — the header carries the reasoning and the roster it was built against, which a generator would overwrite.
+
 - **A generated roster no longer spends a slot on a type combination it already has.** Reported: seeding Goodra-Hisui and clicking Fill Roster added Archaludon, also Steel/Dragon.
 
   Reproduced under the app's default filters, which cut the pool to 86 Pokémon across 42 typings — Steel/Dragon holds exactly those two. Seeded with Goodra-Hisui, the best roster was `goodra-hisui, archaludon, dragapult, primarina, rotom-heat, overqwil` at **87.30**, and the best with six distinct typings was the same roster with Metagross instead, at **86.77**.

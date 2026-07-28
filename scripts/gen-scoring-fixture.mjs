@@ -6,8 +6,16 @@
 // chart, the real ability modifiers, the real coverage table — and emits the
 // resulting PokemonEntry for each Pokemon the fixture teams use.
 //
-// Run with:  npx tsx scripts/gen-scoring-fixture.mjs > src/lib/scoring.fixture.ts
+// Run with:  npm run gen:scoring-fixture
+//
+// Writes src/lib/scoring.fixture.ts itself rather than emitting to stdout for a
+// shell redirect. `> file` truncates the destination when the shell sets the
+// redirection up — before this script has fetched anything — so a mid-run
+// failure left the committed fixture empty rather than untouched. There is no
+// retry around the fetches below, and the fixture is the file every ordinal
+// assertion is read against: losing it silently is the worst outcome available.
 
+import { writeFileSync } from 'node:fs';
 import { chooseDefaultAbility, getBaseTypes, getDualTypes } from '../src/lib/pokedex.ts';
 import { applyAbilityModifiers } from '../src/lib/pokedexAbilities.ts';
 import { buildOffensiveTypeChart, getMoveCoverage } from '../src/lib/coverageMoves.ts';
@@ -166,7 +174,9 @@ const body = entries
   .map((e) => `  ${JSON.stringify(e.name)}: ${format(e, '  ')}`)
   .join(',\n');
 
-process.stdout.write(`/**
+const OUTPUT = new URL('../src/lib/scoring.fixture.ts', import.meta.url);
+
+writeFileSync(OUTPUT, `/**
  * GENERATED FILE — do not edit by hand.
  *
  * Real Pokemon data for the scoring validation fixture, produced by driving the
@@ -206,3 +216,5 @@ export const SCORING_FIXTURE_RAW_SCORES: Readonly<Record<string, { from: number;
 ${rawScores}
 };
 `);
+
+process.stderr.write(`wrote ${OUTPUT.pathname} (${entries.length} Pokemon)\n`);

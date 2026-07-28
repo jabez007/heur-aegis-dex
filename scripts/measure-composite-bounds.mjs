@@ -115,6 +115,20 @@ for (const [index, name] of species.entries()) {
 
 process.stderr.write(`scored pool: ${pool.length}\n`);
 
+// Every species above can `continue` on a fetch failure, and getActiveRegulation
+// falls back to an empty set when nothing matches, so an offline run reaches the
+// sampling loop with an empty pool. `Math.random() * 0` is always 0, so `picked`
+// sticks at one index and `while (picked.size < broughtToBattle)` spins forever
+// at full CPU, printing nothing. Fail here instead: a bound measured over a pool
+// this small would be worthless even if the loop could terminate.
+const largestBring = Math.max(...BATTLE_FORMAT_LIST.map((f) => f.broughtToBattle));
+if (pool.length < largestBring) {
+  process.stderr.write(
+    `pool of ${pool.length} cannot fill a bring of ${largestBring} — nothing to measure\n`
+  );
+  process.exit(1);
+}
+
 const halves = (members, format) => {
   const coverage = analyzeTeamCoverage(members.map((member) => ({
     ...member,

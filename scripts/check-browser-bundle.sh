@@ -10,13 +10,17 @@
 #
 # Exits 0 when healthy, 1 when the bug is present.
 set -u
-cd "$(dirname "$0")/.."
+# Guarded: the next thing this script does is `rm -rf node_modules/.vite`, and
+# without `set -e` a failed cd would run that against whatever directory the
+# script was invoked from.
+cd "$(dirname "$0")/.." || { echo "cannot reach repository root" >&2; exit 2; }
 
 PORT=${1:-5299}
 DEP=node_modules/.vite/deps/pokedex-promise-v2.js
+LOG=$(mktemp -t repro-vite.XXXXXX)
 
 rm -rf node_modules/.vite
-timeout 45 npx vite --port "$PORT" >/tmp/repro-vite.log 2>&1 &
+timeout 45 npx vite --port "$PORT" >"$LOG" 2>&1 &
 VITE_PID=$!
 
 # Requesting the entry forces dep optimization to run.
@@ -46,4 +50,12 @@ fi
 
 kill $VITE_PID 2>/dev/null
 wait $VITE_PID 2>/dev/null
+
+# The vite log is the only diagnostic when this comes back INCONCLUSIVE, so keep
+# it on anything but a clean pass and say where it is.
+if [ $RESULT -eq 0 ]; then
+  rm -f "$LOG"
+else
+  echo "  vite log: $LOG"
+fi
 exit $RESULT

@@ -24,8 +24,12 @@
  * Moves that choose their class at use time (Shell Side Arm and friends) appear
  * under both, since either stat can be the one that fires.
  *
- * Regenerate with scripts/gen-coverage-moves.mjs when a regulation changes the
- * roster. Generated 2026-07-27 from 208 legal species / 361 varieties.
+ * Regenerate with `npm run gen:coverage-moves` when a regulation changes the
+ * roster, then paste the emitted coverage-table.txt into the literal below and
+ * update the line that follows. The generator does not write this file: the
+ * header above it is hand-written and would be lost.
+ *
+ * Generated 2026-07-27 from 208 legal species / 361 varieties.
  */
 
 export interface CoverageMoveTypes {
