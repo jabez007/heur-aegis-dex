@@ -4,6 +4,31 @@
 
 ### Changed
 
+- **Both halves of the team score are now normalized against their reachable ranges.** `COMPOSITE_WEIGHTS` said 45/55 and behaved as roughly **16/84**. New `COMPOSITE_BOUNDS`, measured by `npm run measure:composite-bounds`.
+
+  Same defect `pokedexScoring.ts` records under `OBSERVED_DAMAGE_FROM`, in the same model, one file away. Member quality is a weighted mean of clamped terms averaged *again* across the team, so it bunches hard around 0.5; synergy is a bonus-minus-penalty difference that genuinely spans almost all of −1..1. Measured over 200,000 random brings from all 208 legal species of Regulation M-B, across the 1st-to-99th percentile band:
+
+  | half | nominal weight | points of swing |
+  | --- | --- | --- |
+  | member quality | 0.45 | 5.9 |
+  | team synergy | 0.55 | 31.0 |
+
+  **5.2 to 1.** Half of all large member-quality gaps were overturned by synergy, making how good the Pokémon were close to a coin flip against how tidily they fitted together. The visible symptom: four Pokémon of Watchog/Audino/Emolga/Dedenne calibre scored **55.28** against **43.59** for Dragonite, Metagross, Garchomp and Tyranitar — and the roster generator was picking Emolga and Dedenne into its best rosters for exactly that reason. Synergy was right in *direction* (two shared 4× Ice weaknesses is a genuinely poor four); it simply outvoted a 0.19 quality gap that should have been decisive.
+
+  **Quality's bounds are exact, synergy's are observed.** An average member quality has a closed form — the mean of the pool's highest individual qualities down to the mean of its lowest — so no team can fall outside it, and both ends are ordinary teams rather than arithmetic limits. Synergy has no such form, so its bounds are the sampled extremes and outliers clamp, as they do for `STAT_CEILINGS`.
+
+  **Percentile bounds were rejected despite landing the ratio on nominal.** The top 0.1% of *random* teams is where the roster generator actually operates: generated brings reach synergy 0.678 against a 99.9th percentile of 0.641, so clamping there would blind the search at the point it does its work. These bounds clamp nothing.
+
+  The residual is **1.79:1 in doubles, 1.71:1 in singles** against a nominal 1.22:1, recorded rather than tuned away — synergy's own −1 clamp compresses the bottom of its range and normalizing cannot undo that. Closing the rest means changing `scoreTeamSynergy`. This takes the error from 330% to 46%. A new fixture test samples the distribution and fails if either half stops deciding anything.
+
+  No cache key moves: team scores are computed live, and only the scan output is cached.
+
+- **The `overlapping threats` validation team did not contain what it claimed.** Its description said the members shared a quadruple weakness. They did not — Garchomp, Sneasler, Kingambit and Glimmora carry one *each*, to four different types, so `sharedQuadrupleWeakness`, the heaviest penalty in the model at 1.5, never fired on the team at all. Under the compressed scale synergy outvoted its member quality anyway and it scored below the defensive core, so the fixture agreed with its assertion for a reason nobody had checked.
+
+  It is now six elite attackers stacked three deep on that penalty — Dragonite and Garchomp both 4× to Ice, Kingambit and Tyranitar both to Fighting, Volcarona and Charizard both to Rock — which is the case the description always described. The old lineup is kept as `strongAttackers`, deliberately **unclassified**: whether six strong attackers with unshared weaknesses should beat six walls that cannot KO anything is a genuine judgement, so it is asserted only against the teams that are plainly bad.
+
+- **Corrected a stale comment in the scoring fixture header**, which claimed abilities were pinned in the generator. They have been derived by the scan's own rule since the ability-selection fix.
+
 - **BREAKING: roster depth counts *different* teams, not the top three bring options.** `ROSTER_DEPTH_OPTIONS` is removed, replaced by `selectDistinctLines`, `countTargetLines`, `maxSharedMembers` and `VIABLE_LINE_MARGIN`. `RosterEvaluation` gains `lines`, `viableLines` and `targetLines`.
 
   Depth was the mean of the three highest-scoring bring options. From six Pokemon bringing four there are fifteen options, and the top three are always **the same team with one Pokemon swapped** — they overlap the best bring in three of four members. The term averaged the peak three times and was reported as depth.

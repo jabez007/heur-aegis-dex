@@ -242,7 +242,7 @@ export function scoreBring(members: RosterMember[], options: RosterScoringOption
     typeCount
   });
 
-  return composeTeamScore(memberQualities, synergy);
+  return composeTeamScore(memberQualities, synergy, format);
 }
 
 /**

@@ -50,9 +50,17 @@ import { CANDIDATE_WEIGHTS, candidatePriority } from './rosterGeneration';
 import {
   DEFAULT_BASE_SCORE, normalizeDamageFromScore, normalizeDamageToScore
 } from './pokedexScoring';
-import { effectiveOffense, scoreMemberQuality } from './teamScoring';
+import {
+  COMPOSITE_BOUNDS,
+  COMPOSITE_WEIGHTS,
+  effectiveOffense,
+  scoreMemberQuality,
+  scoreTeamSynergy
+} from './teamScoring';
 import { evaluateRoster, type RosterMember } from './rosterScoring';
-import { BATTLE_FORMATS } from './battleFormats';
+import { analyzeTeamCoverage } from './teamCoverage';
+import { analyzeTeamRoles, isImmuneToAllyMoves } from './abilityRoles';
+import { BATTLE_FORMATS, type BattleFormat } from './battleFormats';
 import type { PokemonEntry } from './pokemonEntry';
 
 const mon = (name: string): PokemonEntry => {
@@ -80,6 +88,36 @@ const toRosterMember = (entry: PokemonEntry): RosterMember => ({
 
 const scoreTeam = (members: PokemonEntry[], format = BATTLE_FORMATS.doubles) =>
   evaluateRoster(members.map(toRosterMember), { format }).score;
+
+/**
+ * The two halves `composeTeamScore` blends, before weighting or rescaling.
+ *
+ * Recomputed here rather than read off a score, because the balance between them
+ * is the thing under test and a composed score cannot be taken apart again.
+ */
+const compositeHalves = (members: PokemonEntry[], format: BattleFormat) => {
+  const coverage = analyzeTeamCoverage(members.map((member) => ({
+    ...toRosterMember(member),
+    immuneToAllyMoves: format.hasAlly && isImmuneToAllyMoves(member.abilityName)
+  })));
+  const roles = analyzeTeamRoles(
+    members.map((member) => ({ abilityName: member.abilityName })),
+    { hasAlly: format.hasAlly }
+  );
+  const qualities = members.map((member) => scoreMemberQuality(member));
+
+  return {
+    quality: qualities.reduce((total, quality) => total + quality, 0) / qualities.length,
+    synergy: scoreTeamSynergy({
+      coverage,
+      roles,
+      format,
+      typesTotal: new Set(members.flatMap((member) => member.types)).size,
+      teamSize: members.length,
+      typeCount: DEFAULT_BASE_SCORE
+    })
+  };
+};
 
 // ---------------------------------------------------------------------------
 // Teams
@@ -123,10 +161,37 @@ const TEAMS = {
   },
   overlappingThreats: {
     label: 'overlapping threats',
-    why: 'Six genuinely strong attackers that all fold to the same coverage. Ground hits four '
-      + 'of them, Fighting and Psychic most of the rest, and two carry a 4x weakness. '
-      + 'Individually the best team here; collectively one Landorus away from losing. This is '
-      + 'the case that separates synergy scoring from summing member quality.',
+    why: 'Individually the strongest team here — the highest average member quality of any '
+      + 'of them — and stacked three deep on the failure the model charges hardest for. '
+      + 'Dragonite and Garchomp both fold to Ice, Kingambit and Tyranitar both to Fighting, '
+      + 'Volcarona and Charizard both to Rock, every one of those a 4x. Three common moves '
+      + 'two-for-one this roster. The case that separates synergy scoring from summing '
+      + 'member quality.',
+    members: team('dragonite', 'garchomp', 'kingambit', 'tyranitar', 'volcarona', 'charizard')
+  },
+
+  /**
+   * Deliberately unclassified, and kept because the judgement is genuinely close.
+   *
+   * This was `overlappingThreats` until the composite bounds were measured, on a
+   * description that did not match it: it claimed the members shared a quadruple
+   * weakness, and they do not. Garchomp, Sneasler, Kingambit and Glimmora carry
+   * one *each* — to Ice, Psychic, Fighting and Ground — so `sharedQuadrupleWeakness`,
+   * the heaviest penalty in the model at 1.5, never fired on it at all. Sixteen
+   * unique resistances across the six, against the defensive core's seventeen.
+   *
+   * Under the old compressed scale synergy outvoted its member quality anyway and
+   * it scored below the walls, so the fixture agreed with the assertion for a
+   * reason nobody had checked. With the bounds corrected it scores 69.8 against
+   * the core's 67.1.
+   *
+   * Whether six strong attackers with unshared weaknesses *should* beat six walls
+   * that cannot KO anything is a real judgement, not a defect, so it is recorded
+   * rather than asserted either way. What is asserted below is only what the
+   * model should guarantee regardless: it beats the teams that are simply bad.
+   */
+  strongAttackers: {
+    label: 'strong attackers',
     members: team('garchomp', 'sneasler', 'annihilape', 'kingambit', 'lucario', 'glimmora')
   }
 } as const;
@@ -368,6 +433,88 @@ describe('scoring validation — team ranking', () => {
 
     expect(individualQuality(frail)).toBeGreaterThan(individualQuality(core));
     expect(scoreTeam(core)).toBeGreaterThan(scoreTeam(frail));
+  });
+
+  it('still rejects the teams that are simply bad, whatever the close calls', () => {
+    // `strongAttackers` is the lineup this fixture used to assert against the
+    // defensive core, on a description that did not match it — see its comment.
+    // Where it belongs against the walls is a judgement; that it beats the teams
+    // with no case at all is not.
+    const attackers = scoreTeam(TEAMS.strongAttackers.members);
+
+    expect(attackers).toBeGreaterThan(scoreTeam(TEAMS.junk.members));
+    expect(attackers).toBeGreaterThan(scoreTeam(TEAMS.monoFire.members));
+    expect(attackers).toBeLessThan(scoreTeam(TEAMS.balance.members));
+  });
+
+  it('keeps both halves of the composite on the footing the weights claim', () => {
+    // The structural invariant behind every team assertion above, and the one
+    // that would have caught the original defect on its own.
+    //
+    // COMPOSITE_WEIGHTS says 45/55. For a long time it behaved as roughly 16/84,
+    // because member quality is a mean of clamped terms averaged again across the
+    // team and occupied a sliver of 0..1, while synergy used nearly all of -1..1.
+    // A weight only means what it says if the quantity under it uses its range.
+    //
+    // Sampled rather than assumed, so it tracks the real distribution — the same
+    // discipline as the adjunct-budget guard above. Deterministic sample, so a
+    // failure here is reproducible rather than a flake.
+    const pool = Object.values(SCORING_FIXTURE_POKEMON);
+    const format = BATTLE_FORMATS.doubles;
+    const bounds = COMPOSITE_BOUNDS[format.id];
+
+    let seed = 20260728;
+    const nextIndex = (limit: number) => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % limit;
+    };
+
+    const qualities: number[] = [];
+    const synergies: number[] = [];
+    for (let i = 0; i < 3000; i++) {
+      const picked = new Set<number>();
+      while (picked.size < format.broughtToBattle) picked.add(nextIndex(pool.length));
+      const members = [...picked].map((index) => pool[index]);
+      const halves = compositeHalves(members, format);
+      qualities.push(halves.quality);
+      synergies.push(halves.synergy);
+    }
+
+    // The band real comparisons happen in, not the extremes.
+    const band = (values: number[]) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length * 0.99)] - sorted[Math.floor(sorted.length * 0.01)];
+    };
+    const swing = (values: number[], weight: number, range: { min: number; max: number }) =>
+      100 * weight * (band(values) / (range.max - range.min));
+
+    const qualitySwing = swing(qualities, COMPOSITE_WEIGHTS.memberQuality, bounds.quality);
+    const synergySwing = swing(synergies, COMPOSITE_WEIGHTS.synergy, bounds.synergy);
+    const realized = synergySwing / qualitySwing;
+    const nominal = COMPOSITE_WEIGHTS.synergy / COMPOSITE_WEIGHTS.memberQuality;
+
+    // Generous, deliberately: the point is to catch a half that stops deciding
+    // anything, not to pin a ratio nobody measured against match outcomes. The
+    // pre-bounds model sat at 5.2 and would fail this by a wide margin.
+    expect(
+      realized,
+      `synergy swings ${synergySwing.toFixed(1)} points against quality's ` +
+      `${qualitySwing.toFixed(1)} — a ${realized.toFixed(2)}:1 split under nominal ${nominal.toFixed(2)}:1`
+    ).toBeLessThan(nominal * 2);
+    expect(realized).toBeGreaterThan(nominal / 2);
+  });
+
+  it('charges a shared quadruple weakness more than an unshared one', () => {
+    // The distinction the old fixture blurred. Both teams are six strong
+    // attackers with quadruple weaknesses; only one has them *doubled up*, which
+    // is what turns a bad matchup into a two-for-one.
+    const shared = scoreTeam(TEAMS.overlappingThreats.members);
+    const unshared = scoreTeam(TEAMS.strongAttackers.members);
+
+    expect(
+      unshared - shared,
+      `stacked ${shared.toFixed(1)} vs unstacked ${unshared.toFixed(1)}`
+    ).toBeGreaterThan(10);
   });
 });
 

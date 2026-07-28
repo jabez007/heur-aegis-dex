@@ -213,10 +213,101 @@ export const SYNERGY_PENALTY_WEIGHTS = {
 /**
  * Split between raw member quality and team synergy in the final score.
  * These sum to 1.
+ *
+ * They only mean what they say because both halves are normalized against their
+ * reachable ranges first — see COMPOSITE_BOUNDS. Read that before touching
+ * these numbers: for a long time this said 45/55 and behaved like 16/84.
  */
 export const COMPOSITE_WEIGHTS = {
   memberQuality: 0.45,
   synergy: 0.55
+} as const;
+
+/**
+ * Reachable ranges of the two halves of the composite score, measured.
+ *
+ * This is the same calibration error `pokedexScoring.ts` records under
+ * OBSERVED_DAMAGE_FROM, in the same model, found the same way — and the argument
+ * there applies unchanged. Normalizing against a range the quantity cannot
+ * actually occupy compresses it, and a compressed term is a term that does not
+ * decide anything however large its nominal weight.
+ *
+ * ## What was wrong
+ *
+ * `composeTeamScore` combined an average member quality on 0..1 with a synergy
+ * remapped from its nominal -1..1. Neither used its range. Member quality is a
+ * weighted mean of clamped terms, then averaged again across the team, so it
+ * bunches hard around 0.5; synergy is a bonus-minus-penalty difference that
+ * genuinely spans almost all of -1..1.
+ *
+ * Measured over 200,000 random brings from the 208 legal species of Regulation
+ * M-B, across the 1st-to-99th percentile band where real comparisons happen:
+ *
+ * | half           | nominal weight | points of swing |
+ * | -------------- | -------------- | --------------- |
+ * | member quality | 0.45           | 5.9             |
+ * | team synergy   | 0.55           | 31.0            |
+ *
+ * A stated 45/55 split behaving as **5.2 to 1**. Half of all large member-quality
+ * gaps were overturned by synergy, so how good the Pokemon were was close to a
+ * coin flip against how tidily they fitted together.
+ *
+ * The visible symptom: four Pokemon of Watchog/Audino/Emolga/Dedenne calibre
+ * scored **55.28**, against **43.59** for Dragonite, Metagross, Garchomp and
+ * Tyranitar. Synergy was right in direction — two shared quadruple Ice
+ * weaknesses is a genuinely poor four — but it outvoted a 0.19 quality gap that
+ * should have been decisive. The roster generator was picking Emolga and Dedenne
+ * into its best rosters for the same reason.
+ *
+ * ## How these were measured
+ *
+ * `scripts/measure-composite-bounds.mjs`, run 2026-07-28 against Regulation M-B:
+ * every legal species in its default form, resolved through the species endpoint
+ * so the dozen that exist only under a form suffix are included, then 200,000
+ * random brings per format. Rerun it after any change to MEMBER_WEIGHTS,
+ * SYNERGY_*_WEIGHTS or the coverage analysis — all of them move these.
+ *
+ * Both halves are bounded per format, because both depend on it: quality is an
+ * average over `broughtToBattle` members, and synergy uses a different weight
+ * table and role count in singles.
+ *
+ * ## Why quality is exact and synergy is observed
+ *
+ * Average member quality has a **closed-form** range: the best a team average can
+ * be is the mean of the pool's highest individual qualities, the worst is the
+ * mean of its lowest. No sampling needed, and no team can fall outside it. Both
+ * ends are also perfectly ordinary teams — the four best legal Pokemon is a
+ * normal thing to register — which is the property the old formula extremes
+ * lacked.
+ *
+ * Synergy has no such form, so its bounds are the extremes observed across the
+ * sample, and values outside them clamp as they do for STAT_CEILINGS. Its floor
+ * sits at exactly -1 because `scoreTeamSynergy` already clamps there; teams worse
+ * than that are indistinguishable, which costs nothing worth having.
+ *
+ * ## What this does and does not fix
+ *
+ * Percentile bounds would land the ratio on the nominal 1.22:1, and were
+ * rejected: the top 0.1% of *random* teams are where the roster generator
+ * actually operates, and generated brings reach synergy 0.678 against a 99.9th
+ * percentile of 0.641. Clamping there would blind the search at exactly the point
+ * it does its work. These bounds clamp nothing.
+ *
+ * The residual is **1.79:1 in doubles and 1.71:1 in singles**, against a nominal
+ * 1.22:1 — recorded rather than tuned away. Synergy keeps roughly half again the
+ * influence the weights claim, because its own -1 clamp compresses the bottom of
+ * its range and normalizing cannot undo that. Closing the rest means changing
+ * `scoreTeamSynergy`, not these constants. This takes the error from 330% to 46%.
+ */
+export const COMPOSITE_BOUNDS = {
+  doubles: {
+    quality: { min: 0.3336, max: 0.6396 },
+    synergy: { min: -1, max: 0.7873 }
+  },
+  singles: {
+    quality: { min: 0.3184, max: 0.6443 },
+    synergy: { min: -1, max: 0.8078 }
+  }
 } as const;
 
 export interface MemberQualityInput {
@@ -327,22 +418,37 @@ export function scoreTeamSynergy(input: SynergyInput): number {
 /**
  * Combines member quality and synergy into the ranking score.
  *
- * Synergy is remapped from -1..1 onto 0..1 so the result is always a 0..100
- * figure, readable as a percentage of an ideal team.
+ * Both halves are rescaled onto 0..1 against their reachable ranges before being
+ * weighted, so COMPOSITE_WEIGHTS describes the balance the score actually has.
+ * See COMPOSITE_BOUNDS for the measurement and for what it does not fix.
+ *
+ * The result is still a 0..100 figure, but it is now read against real teams
+ * rather than against arithmetic limits: a team scoring 0 is as weak as the
+ * legal pool allows, not infinitely weak. Scores are therefore not comparable
+ * across a change to the bounds. No cache key moves with them — team scores are
+ * computed live in the workbench, and only the scan output is cached.
  *
  * @param memberQualities Per-member quality scores in 0..1.
  * @param synergy Team synergy in -1..1.
+ * @param format Battle format the bounds are taken from. Defaults to doubles.
  * @returns The composite score in 0..100.
  */
-export function composeTeamScore(memberQualities: number[], synergy: number): number {
+export function composeTeamScore(
+  memberQualities: number[],
+  synergy: number,
+  format: BattleFormat = BATTLE_FORMATS[DEFAULT_BATTLE_FORMAT]
+): number {
+  const bounds = COMPOSITE_BOUNDS[format.id];
+
   const averageQuality = memberQualities.length === 0
     ? 0
     : memberQualities.reduce((total, quality) => total + quality, 0) / memberQualities.length;
 
-  const synergyOnUnitScale = (Math.min(1, Math.max(-1, synergy)) + 1) / 2;
+  const rescale = (value: number, { min, max }: { min: number; max: number }) =>
+    max === min ? 0.5 : clamp01((value - min) / (max - min));
 
   return 100 * (
-    (COMPOSITE_WEIGHTS.memberQuality * averageQuality) +
-    (COMPOSITE_WEIGHTS.synergy * synergyOnUnitScale)
+    (COMPOSITE_WEIGHTS.memberQuality * rescale(averageQuality, bounds.quality)) +
+    (COMPOSITE_WEIGHTS.synergy * rescale(synergy, bounds.synergy))
   );
 }

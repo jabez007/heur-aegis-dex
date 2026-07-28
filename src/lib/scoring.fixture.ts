@@ -8,8 +8,8 @@
  *
  * `abilityProfiles` is deliberately empty — scoring reads the resolved fields,
  * and carrying every profile would triple the file for no assertion's benefit.
- * Each entry's ability is pinned in the generator rather than derived, so the
- * fixture cannot drift when the ability-selection rule changes.
+ * Each entry's ability is *derived* by the scan's own rule rather than pinned:
+ * a fixture that picks abilities its own way cannot see a defect in the picking.
  *
  * Regenerate with scripts/gen-scoring-fixture.mjs. Generated 2026-07-28.
  */
