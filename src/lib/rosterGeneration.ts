@@ -6,8 +6,14 @@
  * typing mutually exclusive, and meant the search optimised typings while the
  * user cared about Pokemon.
  *
- * This searches the Pokemon directly. The only identity constraint is the real
- * one: no duplicate species.
+ * This searches the Pokemon directly, so two Pokemon sharing a typing both stay
+ * in the running and the choice between them is made on their merits.
+ *
+ * Two constraints survive that. No duplicate species, which is a rule of the
+ * format. And no two members on the same type combination, which is not — you
+ * may register two Steel/Dragons — but which a *generated* roster should not
+ * spend a slot on. See `typingKey` for why the synergy penalty alone did not
+ * settle it. Both bind generation only; a hand-built roster is scored as it is.
  *
  * Like the type search this is a beam, not an exhaustive enumeration, and it
  * prunes twice over:
@@ -228,8 +234,53 @@ export interface GenerateRostersOptions {
   typeCount?: number;
   /** Champions forbids duplicate Pokedex numbers, so this defaults to false. */
   allowDuplicateSpecies?: boolean;
+  /**
+   * Allow two members to share a type combination. Defaults to false.
+   *
+   * Not a rule of the format — you may register two Steel/Dragons — but a
+   * generated roster should not spend a slot on one. See TYPING_KEY below.
+   */
+  allowDuplicateTypings?: boolean;
   candidateLimit?: number;
 }
+
+/**
+ * Identity used to keep a generated roster off the same typing twice.
+ *
+ * Sorted, so a combination read in either slot order is one typing. Species
+ * entries carry `typeName` already, but it comes from the type chart in whatever
+ * order that resource lists, and pinning identity to a display string would make
+ * this silently stop working if the chart ever reordered.
+ *
+ * ## Why the score alone was not enough
+ *
+ * Redundancy is already scored: two members with one typing contribute one set
+ * of resistances to `uniqueResistances` and one set of types to `typeDiversity`.
+ * Holding a Pokemon's stats and ability fixed and moving only its typing, a
+ * second Steel/Dragon beside Goodra-Hisui costs **about 5 points** against most
+ * other typings — so the charge is real and roughly the right size.
+ *
+ * It is not enough because it competes with individual quality on a roster where
+ * the alternatives are worse Pokemon. Seeded with Goodra-Hisui under the app's
+ * default filters, the best roster was:
+ *
+ *   goodra-hisui, **archaludon**, dragapult, primarina, rotom-heat, overqwil  87.30
+ *
+ * and the best with six distinct typings was the same roster with Metagross in
+ * place of Archaludon, at **86.77**. Archaludon's quality edge covered all but
+ * 0.53 of the 5-point charge. Half a point out of 87 is inside the noise of
+ * every weight in this model, and it bought a roster that answers the same
+ * threats twice and folds to Ground and Fighting on both.
+ *
+ * Raising the synergy penalty until 0.53 became decisive would mean recalibrating
+ * `COMPOSITE_BOUNDS` and every team score to fix a case a constraint states
+ * directly. The scoring keeps saying "slightly worse", which is true; the
+ * generator should not be *suggesting* it, which is a different question.
+ *
+ * The constraint binds generation only. A user who wants both can still add them
+ * by hand, and the workbench will score that roster honestly.
+ */
+const typingKey = (entry: PokemonEntry): string => [...entry.types].sort().join('/');
 
 export interface GeneratedRoster {
   members: PokemonEntry[];
@@ -294,10 +345,26 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
 /**
  * Builds rosters from a Pokemon pool, ranked by the bring options they offer.
  *
+ * Runs the search twice at most: once refusing to put two members on the same
+ * type combination, and again without that constraint if the first pass could
+ * not fill a roster. A narrow pool — a user filtering the browser down to a
+ * handful of typings — must still get a roster rather than an error, and in that
+ * case doubling up is the honest answer rather than a failure.
+ *
  * @param options Pool, format, roster size, seed and pruning limits.
  * @returns Rosters ordered by score, best first. May be empty.
  */
 export function generateRosters(options: GenerateRostersOptions): GeneratedRoster[] {
+  if (options.allowDuplicateTypings) return searchRosters(options, true);
+
+  const distinct = searchRosters(options, false);
+  return distinct.length > 0 ? distinct : searchRosters(options, true);
+}
+
+function searchRosters(
+  options: GenerateRostersOptions,
+  allowDuplicateTypings: boolean
+): GeneratedRoster[] {
   const {
     pokemon,
     format,
@@ -338,10 +405,25 @@ export function generateRosters(options: GenerateRostersOptions): GeneratedRoste
     return score;
   };
 
+  // Cached per entry: canAdd runs once per candidate per surviving partial, so
+  // this is on the hot path of the beam.
+  const typingOf = new Map<PokemonEntry, string>();
+  const typing = (entry: PokemonEntry): string => {
+    let key = typingOf.get(entry);
+    if (key === undefined) {
+      key = typingKey(entry);
+      typingOf.set(entry, key);
+    }
+    return key;
+  };
+
   const canAdd = (roster: PokemonEntry[], candidate: PokemonEntry): boolean => {
     if (roster.length >= rosterSize) return false;
     if (roster.some((member) => member.name === candidate.name)) return false;
     if (!allowDuplicateSpecies && roster.some((member) => member.speciesName === candidate.speciesName)) return false;
+    // A seed that already doubles a typing keeps whatever the user chose; this
+    // only stops the search from adding more of one.
+    if (!allowDuplicateTypings && roster.some((member) => typing(member) === typing(candidate))) return false;
     return true;
   };
 

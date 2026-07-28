@@ -261,6 +261,84 @@ describe('generateRosters', () => {
     expect(rosters[0].members).toHaveLength(3);
   });
 
+  it('does not spend a slot on a type combination the roster already has', () => {
+    // Reported case: seeding Goodra-Hisui and filling the roster added
+    // Archaludon, which is the same Steel/Dragon. Redundancy is scored — the
+    // pair contributes one set of resistances — but the charge competes with
+    // individual quality, and Archaludon's edge covered all but 0.53 points of
+    // it. The constraint states directly what the score only implies.
+    const seed = [mon('goodra-hisui', { types: ['steel', 'dragon'], typeName: 'steel/dragon' })];
+    const pokemon = [
+      // Same typing, and deliberately the strongest thing in the pool.
+      mon('archaludon', {
+        types: ['steel', 'dragon'],
+        typeName: 'steel/dragon',
+        stats: { hp: 90, attack: 105, defense: 130, 'special-attack': 125, 'special-defense': 65, speed: 85 },
+        normalizedDamageFromScore: 0.2
+      }),
+      mon('a', { types: ['water'], typeName: 'water' }),
+      mon('b', { types: ['fire'], typeName: 'fire' }),
+      mon('c', { types: ['grass'], typeName: 'grass' }),
+      mon('d', { types: ['ghost'], typeName: 'ghost' }),
+      mon('e', { types: ['fairy'], typeName: 'fairy' }),
+      mon('f', { types: ['bug'], typeName: 'bug' })
+    ];
+
+    const rosters = generateRosters({ pokemon, format: doubles, seed });
+
+    expect(rosters.length).toBeGreaterThan(0);
+    rosters.forEach((roster) => {
+      const typings = roster.members.map((m) => [...m.types].sort().join('/'));
+      expect(new Set(typings).size, roster.members.map((m) => m.name).join(',')).toBe(typings.length);
+    });
+    expect(rosters[0].members.map((m) => m.name)).not.toContain('archaludon');
+  });
+
+  it('treats a type combination as the same in either slot order', () => {
+    const seed = [mon('seeded', { types: ['steel', 'dragon'] })];
+    const pokemon = [
+      mon('reversed', { types: ['dragon', 'steel'] }),
+      ...['water', 'fire', 'grass', 'ghost', 'fairy'].map((t) => mon(t, { types: [t] }))
+    ];
+
+    const rosters = generateRosters({ pokemon, format: doubles, seed });
+
+    rosters.forEach((roster) => {
+      expect(roster.members.map((m) => m.name)).not.toContain('reversed');
+    });
+  });
+
+  it('doubles a typing rather than failing when the pool cannot avoid it', () => {
+    // A user can filter the browser down to a handful of typings. Returning no
+    // roster there would be worse advice than returning one that doubles up.
+    const pokemon = [
+      mon('p1', { types: ['steel', 'dragon'] }),
+      mon('p2', { types: ['steel', 'dragon'] }),
+      mon('p3', { types: ['steel', 'dragon'] }),
+      mon('p4', { types: ['steel', 'dragon'] })
+    ];
+
+    const rosters = generateRosters({ pokemon, format: doubles, rosterSize: 4 });
+
+    expect(rosters.length).toBeGreaterThan(0);
+    expect(rosters[0].members).toHaveLength(4);
+  });
+
+  it('honours an explicit request to allow duplicate typings', () => {
+    const pokemon = [
+      mon('x', { types: ['steel', 'dragon'] }),
+      mon('y', { types: ['steel', 'dragon'] }),
+      mon('z', { types: ['water'] }),
+      mon('w', { types: ['fire'] })
+    ];
+
+    const rosters = generateRosters({
+      pokemon, format: doubles, rosterSize: 4, allowDuplicateTypings: true
+    });
+
+    expect(rosters[0].members.map((m) => m.name).sort()).toEqual(['w', 'x', 'y', 'z']);
+  });
+
   it('keeps every seeded Pokemon', () => {
     const seed = [mon('locked-a', { typeName: 'ta' }), mon('locked-b', { typeName: 'tb' })];
     const rosters = generateRosters({ pokemon: pool(10), format: doubles, seed });

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A generated roster no longer spends a slot on a type combination it already has.** Reported: seeding Goodra-Hisui and clicking Fill Roster added Archaludon, also Steel/Dragon.
+
+  Reproduced under the app's default filters, which cut the pool to 86 Pokémon across 42 typings — Steel/Dragon holds exactly those two. Seeded with Goodra-Hisui, the best roster was `goodra-hisui, archaludon, dragapult, primarina, rotom-heat, overqwil` at **87.30**, and the best with six distinct typings was the same roster with Metagross instead, at **86.77**.
+
+  **The redundancy was already scored, and roughly correctly.** Holding Archaludon's stats and ability fixed and moving only its typing, a second Steel/Dragon costs about **5 points** against most alternatives — two members with one typing contribute one set of resistances to `uniqueResistances` and one set of types to `typeDiversity`. The problem is that the charge competes with individual quality, and Archaludon's edge over Metagross covered all but **0.53** of it. Half a point out of 87 is inside the noise of every weight in this model, and it bought a roster answering the same threats twice and folding to Ground and Fighting on both.
+
+  Fixed as a constraint rather than a weight. Raising the synergy penalty until 0.53 became decisive would mean recalibrating `COMPOSITE_BOUNDS` and every team score to settle a case a constraint states directly — and the scoring is not wrong when it says "slightly worse", it just should not be *suggesting* it. New `allowDuplicateTypings` option on `generateRosters`, defaulting to false.
+
+  **The search runs twice when it has to.** A user can filter the browser down to a handful of typings, and returning no roster there would be worse advice than one that doubles up, so a first pass that cannot fill falls back to the unconstrained search. Typing identity is the sorted type pair, so Steel/Dragon and Dragon/Steel are one typing.
+
+  Note this binds generation only. Adding both by hand still works and the workbench scores that roster honestly.
+
 ### Changed
 
 - **The three stat terms inside member quality are now measured against the ranges they occupy.** New `OBSERVED_STAT_TERMS`. This reorders the Pokémon Browser grid. Cache key bumped to v17.
