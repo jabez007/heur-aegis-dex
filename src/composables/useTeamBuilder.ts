@@ -23,6 +23,13 @@ export interface PartyMember {
   stats: Record<string, number>;
   abilityName?: string;
   weaknesses: string[];
+  /**
+   * Strict 4x subset of `weaknesses`. Carried separately because the team
+   * analysis weighs it separately: a type two members are quadruply weak to is
+   * the shape that loses games, and folding it into `weaknesses` would price it
+   * as an ordinary one.
+   */
+  quadrupleWeaknesses: string[];
   resistances: string[];
   /** Strict 0x subset of `resistances`, needed for doubles spread safety. */
   immunities: string[];
@@ -72,6 +79,7 @@ export function useTeamBuilder() {
     abilityName: member.abilityName,
     stats: member.stats as RosterMember['stats'],
     weaknesses: member.weaknesses,
+    quadruple_weaknesses: member.quadrupleWeaknesses,
     resistances: member.resistances,
     immunities: member.immunities,
     coverages: member.coverages,
@@ -154,9 +162,13 @@ export function useTeamBuilder() {
   // Analysis describes the brought team, not the whole roster: the other members
   // never share a battle, so folding them in would describe a team that never
   // takes the field.
+  // Routed through toRosterMember rather than spreading the PartyMember: the
+  // analysis reads snake_case fields, so a spread silently supplies nothing for
+  // any field whose two names differ. That is exactly how quadruple_weaknesses
+  // went missing here while the roster generator scored it.
   const coverageAnalysis = computed(() => analyzeTeamCoverage(
     broughtTeam.value.map((member) => ({
-      ...member,
+      ...toRosterMember(member),
       immuneToAllyMoves: format.value.hasAlly && isImmuneToAllyMoves(member.abilityName)
     }))
   ));
@@ -198,6 +210,7 @@ export function useTeamBuilder() {
     stats: entry.stats,
     abilityName: entry.abilityName,
     weaknesses: entry.weaknesses,
+    quadrupleWeaknesses: entry.quadrupleWeaknesses,
     resistances: entry.resistances,
     immunities: entry.immunities,
     coverages: entry.coverages,

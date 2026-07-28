@@ -274,4 +274,33 @@ describe('useTeamBuilder', () => {
     addPokemon(pokemon('charizard'));
     expect(builder.hasSpecies('charizard')).toBe(true);
   });
+
+  // The roster generator has always scored quadruple weaknesses, but the
+  // workbench dropped them: PartyMember never carried the field, so every
+  // member reached analyzeTeamCoverage with none. The same roster scored
+  // differently depending on which path evaluated it, and the shared-4x signal
+  // — three separate penalty terms in scoreTeamSynergy — never fired here.
+  it('scores the roster against its quadruple weaknesses', () => {
+    const quadRoster = (quad: string[]) => {
+      clearParty();
+      ['fire', 'water', 'grass', 'electric'].forEach((type, index) => {
+        addPokemon(pokemon(`mon-${index}`, {
+          typeName: type,
+          types: [type],
+          weaknesses: ['ice'],
+          quadrupleWeaknesses: quad
+        }));
+      });
+      return builder.rosterEvaluation.value.best!.score;
+    };
+
+    // Identical teams but for the 4x flag, so nothing else can explain the gap.
+    expect(quadRoster(['ice'])).toBeLessThan(quadRoster([]));
+  });
+
+  it('carries quadruple weaknesses onto the registered member', () => {
+    addPokemon(pokemon('charizard', { quadrupleWeaknesses: ['rock'] }));
+
+    expect(roster.value[0].quadrupleWeaknesses).toEqual(['rock']);
+  });
 });

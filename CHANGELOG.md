@@ -305,6 +305,14 @@
 
 ### Fixed
 
+- **The workbench scores the quadruple weaknesses it was blind to.** `PartyMember` never carried `quadrupleWeaknesses`, so `toRosterMember` emitted no `quadruple_weaknesses` and every member reached `analyzeTeamCoverage` with none. All three penalty terms that key on it — `quadrupleWeakness`, `sharedQuadrupleWeakness` and `uncoveredQuadrupleWeakness` — read zero for any roster built or displayed in the workbench.
+
+  The roster generator was unaffected: `rosterGeneration.ts` maps the field itself, as does the calibration script that measured `COMPOSITE_BOUNDS`. So the same six Pokémon scored differently depending on which path evaluated them, and the generator's score was the honest one. That matters for the composite rebalance recorded above, where two shared quadruple Ice weaknesses were precisely the signal synergy got *right*.
+
+  The `PartyMember` interface is exported, and the new field is required rather than optional — a member that silently omits it is the defect, not a valid state.
+
+  Also routes `coverageAnalysis` through `toRosterMember` instead of spreading the `PartyMember`. The analysis reads snake\_case, so a spread supplies nothing for any field whose two names differ; that asymmetry is how the field went missing while every neighbouring one worked.
+
 - **A generated roster no longer spends a slot on a type combination it already has.** Reported: seeding Goodra-Hisui and clicking Fill Roster added Archaludon, also Steel/Dragon.
 
   Reproduced under the app's default filters, which cut the pool to 86 Pokémon across 42 typings — Steel/Dragon holds exactly those two. Seeded with Goodra-Hisui, the best roster was `goodra-hisui, archaludon, dragapult, primarina, rotom-heat, overqwil` at **87.30**, and the best with six distinct typings was the same roster with Metagross instead, at **86.77**.
