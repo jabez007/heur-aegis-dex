@@ -256,6 +256,21 @@ describe('scoreBring', () => {
     expect(scoreBring([], doubles)).toBe(0);
   });
 
+  // Member quality used to be averaged over the members that *had* stats while
+  // synergy divided by the full team size, so a bring carrying stats-less
+  // members was scored as the smaller, better team it was not.
+  it('does not average member quality over only the members it can see', () => {
+    const full = ['a', 'b', 'c', 'd'].map((n) => member(n));
+    const partial = [
+      member('a'),
+      member('b'),
+      member('c', { stats: undefined }),
+      member('d', { stats: undefined })
+    ];
+
+    expect(scoreBring(partial, doubles)).toBeLessThan(scoreBring(full, doubles));
+  });
+
   it('ignores ally-damage immunity in singles', () => {
     // Telepathy protects against an ally's moves. With no ally it is inert, so
     // it must not change a singles score.

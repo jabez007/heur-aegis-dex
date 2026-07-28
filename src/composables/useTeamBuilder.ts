@@ -5,9 +5,9 @@ import { analyzeTeamCoverage } from '../lib/teamCoverage';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from '../lib/abilityRoles';
 import { evaluateRoster, type RosterMember } from '../lib/rosterScoring';
 import {
-  BATTLE_FORMATS,
   DEFAULT_BATTLE_FORMAT,
   getBattleFormat,
+  isBattleFormatId,
   type BattleFormatId
 } from '../lib/battleFormats';
 import { useNotifications } from './useNotifications';
@@ -139,18 +139,27 @@ export function useTeamBuilder() {
    * Steps to another line, wrapping in both directions.
    *
    * A hand-picked bring that is not a line counts as before the first one, so
-   * stepping forward from it lands on the best line rather than nowhere.
+   * stepping forward from it lands on the best line rather than nowhere. A step
+   * of zero from there stays off-line rather than jumping somewhere.
+   *
+   * Total for any integer step. The workbench only ever passes ±1, but this is
+   * exported from the published composable, and `(from + step + length) %
+   * length` normalizes exactly one wrap — `cycleBringLine(-5)` across three
+   * lines produced -2 and indexed off the end.
    *
    * @param step How many lines to move, negative to go back.
    */
   const cycleBringLine = (step: number) => {
     const lines = bringLines.value;
-    if (lines.length === 0) return;
+    if (lines.length === 0 || !Number.isFinite(step)) return;
 
     const from = currentLineIndex.value;
+    if (from === -1 && step === 0) return;
+
+    const wrap = (index: number) => ((index % lines.length) + lines.length) % lines.length;
     const next = from === -1
-      ? (step > 0 ? 0 : lines.length - 1)
-      : (from + step + lines.length) % lines.length;
+      ? (step > 0 ? wrap(step - 1) : wrap(step))
+      : wrap(from + step);
 
     // Line 0 is the best bring, which is what following the suggestion means, so
     // landing there clears the manual pick rather than pinning the same indices.
@@ -221,7 +230,7 @@ export function useTeamBuilder() {
   });
 
   const setFormat = (nextFormatId: BattleFormatId) => {
-    if (!(nextFormatId in BATTLE_FORMATS)) return;
+    if (!isBattleFormatId(nextFormatId)) return;
     formatId.value = nextFormatId;
     // A bring sized for the old format is meaningless under the new one.
     manualBringIndices.value = null;

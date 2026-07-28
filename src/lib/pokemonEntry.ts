@@ -156,7 +156,13 @@ export function toPokemonEntry(
     resistances: profile?.resistances ?? entry.effective_resistances ?? [],
     immunities: profile?.immunities ?? entry.effective_immunities ?? [],
     coverages: profile?.coverages ?? entry.effective_coverages ?? [],
-    moveCoverages: entry.effective_move_coverages ?? [],
+    // Profile first, like every field around it. Which half of a learnset is
+    // worth a moveslot depends on the stats the Pokemon fights with, and those
+    // follow the ability — so coverage is an ability-resolved value, not an
+    // entry-level one. A fresh scan sets `effective_move_coverages` from this
+    // same profile, so the two agree today; the asymmetry was a trap rather
+    // than a live defect, and `withAbility` below already reads it this way.
+    moveCoverages: profile?.move_coverages ?? entry.effective_move_coverages ?? [],
     normalizedDamageToScore: normalizeDamageToScore(
       profile?.damage_to_score ?? entry.effective_damage_to_score, baseScore
     ),

@@ -313,6 +313,16 @@
 
   Also routes `coverageAnalysis` through `toRosterMember` instead of spreading the `PartyMember`. The analysis reads snake\_case, so a spread supplies nothing for any field whose two names differ; that asymmetry is how the field went missing while every neighbouring one worked.
 
+- **Four lookups and reductions made total.** None had a reachable trigger in the app today; all four were one edit away from having one, and three sit on the published library surface.
+
+  `getBattleFormat` tested membership with `in`, which answers true for everything on `Object.prototype` — `getBattleFormat('constructor')` returned the `Object` constructor typed as a `BattleFormat`. The failure would have surfaced far from the lookup, where `SYNERGY_BONUS_WEIGHTS_BY_FORMAT[format.id]` and `COMPOSITE_BOUNDS[format.id]` read undefined. New exported `isBattleFormatId` guard, used by `setFormat` too. Format ids reach these from persisted settings, so "no caller passes a bad one" was never a property this module could rely on.
+
+  `cycleBringLine` normalized exactly one wrap, so `cycleBringLine(-5)` across three lines indexed `lines[-2]` and threw. The workbench only ever passes ±1; the composable is exported. A step of zero from an off-line bring now holds position instead of jumping to the last line.
+
+  `scoreBring` averaged member quality over the members that *had* stats while `scoreTeamSynergy` divided by the full team size, so a bring carrying stats-less members scored as the smaller, better team it was not. They now count as zero.
+
+  `toPokemonEntry` read `moveCoverages` from the entry while every neighbouring field preferred the selected ability's profile — and `withAbility` already read it the other way. Coverage is resolved against the stat line the ability produces, so the profile is where it belongs. A fresh scan sets both from the same profile, so the two agreed; the asymmetry was a trap rather than a live defect.
+
 - **The generators fail loudly instead of quietly destroying what they were meant to produce.** Three tooling faults, all the same shape — the failure path was silent where it should have been noisy.
 
   `gen:scoring-fixture` piped stdout into `src/lib/scoring.fixture.ts` with `>`. The shell truncates the destination when it sets the redirection up, before the script has fetched anything, and there is no retry around the fetches. One PokeAPI hiccup emptied the file every ordinal assertion is read against. The generator now writes the file itself, as `gen-coverage-moves.mjs` already did.

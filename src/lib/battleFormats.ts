@@ -63,13 +63,32 @@ export const BATTLE_FORMAT_LIST: readonly BattleFormat[] = [
 export const DEFAULT_BATTLE_FORMAT: BattleFormatId = 'doubles';
 
 /**
+ * Whether a string names a battle format.
+ *
+ * Tests own properties rather than using `in`, which also answers true for
+ * everything on `Object.prototype`. `getBattleFormat('constructor')` would
+ * otherwise return the `Object` constructor typed as a `BattleFormat`, and the
+ * failure surfaces far from here: `SYNERGY_BONUS_WEIGHTS_BY_FORMAT[format.id]`
+ * and `COMPOSITE_BOUNDS[format.id]` would read undefined and every scoring path
+ * downstream of them would throw or silently mis-score. Ids reach this function
+ * from persisted settings, so "no caller passes a bad one" is not a property
+ * this module can rely on.
+ *
+ * @param id Candidate identifier.
+ * @returns True when the id names a real format.
+ */
+export function isBattleFormatId(id: string | null | undefined): id is BattleFormatId {
+  return !!id && Object.prototype.hasOwnProperty.call(BATTLE_FORMATS, id);
+}
+
+/**
  * Looks up a battle format, falling back to the default for unknown ids.
  *
  * @param id Format identifier.
  * @returns The matching format, or the default when unrecognised.
  */
 export function getBattleFormat(id: string | null | undefined): BattleFormat {
-  if (id && id in BATTLE_FORMATS) return BATTLE_FORMATS[id as BattleFormatId];
+  if (isBattleFormatId(id)) return BATTLE_FORMATS[id];
   return BATTLE_FORMATS[DEFAULT_BATTLE_FORMAT];
 }
 

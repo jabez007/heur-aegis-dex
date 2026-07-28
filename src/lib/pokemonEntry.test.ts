@@ -54,6 +54,29 @@ describe('toPokemonEntry', () => {
     expect(entry.moveCoverages).toEqual(['fire', 'rock', 'grass']);
   });
 
+  // Coverage is resolved against the stat line the selected ability produces, so
+  // it belongs to the profile like every neighbouring field. This one read the
+  // entry-level value directly; a fresh scan sets both from the same profile, so
+  // the two agreed and the asymmetry stayed invisible.
+  it('prefers the selected profile move coverage over the entry-level value', () => {
+    const entry = toPokemonEntry(scanEntry('pelipper', {
+      ability_profiles: {
+        'keen-eye': {
+          weaknesses: ['electric', 'rock'],
+          quadruple_weaknesses: ['electric'],
+          resistances: ['fighting', 'ground'],
+          immunities: ['ground'],
+          coverages: ['fire', 'rock'],
+          move_coverages: ['water', 'flying'],
+          damage_from_score: 20,
+          damage_to_score: 20
+        }
+      }
+    }), 'water/flying')!;
+
+    expect(entry.moveCoverages).toEqual(['water', 'flying']);
+  });
+
   it('normalizes damage scores onto the 0..1 scale', () => {
     const entry = toPokemonEntry(scanEntry('pelipper'), 'water/flying')!;
 

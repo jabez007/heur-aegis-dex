@@ -233,14 +233,20 @@ export function scoreBring(members: RosterMember[], options: RosterScoringOption
   );
   const typesTotal = new Set(members.flatMap((member) => member.types || [])).size;
 
-  const memberQualities = members
-    .filter((member): member is RosterMember & { stats: PokemonStats } => !!member.stats)
-    .map((member) => scoreMemberQuality({
+  // A member without stats scores zero rather than dropping out of the average.
+  // Filtering divided by the *surviving* count while scoreTeamSynergy below
+  // still divides by members.length, so a bring of four with two stats-less
+  // members was averaged as a bring of two — reading as a smaller, better team
+  // instead of a worse one. Zero is the honest reading: a member the scoring
+  // cannot see contributes nothing to how good the team is.
+  const memberQualities = members.map((member) => member.stats
+    ? scoreMemberQuality({
       stats: member.stats,
       normalizedDamageToScore: member.normalizedDamageToScore ?? 0.5,
       normalizedDamageFromScore: member.normalizedDamageFromScore ?? 0.5,
       abilityName: member.abilityName
-    }));
+    })
+    : 0);
 
   const synergy = scoreTeamSynergy({
     coverage,

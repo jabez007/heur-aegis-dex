@@ -261,6 +261,24 @@ describe('useTeamBuilder', () => {
     );
   });
 
+  // `(from + step + length) % length` normalizes exactly one wrap, so a step
+  // past that produced a negative index and threw on `lines[next].indices`.
+  // The workbench only passes ±1, but this is exported from the composable.
+  it('cycles by any step, not just one', () => {
+    fillRoster(addPokemon, 6);
+    const lines = builder.bringLines.value;
+
+    expect(() => builder.cycleBringLine(-(lines.length * 2 + 1))).not.toThrow();
+    expect(builder.currentLineIndex.value).toBe(lines.length - 1);
+
+    expect(() => builder.cycleBringLine(lines.length * 3 + 2)).not.toThrow();
+    expect(builder.currentLineIndex.value).toBe(1);
+
+    // A step of zero holds position rather than moving.
+    builder.cycleBringLine(0);
+    expect(builder.currentLineIndex.value).toBe(1);
+  });
+
   it('has nothing to cycle before a bring can be fielded', () => {
     fillRoster(addPokemon, 3);
 

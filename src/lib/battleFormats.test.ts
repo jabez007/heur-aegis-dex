@@ -31,6 +31,16 @@ describe('battle formats', () => {
     expect(getBattleFormat(null).id).toBe('doubles');
     expect(getBattleFormat(undefined).id).toBe('doubles');
   });
+
+  // An `in` check answers true for everything on Object.prototype, so these
+  // returned the Object constructor typed as a BattleFormat. The failure landed
+  // far from here: SYNERGY_BONUS_WEIGHTS_BY_FORMAT[format.id] reads undefined
+  // and the scoring path downstream throws.
+  it('does not mistake a prototype key for a format', () => {
+    expect(getBattleFormat('constructor').id).toBe('doubles');
+    expect(getBattleFormat('toString').id).toBe('doubles');
+    expect(getBattleFormat('hasOwnProperty').id).toBe('doubles');
+  });
 });
 
 describe('combinationsOf', () => {
