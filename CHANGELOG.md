@@ -29,6 +29,34 @@
 
 - **Corrected a stale comment in the scoring fixture header**, which claimed abilities were pinned in the generator. They have been derived by the scan's own rule since the ability-selection fix.
 
+- **Took a position: bulky attackers rank above walls that cannot threaten anything.** `strongAttackers` is now classified rather than left open, and asserted above `defensiveCore`.
+
+  Judged against this project's premise — defensive typing, then decent bulk within it, then a real attacking stat out of what survives — the two teams split gate by gate:
+
+  | gate | defensive core | strong attackers |
+  | --- | --- | --- |
+  | defensive typing | **17 unique resistances** | 16 |
+  | decent bulk | 0.651 | 0.649 |
+  | attacking stat | 0.543 | **0.747** |
+
+  **Gate 2 decides it, and it is the one that surprises.** The usual case against a team of attackers is that it trades a turn for a KO and then dies, leaving the match to a speed race. That is not this lineup: Garchomp is 108/95/85, Annihilape 110/80/90, Kingambit 100/120/85. Only Lucario and Sneasler are frail. They are *bulky* attackers, so the objection does not apply and the walls' remaining edge is worth about one resistance.
+
+  Gate 3 the walls fail outright — best attacking stats of 80, 90, 80, 95, 100 and 77, not one above 100, against four at 130 or better. A team that cannot KO does not win; it stalls until the clock or chip damage decides.
+
+  The margin stays narrow (69.8 to 67.1) and the assertion deliberately does not demand otherwise: both teams fail the pipeline, in opposite directions. A second test carries the real claim — `balance`, which passes all three gates, must beat *both* by more than 5 points.
+
+- **`MEMBER_WEIGHTS` was checked against the ranges its terms occupy, and holds up.** The same audit that found the composite weights behaving as 16/84 was run one level down, over all 208 legal species:
+
+  | term | span | weight | realized swing | share |
+  | --- | --- | --- | --- | --- |
+  | offense | 0.502 | 0.35 | 0.176 | 0.34 |
+  | bulk | 0.475 | 0.45 | 0.214 | **0.41** |
+  | speed | 0.673 | 0.20 | 0.135 | 0.26 |
+
+  Bulk really is the largest term, which is what the premise asks for — `STAT_CEILINGS` having been set to competitive rather than theoretical maxima is why, and this is the evidence it worked. Speed drifts to 0.26 against a nominal 0.20 because base Speed spreads wider across the pool; left alone deliberately, since correcting a 6-point overshoot on a term already known to be modelled wrong for Trick Room would be tuning the symptom.
+
+  A first pass at this, measured on the 51-Pokémon fixture rather than the legal pool, suggested bulk was the *most* compressed term and wrongly implied the weights were inverted. The fixture is selected for scoring edge cases, not representative of the pool. Recorded because the wrong conclusion was reachable from data already in the repo.
+
 - **BREAKING: roster depth counts *different* teams, not the top three bring options.** `ROSTER_DEPTH_OPTIONS` is removed, replaced by `selectDistinctLines`, `countTargetLines`, `maxSharedMembers` and `VIABLE_LINE_MARGIN`. `RosterEvaluation` gains `lines`, `viableLines` and `targetLines`.
 
   Depth was the mean of the three highest-scoring bring options. From six Pokemon bringing four there are fifteen options, and the top three are always **the same team with one Pokemon swapped** — they overlap the best bring in three of four members. The term averaged the peak three times and was reported as depth.

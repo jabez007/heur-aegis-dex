@@ -171,27 +171,20 @@ const TEAMS = {
   },
 
   /**
-   * Deliberately unclassified, and kept because the judgement is genuinely close.
-   *
    * This was `overlappingThreats` until the composite bounds were measured, on a
    * description that did not match it: it claimed the members shared a quadruple
    * weakness, and they do not. Garchomp, Sneasler, Kingambit and Glimmora carry
    * one *each* — to Ice, Psychic, Fighting and Ground — so `sharedQuadrupleWeakness`,
-   * the heaviest penalty in the model at 1.5, never fired on it at all. Sixteen
-   * unique resistances across the six, against the defensive core's seventeen.
+   * the heaviest penalty in the model at 1.5, never fired on it at all.
    *
    * Under the old compressed scale synergy outvoted its member quality anyway and
-   * it scored below the walls, so the fixture agreed with the assertion for a
-   * reason nobody had checked. With the bounds corrected it scores 69.8 against
-   * the core's 67.1.
-   *
-   * Whether six strong attackers with unshared weaknesses *should* beat six walls
-   * that cannot KO anything is a real judgement, not a defect, so it is recorded
-   * rather than asserted either way. What is asserted below is only what the
-   * model should guarantee regardless: it beats the teams that are simply bad.
+   * it scored below the defensive core, so the fixture agreed with its assertion
+   * for a reason nobody had checked.
    */
   strongAttackers: {
     label: 'strong attackers',
+    why: 'Bulky attackers with unshared weaknesses. Placed above the defensive core '
+      + 'deliberately — see the assertion, which turns on the two teams having the same bulk.',
     members: team('garchomp', 'sneasler', 'annihilape', 'kingambit', 'lucario', 'glimmora')
   }
 } as const;
@@ -386,7 +379,7 @@ describe('scoring validation — member ranking', () => {
 });
 
 describe('scoring validation — team ranking', () => {
-  const strong = [TEAMS.balance, TEAMS.sun, TEAMS.defensiveCore];
+  const strong = [TEAMS.balance, TEAMS.sun, TEAMS.defensiveCore, TEAMS.strongAttackers];
   const weak = [TEAMS.monoFire, TEAMS.junk, TEAMS.overlappingThreats];
 
   it('scores every considered team above every discarded one', () => {
@@ -435,17 +428,51 @@ describe('scoring validation — team ranking', () => {
     expect(scoreTeam(core)).toBeGreaterThan(scoreTeam(frail));
   });
 
-  it('still rejects the teams that are simply bad, whatever the close calls', () => {
-    // `strongAttackers` is the lineup this fixture used to assert against the
-    // defensive core, on a description that did not match it — see its comment.
-    // Where it belongs against the walls is a judgement; that it beats the teams
-    // with no case at all is not.
-    const attackers = scoreTeam(TEAMS.strongAttackers.members);
-
-    expect(attackers).toBeGreaterThan(scoreTeam(TEAMS.junk.members));
-    expect(attackers).toBeGreaterThan(scoreTeam(TEAMS.monoFire.members));
-    expect(attackers).toBeLessThan(scoreTeam(TEAMS.balance.members));
+  it('ranks bulky attackers above walls that cannot threaten anything', () => {
+    // The position, and the reasoning it stands on.
+    //
+    // This project's premise is a pipeline: a strong defensive typing, then
+    // decent bulk within it, then a real attacking stat out of what survives.
+    // Judge the two teams gate by gate and the answer is not close:
+    //
+    //   gate 1, defensive typing — the walls win, seventeen unique resistances
+    //           to sixteen. This is the whole point of the team.
+    //   gate 2, decent bulk      — a TIE. Averaged over the six, bulk is 0.651
+    //           for the core and 0.649 for the attackers.
+    //   gate 3, an attacking stat — the attackers win outright, 0.747 to 0.543.
+    //
+    // Gate 2 is the one that decides it, and it is the one that surprises. The
+    // usual case against a team of attackers is that it trades a turn for a KO
+    // and then dies. That is not this team: Garchomp is 108/95/85, Annihilape
+    // 110/80/90, Kingambit 100/120/85. Only Lucario and Sneasler are frail. They
+    // are bulky attackers, so the objection does not apply and the walls' one
+    // advantage is a typing edge worth about a resistance.
+    //
+    // Gate 3 the walls fail outright. Their best attacking stats are 80, 90, 80,
+    // 95, 100 and 77 — not one above 100 in a format where the attackers bring
+    // four at 130 or better. A team that cannot KO does not win; it stalls until
+    // the clock or chip damage decides, which is losing slowly.
+    //
+    // The margin should stay narrow, and the assertion below deliberately does
+    // not demand otherwise. Both teams fail the pipeline, in opposite directions:
+    // the walls at gate 3, the attackers on shared weaknesses that the synergy
+    // term charges them for (-0.139 against the core's +0.094). Neither is the
+    // answer, which is why the test that matters is the next one.
+    expect(scoreTeam(TEAMS.strongAttackers.members))
+      .toBeGreaterThan(scoreTeam(TEAMS.defensiveCore.members));
   });
+
+  it('puts a team that passes every gate clearly above teams that fail one', () => {
+    // The real claim behind the pair above. `balance` has the typing spread, the
+    // bulk and the attacking stats; the other two each miss something. If the
+    // model ever rates a one-sided team level with a complete one, the premise
+    // this project is built on has stopped being expressed.
+    const complete = scoreTeam(TEAMS.balance.members);
+
+    expect(complete - scoreTeam(TEAMS.strongAttackers.members)).toBeGreaterThan(5);
+    expect(complete - scoreTeam(TEAMS.defensiveCore.members)).toBeGreaterThan(5);
+  });
+
 
   it('keeps both halves of the composite on the footing the weights claim', () => {
     // The structural invariant behind every team assertion above, and the one

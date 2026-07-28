@@ -105,6 +105,32 @@ export function effectiveOffense(stats: PokemonStats): number {
  * treated as linearly good, which is wrong for a format where Trick Room makes
  * low Speed an asset. Correcting that needs move data the scan does not have,
  * so the bias is recorded here rather than papered over.
+ *
+ * ## These were checked against the ranges they actually occupy
+ *
+ * A weight only means what it says if the term under it uses its range — the
+ * defect COMPOSITE_BOUNDS records one level up, and the reason to look here too.
+ * Measured across all 208 legal species of Regulation M-B on 2026-07-28, over the
+ * 1st-to-99th percentile band:
+ *
+ * | term    | span  | weight | realized swing | share |
+ * | ------- | ----- | ------ | -------------- | ----- |
+ * | offense | 0.502 | 0.35   | 0.176          | 0.34  |
+ * | bulk    | 0.475 | 0.45   | 0.214          | 0.41  |
+ * | speed   | 0.673 | 0.20   | 0.135          | 0.26  |
+ *
+ * Against a nominal 0.35 / 0.45 / 0.20. **These hold up**, unlike the composite
+ * weights above: bulk really is the largest term, which is what this project's
+ * premise asks for. `STAT_CEILINGS` having been set to competitive rather than
+ * theoretical maxima is why, and this is the evidence that it worked.
+ *
+ * The one drift worth recording: Speed swings 0.26 of the total against a nominal
+ * 0.20, because base Speed spreads wider across the pool than either other term.
+ * Left alone deliberately — correcting a 6-point overshoot on a term already
+ * known to be modelled wrong for Trick Room would be tuning the symptom.
+ *
+ * Rerun `npm run measure:composite-bounds` after changing STAT_CEILINGS,
+ * SECONDARY_OFFENSE_WEIGHT or these weights.
  */
 export const MEMBER_WEIGHTS = {
   offense: 0.35,

@@ -24,7 +24,9 @@ import { getEffectiveStats } from '../src/lib/statAbilities.ts';
 import { getActiveRegulation } from '../src/lib/regulations.ts';
 import { analyzeTeamCoverage } from '../src/lib/teamCoverage.ts';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from '../src/lib/abilityRoles.ts';
-import { scoreMemberQuality, scoreTeamSynergy } from '../src/lib/teamScoring.ts';
+import {
+  MEMBER_WEIGHTS, STAT_CEILINGS, effectiveOffense, scoreMemberQuality, scoreTeamSynergy
+} from '../src/lib/teamScoring.ts';
 import { BATTLE_FORMAT_LIST } from '../src/lib/battleFormats.ts';
 import {
   DEFAULT_BASE_SCORE as BASE,
@@ -142,6 +144,30 @@ const halves = (members, format) => {
 };
 
 const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+
+// The same question one level down: do the three stat terms inside
+// scoreMemberQuality use the range MEMBER_WEIGHTS assumes they do?
+{
+  const clamp01 = (v) => Math.min(1, Math.max(0, v));
+  const terms = { offense: [], bulk: [], speed: [] };
+  pool.forEach((m) => {
+    terms.offense.push(clamp01(effectiveOffense(m.stats) / STAT_CEILINGS.offense));
+    terms.bulk.push(clamp01((m.stats.hp + m.stats.defense + m.stats['special-defense']) / STAT_CEILINGS.bulk));
+    terms.speed.push(clamp01(m.stats.speed / STAT_CEILINGS.speed));
+  });
+  process.stdout.write('\nmember-quality stat terms across the legal pool:\n');
+  Object.entries(terms).forEach(([name, values]) => {
+    values.sort((a, b) => a - b);
+    const lo = percentile(values, 0.01);
+    const hi = percentile(values, 0.99);
+    process.stdout.write(
+      `  ${name.padEnd(8)} min ${values[0].toFixed(3)} p01 ${lo.toFixed(3)} p99 ${hi.toFixed(3)} ` +
+      `max ${values.at(-1).toFixed(3)} | span ${(hi - lo).toFixed(3)} ` +
+      `| weight ${MEMBER_WEIGHTS[name]} -> realized swing ${(MEMBER_WEIGHTS[name] * (hi - lo)).toFixed(3)}\n`
+    );
+  });
+  process.stdout.write('\n');
+}
 
 for (const format of BATTLE_FORMAT_LIST) {
   const qualities = [];
