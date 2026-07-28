@@ -10,6 +10,36 @@
 
   Wraps in both directions, and landing on line 1 clears the manual pick rather than pinning the same indices — line 1 *is* the suggestion. A hand-picked bring that matches no line reads as "Your pick" and steps onto the best line from either direction. Per-slot BRINGING/BENCH toggles are unchanged.
 
+- **Unconditional stat abilities are applied.** `src/lib/statAbilities.ts` applies Huge Power, Pure Power, Fur Coat, Ice Scales and Hustle — the abilities that change a stat with no setup at all. The other twelve carried by a Regulation M-B legal species (Chlorophyll, Swift Swim, Guts, Solar Power, Plus/Minus and the rest) are recorded with the condition that rules them out, so their absence reads as a decision rather than an oversight. Each ability profile carries its own stat line, so switching ability moves the numbers and the coverage list, not just the resistances. Cards disclose which ability changed the stats and by how much.
+
+  **Ability selection changed with it.** The default ability was previously chosen on defensive merit alone, which handed Azumarill Sap Sipper over the ability that doubles its Attack. A stat ability now wins the default.
+
+  **The stat floors see the ability**, so Azumarill is measured at the 100 Attack it swings with rather than the 50 it is printed with, and Furfrou at the 120 Defense Fur Coat gives it. Together with the recalibrated floors below, that brings Azumarill, Medicham, Diggersby and Furfrou back into a default scan.
+
+  Caveat recorded in the table: Hustle's ×1.5 Attack comes with an 80% physical accuracy penalty that a stat line cannot express, so Hustle Pokemon read slightly stronger here than they play.
+
+- **Move coverage is split by damage class and read against the attacker's stats.** The generator already fetched each move's physical/special class and used it only to drop status moves; the emitted table flattened the two together. That credited Pelipper with Dark, Steel, Bug, Grass and Poison coverage it can never use at 50 Attack against 95 Special Attack. Measured across the Regulation M-B roster, 16% of the coverage types credited to a clearly one-sided attacker were reachable only through the wrong stat, and the tail was far worse than the average — Sceptile went from 12 usable move types to 5.
+
+  `COVERAGE_MOVE_TYPES` entries are now `{ physical, special }`, and `getCoverageMoveTypes` / `getMoveCoverage` take optional stats. Pokemon whose attacking stats sit within `MIXED_ATTACKER_RATIO` (15%) keep both classes, because they genuinely run either; omitting stats also returns both, which is the honest answer for an unknown bias and matches the previous behaviour. Moves that pick their class at use time, like Shell Side Arm, count for both.
+
+  Net effect on the roster: mean usable move types per Pokemon falls from 9.83 to 8.56, with 158 of 318 entries unchanged. This matters most where move coverage answers "does the team have a response to this weakness" — an overstated entry could mark a weakness as covered when nothing on the team could actually hit it.
+
+- **Pokemon that register as one form and fight as another are rated on the form they fight in.** `src/lib/battleForms.ts` records which battle-only forms qualify, and just as importantly which do not — each entry carries its reasoning, so a species missing from the table can be told apart from one that was considered and rejected. A form is merged only when its trigger is an ability the registered Pokemon actually has, the typing is unchanged, and the Pokemon spends the battle in it. Today that is Palafin alone: Zero to Hero converts on the first switch-out and never reverts, a 193-point swing that took Palafin from below the default stat floor to a 650 base stat total. Aegislash, Castform, Greninja, Mimikyu and Morpeko are recorded as deliberately not merged. Affected cards disclose the form the numbers came from.
+
+- **An ability-effect layer for abilities that change what a stat line is worth.** Three ability layers already existed — type immunities in `pokedexAbilities`, support roles in `abilityRoles`, stat multipliers in `statAbilities` — and between them they missed Unaware, Multiscale, Sturdy, Thick Fat and Adaptability entirely. `src/lib/abilityEffects.ts` scales the half of member quality an ability actually affects: bulk for durability abilities, offence for Adaptability. Applied to ten abilities; nine more are recorded with the condition that rules them out.
+
+  Move-dependent abilities are the largest excluded group, deliberately. Prankster is among the strongest abilities in the format, but its value is entirely in *which* moves it makes priority — and moves are not modelled here beyond coverage types, so crediting it would be scoring a moveset the tool cannot see.
+
+  The visible symptom was Skeledirge ranking below Typhlosion-Hisui. They share Fire/Ghost typing exactly, so the comparison came down to raw stats, where Typhlosion-H legitimately wins — and everything that makes Skeledirge the better Pokemon was worth zero.
+
+- **A validation fixture for the scoring weights.** Every other test checks that a formula computes what it claims to; none checked whether the formula was *right*, and every weight in `MEMBER_WEIGHTS`, `CANDIDATE_WEIGHTS`, `MIXED_ATTACKER_RATIO` and the synergy sets was argued from structure rather than measured. `src/lib/scoringValidation.test.ts` is the counterweight: six real teams — balance, sun, a defensive core, mono-Fire, junk, and frail attackers — scored against each other, plus member-ranking comparisons over 41 real Pokemon.
+
+  Assertions are **ordinal**, never absolute. A team judged stronger must outscore one judged weaker; no assertion names a number, because thresholds fail on every weight change regardless of whether it was an improvement and train people to update expected values without reading them. Each team carries its reasoning inline, so a failure is a disagreement to adjudicate rather than a number to bump.
+
+  The fixture data is generated by driving the project's own pipeline — real type chart, real ability modifiers, real coverage table — via `npm run gen:scoring-fixture`. Hand-written approximations could agree with the scoring for the wrong reasons. Each Pokemon's ability is pinned in the generator rather than derived, so the fixture cannot drift when the selection rule changes.
+
+  **It found a real defect on its first run.** `supportRole: 12` and `quadrupleWeakness: 15` were carried over from the previous formula, whose terms ran to 44. The rework compressed the base to a roughly 30-point spread, so those adjuncts could swing 27 points against it — enough to rank Arbok above Garchomp. Rescaled to 4 and 5, with `coverage` to 0.75 and `moveCoverage` to 0.2. A structural assertion now pins the invariant: the largest single-Pokemon adjustment must stay under half the observed spread of member quality, measured from the fixture rather than assumed.
+
 ### Changed
 
 - **The two roster numbers say what they are, and show their own arithmetic.** They were rendered as bare figures — `72/100` and `2/3 lines` — with nothing to say what either measured. Now labelled "roster 72/100" and "2 of 3 lines hold up".
@@ -29,22 +59,6 @@
   The lines tooltip lists each line with its score and how far behind the best it sits, marking the ones too far back to count.
 
   `RosterEvaluation` gains `depth` so the workbench can show the arithmetic without keeping a second copy of the formula that could drift from the real one; a test pins that `best x 0.6 + depth x 0.4` reconstructs `score` exactly.
-
-### Fixed
-
-- **A generated roster no longer spends a slot on a type combination it already has.** Reported: seeding Goodra-Hisui and clicking Fill Roster added Archaludon, also Steel/Dragon.
-
-  Reproduced under the app's default filters, which cut the pool to 86 Pokémon across 42 typings — Steel/Dragon holds exactly those two. Seeded with Goodra-Hisui, the best roster was `goodra-hisui, archaludon, dragapult, primarina, rotom-heat, overqwil` at **87.30**, and the best with six distinct typings was the same roster with Metagross instead, at **86.77**.
-
-  **The redundancy was already scored, and roughly correctly.** Holding Archaludon's stats and ability fixed and moving only its typing, a second Steel/Dragon costs about **5 points** against most alternatives — two members with one typing contribute one set of resistances to `uniqueResistances` and one set of types to `typeDiversity`. The problem is that the charge competes with individual quality, and Archaludon's edge over Metagross covered all but **0.53** of it. Half a point out of 87 is inside the noise of every weight in this model, and it bought a roster answering the same threats twice and folding to Ground and Fighting on both.
-
-  Fixed as a constraint rather than a weight. Raising the synergy penalty until 0.53 became decisive would mean recalibrating `COMPOSITE_BOUNDS` and every team score to settle a case a constraint states directly — and the scoring is not wrong when it says "slightly worse", it just should not be *suggesting* it. New `allowDuplicateTypings` option on `generateRosters`, defaulting to false.
-
-  **The search runs twice when it has to.** A user can filter the browser down to a handful of typings, and returning no roster there would be worse advice than one that doubles up, so a first pass that cannot fill falls back to the unconstrained search. Typing identity is the sorted type pair, so Steel/Dragon and Dragon/Steel are one typing.
-
-  Note this binds generation only. Adding both by hand still works and the workbench scores that roster honestly.
-
-### Changed
 
 - **The three stat terms inside member quality are now measured against the ranges they occupy.** New `OBSERVED_STAT_TERMS`. This reorders the Pokémon Browser grid. Cache key bumped to v17.
 
@@ -221,62 +235,6 @@
 
   Cache key bumped to v15: scan results store normalized scores, so cached scans are on the old scale.
 
-### Fixed
-
-- **Breedability is asked at the variety level, not only the species level.** The scan's breedable-only rule read `/pokemon-species` — egg groups plus the legendary and mythical flags — which is the right place for almost every Pokemon. It is the wrong place for Floette-Eternal, a variety of a perfectly ordinary Fairy-egg-group species that has never been obtainable in any released game. Nothing upstream rejected it either: the form is neither battle-only nor Mega, the regulation filter is species-keyed and `floette` is on the M-B roster, and its 551 base stat total clears the floors easily.
-
-  **The symptom was worse than a spurious extra entry.** Base Floette is 371 BST and fails the 440 total floor, so the browser showed exactly one Floette — the one nobody can have.
-
-  `src/lib/unbreedableForms.ts` records these by variety name in the `battleForms.ts` idiom: each entry carries its reasoning, and the varieties considered and *kept* are recorded alongside the excluded ones, because a bare absence cannot be told apart from an oversight. Two are excluded. Floette-Eternal, and Greninja-Battle-Bond — distribution-only, and the ability does not pass to offspring, so a player can receive one but never produce one. It survives variety collapsing because its lone ability differs from the registered Greninja's pair. Basculegion-F, Meowstic-F and Lycanroc-Dusk are recorded as deliberately kept.
-
-  PokeAPI models no variety-level breedability, so this has to be recorded data rather than derived. The one available proxy — "has no moves in the `champions` version group" — was already considered and rejected when varieties were collapsed, because it conflates a form that does not exist with a form PokeAPI has not filled in yet.
-
-  **The audit behind it:** all 208 M-B legal species were walked, yielding 34 non-default varieties that survive every filter, 30 of them distinct enough to survive collapsing. The other 28 are ordinary — regional forms, the five Rotom appliances, Gourgeist sizes, gender forms — and stay. The four Totem forms were already correctly collapsed.
-
-  **A whitelist of exclusions goes stale quietly**, which is the weakness of this fix: a future regulation adding a species with an event-only form brings it into the browser with nothing to announce it, exactly as Floette-Eternal arrived. Two assertions convert that silence into a failing build rather than leaving it to be remembered. `VERIFIED_ON` must be no earlier than any regulation's own `verifiedOn`, and `VERIFIED_SPECIES_COUNT` must match the species the regulations actually cover.
-
-  They are separate because they fail on different mistakes and either alone leaves a way through: the count catches species added without anyone touching dates, which is the common case; the date catches a roster re-verified against a PokeAPI that may have gained varieties for species already on it, which the count cannot see. Both failure messages name the drift and say what to re-walk, so the alarm is actionable rather than a number to bump — and both were verified by simulating the change they exist to catch.
-
-  Removed with it: the hardcoded `paradoxPokemon` array that sat inside the breedable check. All 21 of its entries — the Paradox Pokemon, the box legendaries, Gholdengo — are reported by PokeAPI as `no-eggs` and were already caught by the egg-group check one line above. It was redundant on every entry, which is presumably why nobody noticed it was also the wrong level to catch Floette-Eternal.
-
-  Cache key bumped to v14. The dead `floette-eternal` row is dropped from `coverageMoveData.ts`, and the generator now excludes unbreedable varieties so the table cannot drift back. `floette-mega` stays — Floette is on the M-B Mega-capable list, so that entry is real.
-
-### Added
-
-- **Unconditional stat abilities are applied.** `src/lib/statAbilities.ts` applies Huge Power, Pure Power, Fur Coat, Ice Scales and Hustle — the abilities that change a stat with no setup at all. The other twelve carried by a Regulation M-B legal species (Chlorophyll, Swift Swim, Guts, Solar Power, Plus/Minus and the rest) are recorded with the condition that rules them out, so their absence reads as a decision rather than an oversight. Each ability profile carries its own stat line, so switching ability moves the numbers and the coverage list, not just the resistances. Cards disclose which ability changed the stats and by how much.
-
-  **Ability selection changed with it.** The default ability was previously chosen on defensive merit alone, which handed Azumarill Sap Sipper over the ability that doubles its Attack. A stat ability now wins the default.
-
-  **The stat floors see the ability**, so Azumarill is measured at the 100 Attack it swings with rather than the 50 it is printed with, and Furfrou at the 120 Defense Fur Coat gives it. Together with the recalibrated floors below, that brings Azumarill, Medicham, Diggersby and Furfrou back into a default scan.
-
-  Caveat recorded in the table: Hustle's ×1.5 Attack comes with an 80% physical accuracy penalty that a stat line cannot express, so Hustle Pokemon read slightly stronger here than they play.
-
-- **Move coverage is split by damage class and read against the attacker's stats.** The generator already fetched each move's physical/special class and used it only to drop status moves; the emitted table flattened the two together. That credited Pelipper with Dark, Steel, Bug, Grass and Poison coverage it can never use at 50 Attack against 95 Special Attack. Measured across the Regulation M-B roster, 16% of the coverage types credited to a clearly one-sided attacker were reachable only through the wrong stat, and the tail was far worse than the average — Sceptile went from 12 usable move types to 5.
-
-  `COVERAGE_MOVE_TYPES` entries are now `{ physical, special }`, and `getCoverageMoveTypes` / `getMoveCoverage` take optional stats. Pokemon whose attacking stats sit within `MIXED_ATTACKER_RATIO` (15%) keep both classes, because they genuinely run either; omitting stats also returns both, which is the honest answer for an unknown bias and matches the previous behaviour. Moves that pick their class at use time, like Shell Side Arm, count for both.
-
-  Net effect on the roster: mean usable move types per Pokemon falls from 9.83 to 8.56, with 158 of 318 entries unchanged. This matters most where move coverage answers "does the team have a response to this weakness" — an overstated entry could mark a weakness as covered when nothing on the team could actually hit it.
-
-- **Pokemon that register as one form and fight as another are rated on the form they fight in.** `src/lib/battleForms.ts` records which battle-only forms qualify, and just as importantly which do not — each entry carries its reasoning, so a species missing from the table can be told apart from one that was considered and rejected. A form is merged only when its trigger is an ability the registered Pokemon actually has, the typing is unchanged, and the Pokemon spends the battle in it. Today that is Palafin alone: Zero to Hero converts on the first switch-out and never reverts, a 193-point swing that took Palafin from below the default stat floor to a 650 base stat total. Aegislash, Castform, Greninja, Mimikyu and Morpeko are recorded as deliberately not merged. Affected cards disclose the form the numbers came from.
-
-### Added
-
-- **An ability-effect layer for abilities that change what a stat line is worth.** Three ability layers already existed — type immunities in `pokedexAbilities`, support roles in `abilityRoles`, stat multipliers in `statAbilities` — and between them they missed Unaware, Multiscale, Sturdy, Thick Fat and Adaptability entirely. `src/lib/abilityEffects.ts` scales the half of member quality an ability actually affects: bulk for durability abilities, offence for Adaptability. Applied to ten abilities; nine more are recorded with the condition that rules them out.
-
-  Move-dependent abilities are the largest excluded group, deliberately. Prankster is among the strongest abilities in the format, but its value is entirely in *which* moves it makes priority — and moves are not modelled here beyond coverage types, so crediting it would be scoring a moveset the tool cannot see.
-
-  The visible symptom was Skeledirge ranking below Typhlosion-Hisui. They share Fire/Ghost typing exactly, so the comparison came down to raw stats, where Typhlosion-H legitimately wins — and everything that makes Skeledirge the better Pokemon was worth zero.
-
-- **A validation fixture for the scoring weights.** Every other test checks that a formula computes what it claims to; none checked whether the formula was *right*, and every weight in `MEMBER_WEIGHTS`, `CANDIDATE_WEIGHTS`, `MIXED_ATTACKER_RATIO` and the synergy sets was argued from structure rather than measured. `src/lib/scoringValidation.test.ts` is the counterweight: six real teams — balance, sun, a defensive core, mono-Fire, junk, and frail attackers — scored against each other, plus member-ranking comparisons over 41 real Pokemon.
-
-  Assertions are **ordinal**, never absolute. A team judged stronger must outscore one judged weaker; no assertion names a number, because thresholds fail on every weight change regardless of whether it was an improvement and train people to update expected values without reading them. Each team carries its reasoning inline, so a failure is a disagreement to adjudicate rather than a number to bump.
-
-  The fixture data is generated by driving the project's own pipeline — real type chart, real ability modifiers, real coverage table — via `npm run gen:scoring-fixture`. Hand-written approximations could agree with the scoring for the wrong reasons. Each Pokemon's ability is pinned in the generator rather than derived, so the fixture cannot drift when the selection rule changes.
-
-  **It found a real defect on its first run.** `supportRole: 12` and `quadrupleWeakness: 15` were carried over from the previous formula, whose terms ran to 44. The rework compressed the base to a roughly 30-point spread, so those adjuncts could swing 27 points against it — enough to rank Arbok above Garchomp. Rescaled to 4 and 5, with `coverage` to 0.75 and `moveCoverage` to 0.2. A structural assertion now pins the invariant: the largest single-Pokemon adjustment must stay under half the observed spread of member quality, measured from the fixture rather than assumed.
-
-### Changed
-
 - **`MEMBER_WEIGHTS` shifts toward bulk**, from `0.4 / 0.4 / 0.2` to **`0.35 / 0.45 / 0.2`**. A Pokemon has to threaten something to win, but it only threatens anything on turns it is still alive. This also returns the scoring to the premise the project started from — it began as a theorycrafter for *defensive* typings, and weighting bulk over offence keeps it pointed at that question.
 
   Speed is unchanged and is now documented as the weakest part of the model: it is treated as linearly good, which is wrong for a format where Trick Room makes low Speed an asset. Correcting that needs move data the scan does not have, so the bias is recorded rather than papered over.
@@ -308,6 +266,36 @@
   `DEFAULT_STATS_FILTERS` is exported, and `getResistantTypes` now derives its defaults from it. Previously an omitted `statsFilters` produced `500 / 90 / 80` from one default while a partial object was merged against a different `480 / 80 / 80` — two disagreeing sources for the same setting.
 
 ### Fixed
+
+- **A generated roster no longer spends a slot on a type combination it already has.** Reported: seeding Goodra-Hisui and clicking Fill Roster added Archaludon, also Steel/Dragon.
+
+  Reproduced under the app's default filters, which cut the pool to 86 Pokémon across 42 typings — Steel/Dragon holds exactly those two. Seeded with Goodra-Hisui, the best roster was `goodra-hisui, archaludon, dragapult, primarina, rotom-heat, overqwil` at **87.30**, and the best with six distinct typings was the same roster with Metagross instead, at **86.77**.
+
+  **The redundancy was already scored, and roughly correctly.** Holding Archaludon's stats and ability fixed and moving only its typing, a second Steel/Dragon costs about **5 points** against most alternatives — two members with one typing contribute one set of resistances to `uniqueResistances` and one set of types to `typeDiversity`. The problem is that the charge competes with individual quality, and Archaludon's edge over Metagross covered all but **0.53** of it. Half a point out of 87 is inside the noise of every weight in this model, and it bought a roster answering the same threats twice and folding to Ground and Fighting on both.
+
+  Fixed as a constraint rather than a weight. Raising the synergy penalty until 0.53 became decisive would mean recalibrating `COMPOSITE_BOUNDS` and every team score to settle a case a constraint states directly — and the scoring is not wrong when it says "slightly worse", it just should not be *suggesting* it. New `allowDuplicateTypings` option on `generateRosters`, defaulting to false.
+
+  **The search runs twice when it has to.** A user can filter the browser down to a handful of typings, and returning no roster there would be worse advice than one that doubles up, so a first pass that cannot fill falls back to the unconstrained search. Typing identity is the sorted type pair, so Steel/Dragon and Dragon/Steel are one typing.
+
+  Note this binds generation only. Adding both by hand still works and the workbench scores that roster honestly.
+
+- **Breedability is asked at the variety level, not only the species level.** The scan's breedable-only rule read `/pokemon-species` — egg groups plus the legendary and mythical flags — which is the right place for almost every Pokemon. It is the wrong place for Floette-Eternal, a variety of a perfectly ordinary Fairy-egg-group species that has never been obtainable in any released game. Nothing upstream rejected it either: the form is neither battle-only nor Mega, the regulation filter is species-keyed and `floette` is on the M-B roster, and its 551 base stat total clears the floors easily.
+
+  **The symptom was worse than a spurious extra entry.** Base Floette is 371 BST and fails the 440 total floor, so the browser showed exactly one Floette — the one nobody can have.
+
+  `src/lib/unbreedableForms.ts` records these by variety name in the `battleForms.ts` idiom: each entry carries its reasoning, and the varieties considered and *kept* are recorded alongside the excluded ones, because a bare absence cannot be told apart from an oversight. Two are excluded. Floette-Eternal, and Greninja-Battle-Bond — distribution-only, and the ability does not pass to offspring, so a player can receive one but never produce one. It survives variety collapsing because its lone ability differs from the registered Greninja's pair. Basculegion-F, Meowstic-F and Lycanroc-Dusk are recorded as deliberately kept.
+
+  PokeAPI models no variety-level breedability, so this has to be recorded data rather than derived. The one available proxy — "has no moves in the `champions` version group" — was already considered and rejected when varieties were collapsed, because it conflates a form that does not exist with a form PokeAPI has not filled in yet.
+
+  **The audit behind it:** all 208 M-B legal species were walked, yielding 34 non-default varieties that survive every filter, 30 of them distinct enough to survive collapsing. The other 28 are ordinary — regional forms, the five Rotom appliances, Gourgeist sizes, gender forms — and stay. The four Totem forms were already correctly collapsed.
+
+  **A whitelist of exclusions goes stale quietly**, which is the weakness of this fix: a future regulation adding a species with an event-only form brings it into the browser with nothing to announce it, exactly as Floette-Eternal arrived. Two assertions convert that silence into a failing build rather than leaving it to be remembered. `VERIFIED_ON` must be no earlier than any regulation's own `verifiedOn`, and `VERIFIED_SPECIES_COUNT` must match the species the regulations actually cover.
+
+  They are separate because they fail on different mistakes and either alone leaves a way through: the count catches species added without anyone touching dates, which is the common case; the date catches a roster re-verified against a PokeAPI that may have gained varieties for species already on it, which the count cannot see. Both failure messages name the drift and say what to re-walk, so the alarm is actionable rather than a number to bump — and both were verified by simulating the change they exist to catch.
+
+  Removed with it: the hardcoded `paradoxPokemon` array that sat inside the breedable check. All 21 of its entries — the Paradox Pokemon, the box legendaries, Gholdengo — are reported by PokeAPI as `no-eggs` and were already caught by the egg-group check one line above. It was redundant on every entry, which is presumably why nobody noticed it was also the wrong level to catch Floette-Eternal.
+
+  Cache key bumped to v14. The dead `floette-eternal` row is dropped from `coverageMoveData.ts`, and the generator now excludes unbreedable varieties so the table cannot drift back. `floette-mega` stays — Floette is on the M-B Mega-capable list, so that entry is real.
 
 - **Ability selection reaches the abilities that matter.** The scan chose a default ability through a precedence chain — stat abilities, then support roles, then defensive merit, then the first slot — that had grown a clause per ability layer without the ordering between them ever being argued for. It still missed a whole category: Unaware, Multiscale, Magic Guard and Adaptability all sit in a second or third ability slot, so `abilityEffects.ts` shipped with the app never selecting one of them and the layer did nothing in the browser.
 
