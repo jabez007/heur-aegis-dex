@@ -112,6 +112,7 @@ export {
   DEFAULT_CANDIDATE_LIMIT,
   CANDIDATE_WEIGHTS,
   candidatePriority,
+  countTypeOverlap,
   generateRosters
 } from './lib/rosterGeneration'
 export type { GenerateRostersOptions, GeneratedRoster } from './lib/rosterGeneration'

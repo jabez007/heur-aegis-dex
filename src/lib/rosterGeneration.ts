@@ -9,11 +9,14 @@
  * This searches the Pokemon directly, so two Pokemon sharing a typing both stay
  * in the running and the choice between them is made on their merits.
  *
- * Two constraints survive that. No duplicate species, which is a rule of the
- * format. And no two members on the same type combination, which is not — you
- * may register two Steel/Dragons — but which a *generated* roster should not
- * spend a slot on. See `typingKey` for why the synergy penalty alone did not
- * settle it. Both bind generation only; a hand-built roster is scored as it is.
+ * Three constraints survive that. No duplicate species, which is a rule of the
+ * format. No two members on the same type combination, which is not — you may
+ * register two Steel/Dragons — but which a *generated* roster should not spend a
+ * slot on. And a budget on how often the roster repeats any single elemental
+ * type, searched strictest-first so a repeat is spent only when nothing cleaner
+ * fits. See `typingKey` and `countTypeOverlap` for why the synergy penalties
+ * alone did not settle either. All three bind generation only; a hand-built
+ * roster is scored as it is.
  *
  * Like the type search this is a beam, not an exhaustive enumeration, and it
  * prunes twice over:
@@ -282,6 +285,64 @@ export interface GenerateRostersOptions {
  */
 const typingKey = (entry: PokemonEntry): string => [...entry.types].sort().join('/');
 
+/**
+ * How many times a roster repeats an elemental type.
+ *
+ * A roster of Steel/Dragon, Steel/Psychic and Psychic/Fairy repeats Steel once
+ * and Psychic once, so it scores 2. Counted per repetition rather than per
+ * repeated type, so a third Steel costs again.
+ *
+ * ## Why this is not already covered by the shared-weakness penalty
+ *
+ * It very nearly is, and that was the thing to check before adding it. Team
+ * scoring charges shared weaknesses directly, and across the default pool the
+ * proxy is a strong one — pairs sharing a type average **1.96** shared
+ * weaknesses against **0.49** for pairs that share none, four times as many.
+ *
+ * So this is not new information, and it must not become a second charge on the
+ * same property. That is the defect this file has already found twice, in the
+ * `coverage` and `quadrupleWeakness` terms removed above. **It binds generation
+ * only and enters no score**, exactly as `typingKey` does. The team scorer keeps
+ * saying what it said; the generator stops *suggesting* the roster.
+ *
+ * The charge was demonstrably not enough on its own. Under the app's default
+ * filters the best generated roster was:
+ *
+ *   archaludon, metagross, annihilape, primarina, kleavor, oranguru  86.91
+ *
+ * which doubles both Steel and Psychic. The best with no repeated type at all is
+ *
+ *   archaludon, annihilape, primarina, kleavor, overqwil, oranguru   86.79
+ *
+ * — **0.12 points** worse, on a scale where every weight in this model carries
+ * more uncertainty than that. As with the typing rule, the scoring is right that
+ * the difference is small and the generator should still not be spending a slot
+ * on it.
+ *
+ * ## Why a budget rather than a ban
+ *
+ * 8.9% of type-sharing pairs share *no* weakness at all — the second type can
+ * undo the first, and Steel/Dragon against Ground/Steel resist Fire differently
+ * despite both being Steel. A flat prohibition would be wrong for those, and
+ * would fail outright on a pool a user has filtered down to a few types.
+ *
+ * `generateRosters` therefore searches strictest-first and loosens one
+ * repetition at a time, so a repeated type is spent only when nothing cleaner
+ * fits. On a pool narrowed to Steel and Dragon — 32 Pokemon, where six disjoint
+ * types do not exist — it degrades to a roster at overlap 4 rather than falling
+ * straight through to unconstrained.
+ *
+ * @param roster Members to inspect.
+ * @returns Total repetitions, 0 when every member's types are its own.
+ */
+export function countTypeOverlap(roster: { types: string[] }[]): number {
+  const counts = new Map<string, number>();
+  roster.forEach((member) => member.types.forEach((type) => {
+    counts.set(type, (counts.get(type) ?? 0) + 1);
+  }));
+  return [...counts.values()].reduce((total, count) => total + count - 1, 0);
+}
+
 export interface GeneratedRoster {
   members: PokemonEntry[];
   evaluation: RosterEvaluation;
@@ -355,15 +416,24 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
  * @returns Rosters ordered by score, best first. May be empty.
  */
 export function generateRosters(options: GenerateRostersOptions): GeneratedRoster[] {
-  if (options.allowDuplicateTypings) return searchRosters(options, true);
+  if (options.allowDuplicateTypings) return searchRosters(options, true, Infinity);
 
-  const distinct = searchRosters(options, false);
-  return distinct.length > 0 ? distinct : searchRosters(options, true);
+  // Strictest first, loosening one repetition at a time. A roster of six can
+  // repeat at most twelve types, and the unconstrained pass after the loop
+  // covers the case where the typing rule rather than the overlap budget is
+  // what cannot be met.
+  const rosterSize = options.rosterSize ?? options.format.maxRosterSize;
+  for (let budget = 0; budget <= rosterSize * 2; budget++) {
+    const found = searchRosters(options, false, budget);
+    if (found.length > 0) return found;
+  }
+  return searchRosters(options, true, Infinity);
 }
 
 function searchRosters(
   options: GenerateRostersOptions,
-  allowDuplicateTypings: boolean
+  allowDuplicateTypings: boolean,
+  maxTypeOverlap: number
 ): GeneratedRoster[] {
   const {
     pokemon,
@@ -424,6 +494,7 @@ function searchRosters(
     // A seed that already doubles a typing keeps whatever the user chose; this
     // only stops the search from adding more of one.
     if (!allowDuplicateTypings && roster.some((member) => typing(member) === typing(candidate))) return false;
+    if (maxTypeOverlap !== Infinity && countTypeOverlap([...roster, candidate]) > maxTypeOverlap) return false;
     return true;
   };
 

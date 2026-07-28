@@ -58,6 +58,14 @@
 
 ### Changed
 
+- **Generated rosters no longer spend a slot on a type they already carry.** Reported case: seeding Goodra-Hisui and filling the roster added Excadrill. They are not the same typing, so the duplicate-typing rule did not catch it — they share only Steel.
+
+  The first thing to check was whether this was already scored, because charging one property twice is a defect this file has found twice before (the removed `coverage` and `quadrupleWeakness` terms). It very nearly is: across the default pool, pairs sharing a type average **1.96** shared weaknesses against **0.49** for pairs sharing none, and team scoring charges shared weaknesses directly. So the constraint **binds generation only and enters no score**, exactly as the typing rule does. The scorer keeps saying what it said; the generator stops suggesting it.
+
+  The existing charge was not enough alone. The best generated roster under default filters was `archaludon, metagross, annihilape, primarina, kleavor, oranguru` at 86.91, doubling both Steel and Psychic. The best with no repeated type is `archaludon, annihilape, primarina, kleavor, overqwil, oranguru` at **86.79** — 0.12 points worse, less than the uncertainty on any weight in the model.
+
+  **A budget, not a ban.** 8.9% of type-sharing pairs share no weakness at all — a second type can undo the first, and Steel/Dragon resists Fire differently from Ground/Steel despite both being Steel. `generateRosters` searches strictest-first and loosens by one repetition at a time, so a repeat is spent only when nothing cleaner fits. On a pool narrowed to Steel and Dragon (32 Pokémon, where six disjoint types do not exist) it degrades to a roster at overlap 4 rather than falling straight through to unconstrained. `countTypeOverlap` is exported.
+
 - **Both empirical bound tables re-measured for the new abilities.** They are measured on `scoreMemberQuality`'s output, so any ability that moves a term invalidates them.
 
   `OBSERVED_STAT_TERMS.speed` rises from a max of 0.9467 to **1** — the one bound now set by an ability rather than a stat line, since Speed Boost takes Scolipede's 112 past `STAT_CEILINGS.speed` and `clamp01` catches it. The cost is named rather than absorbed: widening the denominator from 0.8134 to 0.8667 compresses every *other* Pokémon's speed term by about 6%. Correct in direction — the range genuinely got wider — but four Pokémon gaining an ability slightly discounted the speed of the other 204.

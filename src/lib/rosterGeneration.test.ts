@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BATTLE_FORMATS } from './battleFormats';
-import { candidatePriority, generateRosters } from './rosterGeneration';
+import { candidatePriority, countTypeOverlap, generateRosters } from './rosterGeneration';
 import { DEFAULT_BASE_SCORE, normalizeDamageFromScore } from './pokedexScoring';
 import type { PokemonEntry } from './pokemonEntry';
 
@@ -292,6 +292,80 @@ describe('generateRosters', () => {
       expect(new Set(typings).size, roster.members.map((m) => m.name).join(',')).toBe(typings.length);
     });
     expect(rosters[0].members.map((m) => m.name)).not.toContain('archaludon');
+  });
+
+  it('does not spend a slot on a type the roster already carries', () => {
+    // Reported case: seeding Goodra-Hisui and filling the roster added
+    // Excadrill. They are not the same typing, so the rule above does not catch
+    // it — they share only Steel. Across the default pool a shared type predicts
+    // four times the shared weaknesses, and the scorer charges that; it is not
+    // enough to outweigh a quality edge, so the generator states it directly.
+    const seed = [mon('goodra-hisui', { types: ['steel', 'dragon'], typeName: 'steel/dragon' })];
+    const pokemon = [
+      // Shares only Steel, and deliberately the strongest thing in the pool.
+      mon('excadrill', {
+        types: ['ground', 'steel'],
+        typeName: 'ground/steel',
+        stats: { hp: 110, attack: 135, defense: 120, 'special-attack': 50, 'special-defense': 65, speed: 88 },
+        normalizedDamageFromScore: 0.2
+      }),
+      mon('a', { types: ['water'], typeName: 'water' }),
+      mon('b', { types: ['fire'], typeName: 'fire' }),
+      mon('c', { types: ['grass'], typeName: 'grass' }),
+      mon('d', { types: ['ghost'], typeName: 'ghost' }),
+      mon('e', { types: ['fairy'], typeName: 'fairy' }),
+      mon('f', { types: ['bug'], typeName: 'bug' })
+    ];
+
+    const rosters = generateRosters({ pokemon, format: doubles, seed });
+
+    expect(rosters.length).toBeGreaterThan(0);
+    expect(countTypeOverlap(rosters[0].members)).toBe(0);
+    expect(rosters[0].members.map((m) => m.name)).not.toContain('excadrill');
+  });
+
+  it('spends the fewest repeated types the pool allows', () => {
+    // The budget must *loosen*, not switch off. Three strong Pokemon that
+    // pairwise share a type, and four clean but weaker ones. Six members means
+    // taking two of the three, so a zero-overlap roster does not exist — but one
+    // repeat is enough, and the search must stop there rather than taking all
+    // three strong ones and spending three.
+    const strong = {
+      stats: { hp: 110, attack: 135, defense: 120, 'special-attack': 120, 'special-defense': 110, speed: 100 },
+      normalizedDamageFromScore: 0.2
+    };
+    const pokemon = [
+      mon('a', { types: ['steel', 'dragon'], typeName: 'steel/dragon', ...strong }),
+      mon('b', { types: ['steel', 'water'], typeName: 'steel/water', ...strong }),
+      mon('c', { types: ['dragon', 'water'], typeName: 'dragon/water', ...strong }),
+      mon('d', { types: ['grass'], typeName: 'grass' }),
+      mon('e', { types: ['ghost'], typeName: 'ghost' }),
+      mon('f', { types: ['fairy'], typeName: 'fairy' }),
+      mon('g', { types: ['bug'], typeName: 'bug' })
+    ];
+
+    const constrained = generateRosters({ pokemon, format: doubles });
+    const unconstrained = generateRosters({ pokemon, format: doubles, allowDuplicateTypings: true });
+
+    expect(constrained.length).toBeGreaterThan(0);
+    expect(constrained[0].members).toHaveLength(6);
+    expect(countTypeOverlap(constrained[0].members)).toBe(1);
+    // Non-vacuous: left alone the search takes all three strong ones and pays
+    // three repeats for them.
+    expect(countTypeOverlap(unconstrained[0].members))
+      .toBeGreaterThan(countTypeOverlap(constrained[0].members));
+  });
+
+  it('returns a roster rather than failing when every type must repeat', () => {
+    // A user filtered down to one type. Refusing to answer is worse advice than
+    // answering with the only roster available.
+    const pokemon = Array.from({ length: 6 }, (_, i) =>
+      mon(`steel-${i}`, { types: ['steel'], typeName: 'steel' }));
+
+    const rosters = generateRosters({ pokemon, format: doubles });
+
+    expect(rosters.length).toBeGreaterThan(0);
+    expect(rosters[0].members).toHaveLength(6);
   });
 
   it('treats a type combination as the same in either slot order', () => {
