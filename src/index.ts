@@ -89,9 +89,12 @@ export {
 export type { BattleFormat, BattleFormatId } from './lib/battleFormats'
 export {
   ROSTER_WEIGHTS,
-  ROSTER_DEPTH_OPTIONS,
+  VIABLE_LINE_MARGIN,
+  countTargetLines,
   evaluateRoster,
-  scoreBring
+  maxSharedMembers,
+  scoreBring,
+  selectDistinctLines
 } from './lib/rosterScoring'
 export type { RosterMember, RosterEvaluation, BringOption } from './lib/rosterScoring'
 

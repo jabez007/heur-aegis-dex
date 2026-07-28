@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { BATTLE_FORMATS } from './battleFormats';
+import { BATTLE_FORMATS, combinationsOf } from './battleFormats';
 import {
-  ROSTER_DEPTH_OPTIONS,
   ROSTER_WEIGHTS,
+  VIABLE_LINE_MARGIN,
+  countTargetLines,
   evaluateRoster,
+  maxSharedMembers,
   scoreBring,
+  selectDistinctLines,
   type RosterMember
 } from './rosterScoring';
 
@@ -72,38 +75,154 @@ describe('evaluateRoster', () => {
     expect(evaluation.best?.indices).toEqual([0, 1, 2, 3]);
   });
 
-  it('rewards depth, not just a single strong line', () => {
-    // Both rosters contain the same best four. The deep one has interchangeable
-    // spares, the shallow one has two members that drag every alternative down.
-    const strongFour = [
-      member('w', { types: ['water'], resistances: ['fire'], coverages: ['fire'] }),
-      member('g', { types: ['grass'], resistances: ['water'], coverages: ['water'] }),
-      member('e', { types: ['electric'], resistances: ['flying'], coverages: ['flying'] }),
-      member('s', { types: ['steel'], resistances: ['fairy'], coverages: ['fairy'] })
-    ];
-    const deep = evaluateRoster([
-      ...strongFour,
-      member('x', { types: ['ghost'], resistances: ['normal'], coverages: ['psychic'] }),
-      member('y', { types: ['dark'], resistances: ['psychic'], coverages: ['ghost'] })
-    ], doubles);
-    const shallow = evaluateRoster([
-      ...strongFour,
-      member('p', { types: ['water'], weaknesses: ['grass'], resistances: [], coverages: [] }),
-      member('q', { types: ['water'], weaknesses: ['grass'], resistances: [], coverages: [] })
-    ], doubles);
-
-    expect(deep.best!.score).toBeCloseTo(shallow.best!.score);
-    expect(deep.score).toBeGreaterThan(shallow.score);
-  });
-
-  it('averages depth over at most the configured number of options', () => {
+  it('scores depth over the distinct lines a full roster could offer', () => {
     const evaluation = evaluateRoster(sixRoster, doubles);
-    const topScores = evaluation.bringOptions.slice(0, ROSTER_DEPTH_OPTIONS).map((o) => o.score);
-    const depth = topScores.reduce((a, b) => a + b, 0) / topScores.length;
+    const depth = evaluation.lines.reduce((total, line) => total + line.score, 0) / evaluation.targetLines;
 
+    expect(evaluation.lines.length).toBe(evaluation.targetLines);
     expect(evaluation.score).toBeCloseTo(
       (ROSTER_WEIGHTS.best * evaluation.best!.score) + (ROSTER_WEIGHTS.depth * depth)
     );
+  });
+
+  it('opens the line list with the best bring', () => {
+    const evaluation = evaluateRoster(sixRoster, doubles);
+    expect(evaluation.lines[0]).toBe(evaluation.best);
+  });
+
+  it('measures a short roster against a full one, so a sixth member can only help', () => {
+    // Every pair of bring-four subsets drawn from five shares three members, so
+    // a roster of five offers exactly one line however good it is. Measured
+    // against its own shape it would score full depth and beat any roster of
+    // six, telling the user to stop registering Pokemon.
+    const five = evaluateRoster(sixRoster.slice(0, 5), doubles);
+    const six = evaluateRoster(sixRoster, doubles);
+
+    expect(five.lines).toHaveLength(1);
+    expect(five.targetLines).toBe(six.targetLines);
+    expect(six.score).toBeGreaterThan(five.score);
+  });
+
+  it('never scores a roster above its own best bring', () => {
+    const evaluation = evaluateRoster(sixRoster, doubles);
+    expect(evaluation.score).toBeLessThanOrEqual(evaluation.best!.score + 1e-9);
+  });
+
+  it('charges two dead slots far more than a single swap would', () => {
+    // The defect this replaced: depth was the mean of the three top-scoring
+    // options, and those always differ from the best bring by one member. Two
+    // unusable spares never had to appear together in any counted option, so
+    // they cost almost nothing. Under distinct lines the third line must field
+    // both of them.
+    const core = [
+      member('w', { types: ['water'], resistances: ['fire', 'steel'], coverages: ['fire', 'ground'] }),
+      member('g', { types: ['grass'], resistances: ['water', 'ground'], coverages: ['water', 'rock'] }),
+      member('e', { types: ['electric'], resistances: ['flying', 'steel'], coverages: ['flying', 'water'] }),
+      member('s', { types: ['steel'], resistances: ['fairy', 'dragon'], coverages: ['fairy', 'ice'] })
+    ];
+    const spares = [
+      member('x', { types: ['ghost'], resistances: ['poison', 'bug'], immunities: ['normal'], coverages: ['psychic', 'ghost'] }),
+      member('y', { types: ['dark'], resistances: ['dark', 'ghost'], immunities: ['psychic'], coverages: ['ghost', 'psychic'] })
+    ];
+    const junk = [
+      member('p', { types: ['water'], weaknesses: ['grass', 'electric'], resistances: [], coverages: [] }),
+      member('q', { types: ['water'], weaknesses: ['grass', 'electric'], resistances: [], coverages: [] })
+    ];
+
+    const deep = evaluateRoster([...core, ...spares], doubles);
+    const shallow = evaluateRoster([...core, ...junk], doubles);
+
+    // Stated as a comparison against the peak rather than as "same best four",
+    // because the spares are good enough to appear in the best bring themselves.
+    // If depth were inert the two scores would differ by exactly the peak gap,
+    // since both terms would then be reading the same number.
+    const peakGap = deep.best!.score - shallow.best!.score;
+    const scoreGap = deep.score - shallow.score;
+
+    expect(peakGap).toBeGreaterThan(0);
+    expect(scoreGap).toBeGreaterThan(peakGap * 2);
+  });
+});
+
+describe('viableLines', () => {
+  const sixRoster = ['a', 'b', 'c', 'd', 'e', 'f'].map((n) => member(n));
+
+  it('counts only the lines that hold up against the best', () => {
+    const evaluation = evaluateRoster(sixRoster, doubles);
+    const expected = evaluation.lines.filter(
+      (line) => line.score >= evaluation.best!.score - VIABLE_LINE_MARGIN
+    ).length;
+
+    expect(evaluation.viableLines).toBe(expected);
+    expect(evaluation.viableLines).toBeGreaterThanOrEqual(1);
+    expect(evaluation.viableLines).toBeLessThanOrEqual(evaluation.lines.length);
+  });
+
+  it('drops a line the roster cannot really field', () => {
+    // Structurally there are always three distinct lines from six Pokemon, so
+    // the raw count says nothing about the Pokemon. Two members that ruin any
+    // bring they appear in have to show up as a *lower* viable count.
+    const core = [
+      member('w', { types: ['water'], resistances: ['fire', 'steel'], coverages: ['fire', 'ground'] }),
+      member('g', { types: ['grass'], resistances: ['water', 'ground'], coverages: ['water', 'rock'] }),
+      member('e', { types: ['electric'], resistances: ['flying', 'steel'], coverages: ['flying', 'water'] }),
+      member('s', { types: ['steel'], resistances: ['fairy', 'dragon'], coverages: ['fairy', 'ice'] })
+    ];
+    const junk = [
+      member('p', { types: ['water'], weaknesses: ['grass', 'electric'], resistances: [], coverages: [] }),
+      member('q', { types: ['water'], weaknesses: ['grass', 'electric'], resistances: [], coverages: [] })
+    ];
+    const evaluation = evaluateRoster([...core, ...junk], doubles);
+
+    expect(evaluation.lines).toHaveLength(evaluation.targetLines);
+    expect(evaluation.viableLines).toBeLessThan(evaluation.lines.length);
+  });
+
+  it('reports nothing viable when no bring is possible', () => {
+    expect(evaluateRoster([member('a')], doubles).viableLines).toBe(0);
+  });
+});
+
+describe('selectDistinctLines', () => {
+  const option = (indices: number[], score: number) => ({ indices, names: [], score });
+
+  it('rejects a bring that is one substitution away from a kept line', () => {
+    const lines = selectDistinctLines(
+      [option([0, 1, 2, 3], 90), option([0, 1, 2, 4], 89), option([0, 1, 4, 5], 88)],
+      4
+    );
+
+    expect(lines.map((line) => line.indices)).toEqual([[0, 1, 2, 3], [0, 1, 4, 5]]);
+  });
+
+  it('keeps the highest scoring option even when a lower one would pack better', () => {
+    // Greedy on purpose: the first line has to stay the roster's best bring,
+    // because that is the one actually played when the matchup allows it.
+    const lines = selectDistinctLines([option([0, 1, 2, 3], 90), option([2, 3, 4, 5], 10)], 4);
+    expect(lines[0].score).toBe(90);
+  });
+
+  it('requires singles brings to differ by two of three', () => {
+    expect(maxSharedMembers(3)).toBe(1);
+    const lines = selectDistinctLines([option([0, 1, 2], 90), option([0, 1, 3], 89), option([0, 3, 4], 88)], 3);
+    expect(lines.map((line) => line.indices)).toEqual([[0, 1, 2], [0, 3, 4]]);
+  });
+});
+
+describe('countTargetLines', () => {
+  it('derives three lines for doubles and four for singles', () => {
+    expect(countTargetLines(6, 4)).toBe(3);
+    expect(countTargetLines(6, 3)).toBe(4);
+  });
+
+  it('is reachable by the algorithm that scores against it', () => {
+    // A target no roster could hit would mark every roster short of it.
+    [[6, 4], [6, 3], [5, 4], [4, 4]].forEach(([rosterSize, bringSize]) => {
+      const indices = Array.from({ length: rosterSize }, (_, index) => index);
+      const shapes = combinationsOf(indices, bringSize).map((subset) => ({ indices: subset, names: [], score: 0 }));
+
+      expect(selectDistinctLines(shapes, bringSize)).toHaveLength(countTargetLines(rosterSize, bringSize));
+    });
   });
 });
 

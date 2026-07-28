@@ -4,6 +4,24 @@
 
 ### Changed
 
+- **BREAKING: roster depth counts *different* teams, not the top three bring options.** `ROSTER_DEPTH_OPTIONS` is removed, replaced by `selectDistinctLines`, `countTargetLines`, `maxSharedMembers` and `VIABLE_LINE_MARGIN`. `RosterEvaluation` gains `lines`, `viableLines` and `targetLines`.
+
+  Depth was the mean of the three highest-scoring bring options. From six Pokemon bringing four there are fifteen options, and the top three are always **the same team with one Pokemon swapped** — they overlap the best bring in three of four members. The term averaged the peak three times and was reported as depth.
+
+  Measured on the validation fixture: Dragonite / Metagross / Incineroar / Milotic / **Skarmory / Whimsicott** scored 64.62, and the same four with **Watchog / Audino** in the back scored 64.52. Two slots of outright junk cost **a tenth of a point**, because the junk never had to appear in more than one of the three counted options.
+
+  A real alternative is not a substitution. Two brings now count as different teams only when they **differ by at least two members**, which forces every line beyond the first to actually field the back half of the roster. The same pair of rosters now separates by 0.93 — and on a fixture roster of six strong but overlapping threats, whose forced third line scores 27.5 against a 57.1 peak, the roster drops from 56.55 to 52.60.
+
+  **Greedy, not a best-portfolio search.** Optimising the lines' total could return a set whose peak is below the roster's actual best bring, contradicting `ROSTER_WEIGHTS.best`: you play your strongest line whenever the matchup allows, and the rest are what you fall back on. Greedy keeps line one identical to `best` by construction.
+
+  **The target comes from the format, not the roster.** Measured against its own size, a roster of five would have a target of 1 — from five, every pair of bring-fours shares three members — so it would earn full depth credit for a single line while a roster of six almost never can, and registering a sixth Pokemon could only lower the score. A test pins that a sixth member always helps.
+
+- **`optionCount` is no longer shown in the workbench.** It is `C(6,4)` — always 15 for a full doubles roster, 20 for singles — so "over 15 options" was a constant presented as a measurement.
+
+  The replacement needed a threshold to say anything. **`lines.length` is also structurally constant**: from any six Pokemon there are always three bring-fours that pairwise share only two members, whatever those Pokemon are. Reporting it would have repeated the same mistake. The workbench now shows `viableLines/targetLines` — lines within `VIABLE_LINE_MARGIN` (5 points) of the best bring — which runs 1–3 across generated rosters and collapses to a constant 3 by a margin of 12.
+
+  **The margin is a readout, not a term in the score.** Depth already sums the lines' actual scores, so a weak alternative is discounted smoothly and in proportion; thresholding on top would charge the same shortfall twice, and would hand six weak-but-tidy Pokemon full marks for breadth. Keeping the count out of the score is what stops it being gameable.
+
 - **BREAKING: `CANDIDATE_WEIGHTS.coverage` is removed.** It paid a second time for a count the offensive score already contains. `coverages` is exactly `damage_relations.double_damage_to`, and `calculateDamageToScore` is `baseScore + double_damage_to.length - …`. The same list fed both paths: **0.89 points** per super-effective type through the score into the offence term, and **0.75** again on its own line. STAB breadth was charged at **1.84×**.
 
   Its docstring claimed the offensive score "measures strength rather than spread". It counts the length of a list of types, which is spread. The justification had been wrong for as long as the weight existed — the same way `supportRole` claimed to be worth "about three resistances" while buying nine.

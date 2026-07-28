@@ -36,6 +36,14 @@ const {
 const rosterIsFull = computed(() => roster.value.length >= maxRosterSize.value);
 const canFieldATeam = computed(() => bringIndices.value.length === bringSize.value);
 
+// Under open team list the opponent picks against all six, so what matters is
+// how many *different* teams the roster can field — not how many subsets exist.
+const linesHint = computed(() =>
+  `Meaningfully different teams of ${bringSize.value} that hold up against your best, ` +
+  `out of the ${rosterEvaluation.value.targetLines} a full roster could offer. ` +
+  'Two brings count separately only when they differ by at least two Pokemon.'
+);
+
 const ROLE_LABELS: Record<string, string> = {
   'intimidate': 'Intimidate',
   'redirection': 'Redirection',
@@ -91,7 +99,8 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
         // bringing {{ bringSize }}
         <template v-if="isSuggestedBring">(suggested)</template>
         <template v-else>(your pick)</template>
-        // {{ Math.round(rosterEvaluation.score) }}/100 over {{ rosterEvaluation.optionCount }} options
+        // {{ Math.round(rosterEvaluation.score) }}/100
+        // <span :title="linesHint">{{ rosterEvaluation.viableLines }}/{{ rosterEvaluation.targetLines }} lines</span>
       </span>
       <span v-else>
         // select {{ bringSize }} to bring
