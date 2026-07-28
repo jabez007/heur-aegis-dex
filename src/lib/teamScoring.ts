@@ -106,36 +106,71 @@ export function effectiveOffense(stats: PokemonStats): number {
  * low Speed an asset. Correcting that needs move data the scan does not have,
  * so the bias is recorded here rather than papered over.
  *
- * ## These were checked against the ranges they actually occupy
- *
- * A weight only means what it says if the term under it uses its range — the
- * defect COMPOSITE_BOUNDS records one level up, and the reason to look here too.
- * Measured across all 208 legal species of Regulation M-B on 2026-07-28, over the
- * 1st-to-99th percentile band:
- *
- * | term    | span  | weight | realized swing | share |
- * | ------- | ----- | ------ | -------------- | ----- |
- * | offense | 0.502 | 0.35   | 0.176          | 0.34  |
- * | bulk    | 0.475 | 0.45   | 0.214          | 0.41  |
- * | speed   | 0.673 | 0.20   | 0.135          | 0.26  |
- *
- * Against a nominal 0.35 / 0.45 / 0.20. **These hold up**, unlike the composite
- * weights above: bulk really is the largest term, which is what this project's
- * premise asks for. `STAT_CEILINGS` having been set to competitive rather than
- * theoretical maxima is why, and this is the evidence that it worked.
- *
- * The one drift worth recording: Speed swings 0.26 of the total against a nominal
- * 0.20, because base Speed spreads wider across the pool than either other term.
- * Left alone deliberately — correcting a 6-point overshoot on a term already
- * known to be modelled wrong for Trick Room would be tuning the symptom.
- *
- * Rerun `npm run measure:composite-bounds` after changing STAT_CEILINGS,
- * SECONDARY_OFFENSE_WEIGHT or these weights.
+ * These describe the real balance because the terms under them are rescaled
+ * against the ranges they occupy first — see OBSERVED_STAT_TERMS.
  */
 export const MEMBER_WEIGHTS = {
   offense: 0.35,
   bulk: 0.45,
   speed: 0.2
+} as const;
+
+/**
+ * Reachable ranges of the three stat terms, measured across the legal pool.
+ *
+ * The third and innermost instance of the defect `pokedexScoring.ts` records
+ * under OBSERVED_DAMAGE_FROM and COMPOSITE_BOUNDS records above. `STAT_CEILINGS`
+ * fixed the *top* of each term — competitive ceilings rather than the theoretical
+ * 255 — and nobody looked at the bottom. Every term turned out to have a floor
+ * well above zero, and a different one each:
+ *
+ * | term    | floor | ceiling | realized share | nominal |
+ * | ------- | ----- | ------- | -------------- | ------- |
+ * | offense | 0.320 | 0.992   | 0.317          | 0.35    |
+ * | bulk    | 0.313 | 0.988   | 0.440          | 0.45    |
+ * | speed   | 0.133 | 0.947   | 0.243          | 0.20    |
+ *
+ * The floors are what matter here. An 85 Attack — unusable in a format where the
+ * Pokemon worth bringing carry 130 — still collected **52%** of the offence term,
+ * because the term's implicit zero was a Pokemon with no attacking stat at all
+ * and nothing in the pool is close to that. Steelix ranked 21st in the browser on
+ * 340 bulk and an attacking stat that cannot knock anything out.
+ *
+ * That is the third gate of this project's premise — defensive typing, then bulk
+ * within it, then a real attacking stat — failing to bite, and it failed because
+ * a floor nobody set was doing the work.
+ *
+ * ## Consequences, all pointing the same way
+ *
+ * Rescaling each term against its own range does three things at once, which is
+ * why it is worth the churn:
+ *
+ * 1. MEMBER_WEIGHTS becomes near-exact (0.33 / 0.46 / 0.21 against 0.35 / 0.45 /
+ *    0.20), so bulk leading is a fact rather than an intention.
+ * 2. The third gate bites. Klefki falls 111 to 171, Skarmory 51 to 91, Tinkaton
+ *    33 to 80 — all of them Pokemon that cannot threaten anything.
+ * 3. Speed's influence drops from 0.243 to 0.21, which **reduces** the documented
+ *    Trick Room bias instead of amplifying it. Slow bulky Pokemon rise: Avalugg
+ *    116 to 61, Hatterene 119 to 90. That was the outcome to check before
+ *    committing to this, since the opposite would have been a reason not to.
+ *
+ * ## Why min/max rather than percentiles
+ *
+ * Percentile bounds would land the shares exactly on nominal, and are rejected
+ * for the reason already argued under COMPOSITE_BOUNDS: the 99th percentile of
+ * offence is 0.841, which is *Dragonite* — clamping there would flatten the top
+ * of the pool, which is the part anyone is choosing between. These bounds clamp
+ * nothing and land within 0.02 of nominal anyway.
+ *
+ * Measured 2026-07-28 by `npm run measure:composite-bounds` over all 208 legal
+ * species of Regulation M-B, computed exactly as `scoreMemberQuality` computes
+ * them with ability multipliers applied. Rerun after changing STAT_CEILINGS,
+ * SECONDARY_OFFENSE_WEIGHT, the ability tables or MEMBER_WEIGHTS.
+ */
+export const OBSERVED_STAT_TERMS = {
+  offense: { min: 0.32, max: 0.9923 },
+  bulk: { min: 0.3125, max: 0.9882 },
+  speed: { min: 0.1333, max: 0.9467 }
 } as const;
 
 /**
@@ -271,10 +306,10 @@ export const COMPOSITE_WEIGHTS = {
  *
  * | half           | nominal weight | points of swing |
  * | -------------- | -------------- | --------------- |
- * | member quality | 0.45           | 5.9             |
- * | team synergy   | 0.55           | 31.0            |
+ * | member quality | 0.45           | 7.8             |
+ * | team synergy   | 0.55           | 31.2            |
  *
- * A stated 45/55 split behaving as **5.2 to 1**. Half of all large member-quality
+ * A stated 45/55 split behaving as **4 to 1**. Half of all large member-quality
  * gaps were overturned by synergy, so how good the Pokemon were was close to a
  * coin flip against how tidily they fitted together.
  *
@@ -287,7 +322,9 @@ export const COMPOSITE_WEIGHTS = {
  *
  * ## How these were measured
  *
- * `scripts/measure-composite-bounds.mjs`, run 2026-07-28 against Regulation M-B:
+ * `scripts/measure-composite-bounds.mjs`, run 2026-07-28 against Regulation M-B,
+ * and **rerun whenever `scoreMemberQuality` changes** — these bounds are measured
+ * on its output, so a change to OBSERVED_STAT_TERMS invalidates them. Details:
  * every legal species in its default form, resolved through the species endpoint
  * so the dozen that exist only under a form suffix are included, then 200,000
  * random brings per format. Rerun it after any change to MEMBER_WEIGHTS,
@@ -316,22 +353,22 @@ export const COMPOSITE_WEIGHTS = {
  * Percentile bounds would land the ratio on the nominal 1.22:1, and were
  * rejected: the top 0.1% of *random* teams are where the roster generator
  * actually operates, and generated brings reach synergy 0.678 against a 99.9th
- * percentile of 0.641. Clamping there would blind the search at exactly the point
+ * percentile of 0.635. Clamping there would blind the search at exactly the point
  * it does its work. These bounds clamp nothing.
  *
- * The residual is **1.79:1 in doubles and 1.71:1 in singles**, against a nominal
+ * The residual is **1.87:1 in doubles and 1.73:1 in singles**, against a nominal
  * 1.22:1 — recorded rather than tuned away. Synergy keeps roughly half again the
  * influence the weights claim, because its own -1 clamp compresses the bottom of
  * its range and normalizing cannot undo that. Closing the rest means changing
- * `scoreTeamSynergy`, not these constants. This takes the error from 330% to 46%.
+ * `scoreTeamSynergy`, not these constants. This takes the error from 228% to 53%.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.3336, max: 0.6396 },
-    synergy: { min: -1, max: 0.7873 }
+    quality: { min: 0.1531, max: 0.5776 },
+    synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.3184, max: 0.6443 },
+    quality: { min: 0.1351, max: 0.5849 },
     synergy: { min: -1, max: 0.8078 }
   }
 } as const;
@@ -363,13 +400,22 @@ export function scoreMemberQuality(member: MemberQualityInput): number {
   // changing the stats, so they scale the component they actually affect.
   const ability = getQualityMultipliers(member.abilityName);
 
-  const offense = clamp01(
-    (effectiveOffense(stats) / STAT_CEILINGS.offense) * ability.offense
+  // Each term is put on its own reachable range, not on 0..1. Every one of them
+  // has a floor well above zero — an unusable 85 Attack collected 52% of the
+  // offence term before this — so a nominal 0..1 credited every Pokemon for
+  // stats no Pokemon in the pool actually lacks. See OBSERVED_STAT_TERMS.
+  const rescale = (value: number, { min, max }: { min: number; max: number }) =>
+    clamp01((clamp01(value) - min) / (max - min));
+
+  const offense = rescale(
+    (effectiveOffense(stats) / STAT_CEILINGS.offense) * ability.offense,
+    OBSERVED_STAT_TERMS.offense
   );
-  const bulk = clamp01(
-    ((stats.hp + stats.defense + stats['special-defense']) / STAT_CEILINGS.bulk) * ability.bulk
+  const bulk = rescale(
+    ((stats.hp + stats.defense + stats['special-defense']) / STAT_CEILINGS.bulk) * ability.bulk,
+    OBSERVED_STAT_TERMS.bulk
   );
-  const speed = clamp01(stats.speed / STAT_CEILINGS.speed);
+  const speed = rescale(stats.speed / STAT_CEILINGS.speed, OBSERVED_STAT_TERMS.speed);
 
   const modulate = (quality: number) => (1 - TYPE_MODULATION) + (TYPE_MODULATION * clamp01(quality));
   const offensiveTyping = modulate(normalizedDamageToScore);

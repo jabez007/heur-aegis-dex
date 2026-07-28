@@ -225,21 +225,47 @@ describe('scoring validation — member ranking', () => {
     // that has to stay fixed.
     //
     // Skarmory and Corviknight resist ten types and are immune to two. Blastoise
-    // and Feraligatr resist four and are immune to none — but carry comparable
-    // raw bulk, and more offence. Under the old formula-extreme normalization
-    // that twelve-versus-four difference was worth a 3.6% multiplier on one
-    // term, so the water starters won on offence and led both walls.
+    // resists four and is immune to none — but carries comparable raw bulk and
+    // slightly more offence. Under the old formula-extreme normalization that
+    // twelve-versus-four difference was worth a 3.6% multiplier on one term, so
+    // the water starter won on offence and led both walls.
     //
     // This is the assertion the tool exists to get right: resisting most of the
     // chart is what defensive typing *is*, and it has to outweigh being merely
     // bulky. If it fails, check pokedexScoring's bounds before touching a weight.
     const walls = ['skarmory', 'corviknight'];
-    const bulky = ['blastoise', 'feraligatr'];
-
     const worstWall = Math.min(...walls.map((n) => candidatePriority(mon(n))));
-    const bestBulky = Math.max(...bulky.map((n) => candidatePriority(mon(n))));
 
-    expect(worstWall).toBeGreaterThan(bestBulky);
+    expect(worstWall).toBeGreaterThan(candidatePriority(mon('blastoise')));
+  });
+
+  it('lets a bulky attacker edge the walls, but only just', () => {
+    // Feraligatr used to be paired with Blastoise in the assertion above, as a
+    // second example of "merely bulky". Measuring the stat terms against their
+    // real ranges separated them, and the separation is the point rather than an
+    // exception to be waived:
+    //
+    //   blastoise    268 bulk, 85 best attacking stat  -> 43.8
+    //   skarmory     275 bulk, 80                      -> 44.8
+    //   feraligatr   268 bulk, 105                     -> 45.2
+    //
+    // Blastoise and Skarmory sit either side of an offensive stat neither can
+    // use, and the typing decides it — the original claim, intact. Feraligatr
+    // carries 25 more Attack than Skarmory on the same bulk, which is the third
+    // gate of this project's premise: strong typing, then bulk within it, then a
+    // real attacking stat out of what survives. Skarmory fails that gate.
+    //
+    // Before OBSERVED_STAT_TERMS an 80 Attack collected 52% of the offence term,
+    // because the term's implicit floor was a Pokemon with no attacking stat at
+    // all and nothing in the pool is close to that. The gate could not bite.
+    //
+    // The margin is asserted small in both directions deliberately. A defensive
+    // typing this good is worth nearly as much as 25 points of Attack, and if
+    // either side of that ever runs away from the other, something is wrong.
+    const gap = candidatePriority(mon('feraligatr')) - candidatePriority(mon('skarmory'));
+
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThan(2);
   });
 
   it('rates a one-sided attacker on the stat it actually attacks with', () => {

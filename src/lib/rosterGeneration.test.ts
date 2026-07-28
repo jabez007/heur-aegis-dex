@@ -186,10 +186,13 @@ describe('candidatePriority', () => {
   it('does not let one role outrank a quadruple weakness', () => {
     // A support role is worth real points, but not enough to promote a Pokemon
     // that folds to a common type.
-    // The invariant is on the *total* charge, not the flat penalty alone: the
-    // defensive score carries 2.52 points of it and the flat penalty 2.5, which
-    // together clear the 4 a role is worth. Asserting it against the flat half
-    // by itself would forbid ever moving charge between the two.
+    //
+    // The whole charge now runs through the defensive score, which modulates the
+    // bulk term — so it scales with bulk, from about 1.0 point at 200 raw bulk to
+    // 3.7 at 400. There is no single figure for `supportRole` to sit under, and
+    // it is pinned at the weakest case instead. `mon()` builds a middling stat
+    // line, so this asserts the invariant somewhere in the middle of that range;
+    // the low end is what actually constrains the weight.
     const fragileSupporter = mon('fragile', {
       abilityName: 'intimidate', weaknesses: ['fire'], quadrupleWeaknesses: ['fire'],
       normalizedDamageFromScore: WITH_QUAD

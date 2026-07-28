@@ -4,6 +4,46 @@
 
 ### Changed
 
+- **The three stat terms inside member quality are now measured against the ranges they occupy.** New `OBSERVED_STAT_TERMS`. This reorders the Pokémon Browser grid. Cache key bumped to v17.
+
+  The third and innermost instance of the defect `pokedexScoring.ts` records under `OBSERVED_DAMAGE_FROM`. `STAT_CEILINGS` fixed the *top* of each term — competitive ceilings rather than the theoretical 255 — and nobody looked at the bottom. Every term had a floor well above zero, and a different one each:
+
+  | term | floor | ceiling | realized share | nominal |
+  | --- | --- | --- | --- | --- |
+  | offense | 0.320 | 0.992 | 0.317 | 0.35 |
+  | bulk | 0.313 | 0.988 | 0.440 | 0.45 |
+  | speed | 0.133 | 0.947 | 0.243 | 0.20 |
+
+  **The floors are what matter.** An 85 Attack — unusable where the Pokémon worth bringing carry 130 — still collected **52% of the offence term**, because the term's implicit zero was a Pokémon with no attacking stat at all and nothing in the pool is close to that. **Steelix ranked 21st** on 340 bulk and an attacking stat that cannot KO. That is the third gate of this project's premise failing to bite, and it failed because a floor nobody set was doing the work.
+
+  Three consequences, all pointing the same way:
+
+  1. `MEMBER_WEIGHTS` becomes near-exact (0.33 / 0.46 / 0.21 against 0.35 / 0.45 / 0.20), so bulk leading is a fact rather than an intention.
+  2. The third gate bites: Klefki 111 → 171, Skarmory 51 → 91, Tinkaton 33 → 80, Forretress 84 → 120 — all Pokémon that cannot threaten anything.
+  3. Speed's influence drops from 0.243 to 0.21, **reducing** the documented Trick Room bias rather than amplifying it. Slow bulky Pokémon rise: Avalugg 116 → 61, Hatterene 119 → 90. That was the outcome checked before committing to this, since the opposite would have been a reason not to.
+
+  Rising into the top 25: Tyranitar 13 → 5, Rhyperior 29 → 12, Goodra 43 → 19, Aggron 31 → 21, Basculegion 37 → 22. Falling: Talonflame 83 → 127, Ninetales 97 → 123, Dragapult 6 → 10. 200 of 208 move, median 10 places.
+
+  **min/max rather than percentiles**, for the reason already argued under `COMPOSITE_BOUNDS`: the 99th percentile of offence is 0.841, which is *Dragonite*. Clamping there would flatten the top of the pool, the part anyone is choosing between. These bounds clamp nothing and land within 0.02 of nominal anyway.
+
+  `COMPOSITE_BOUNDS` was re-measured, since it is measured on `scoreMemberQuality`'s output. The composite's realized split improves from 4.0:1 to 1.87:1 against a nominal 1.22:1.
+
+- **BREAKING-ish: `CANDIDATE_WEIGHTS.supportRole` falls from 2 to 1.** The invariant it exists to hold — a support role never offsets a quadruple weakness — broke for frail Pokémon.
+
+  Defensive typing modulates the *bulk* term, so once bulk is measured against its real range the quad-weakness charge scales with how much bulk there is to modulate: **1.02 points at 200 raw bulk, 2.37 at 300, 3.66 at 400.** There is no longer a single figure to sit under, and 2 cleared the charge for anything below roughly 270 bulk — the Pokémon where a 4× weakness is *least* survivable. Pinned at the weakest case instead.
+
+  That the charge is smaller for frail Pokémon is a genuine quirk of routing it through the bulk term, not a deliberate claim. Recorded rather than fixed, because it is defensible — something that dies to a neutral hit does not need a 4× one — and because it is the reason the weight had to move.
+
+- **A validation assertion was split, and the split is the finding.** `ranks defensive walls above bulky Pokemon with ordinary typing` paired Blastoise and Feraligatr as two examples of "merely bulky". Measuring the stat terms separated them:
+
+  | | bulk | best attacking stat | priority |
+  | --- | --- | --- | --- |
+  | blastoise | 268 | 85 | 43.8 |
+  | skarmory | 275 | 80 | 44.8 |
+  | feraligatr | 268 | 105 | **45.2** |
+
+  Blastoise and Skarmory sit either side of an offensive stat neither can use, and typing decides it — the original claim, intact and still asserted. Feraligatr carries 25 more Attack on the same bulk and now edges the walls, which is the third gate working. The new assertion bounds that gap on *both* sides: a defensive typing that good is worth nearly as much as 25 points of Attack, and if either side runs away from the other something is wrong.
+
 - **Both halves of the team score are now normalized against their reachable ranges.** `COMPOSITE_WEIGHTS` said 45/55 and behaved as roughly **16/84**. New `COMPOSITE_BOUNDS`, measured by `npm run measure:composite-bounds`.
 
   Same defect `pokedexScoring.ts` records under `OBSERVED_DAMAGE_FROM`, in the same model, one file away. Member quality is a weighted mean of clamped terms averaged *again* across the team, so it bunches hard around 0.5; synergy is a bonus-minus-penalty difference that genuinely spans almost all of −1..1. Measured over 200,000 random brings from all 208 legal species of Regulation M-B, across the 1st-to-99th percentile band:

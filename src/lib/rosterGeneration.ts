@@ -97,29 +97,44 @@ export const CANDIDATE_WEIGHTS = {
    * Their payoff depends on teammates that want the field changed, which team
    * scoring evaluates and a solo ranking cannot.
    *
-   * ## Why this fell from 4 to 2
+   * ## Why this fell 4 -> 2 -> 1
    *
-   * The same calibration defect as the removed quadruple penalty, found by checking
-   * this weight's own stated unit. It claimed to be "about three resistances" —
-   * but that unit came from an older formula where resistances were explicit
-   * terms, and the rework onto `scoreMemberQuality` folded them into the
-   * defensive score without anyone restating what a resistance costs. Under the
-   * empirical bounds a resistance is worth 0.42 points, so 4 was buying **9.5**
-   * of them, and the comment describing it had been wrong for two reworks.
+   * It first claimed to be "about three resistances", a unit inherited from an
+   * older formula where resistances were explicit terms. The rework onto
+   * `scoreMemberQuality` folded them into the defensive score and nobody
+   * restated the price, so 4 was quietly buying nine and a half. That took it
+   * to 2.
    *
-   * 2 is roughly five resistances. Still more than the stale claim, and
-   * deliberately so: this ranking's job is to keep supporters from being pruned
-   * out of the candidate pool before team synergy — which weighs roles properly —
-   * ever sees them. It is not meant to rank them first on its own.
+   * The invariant worth holding is that **a role never offsets a quadruple
+   * weakness**, and 2 held it against a charge that was then a flat 2.52.
    *
-   * The invariant worth holding is that a role never offsets a quadruple
-   * weakness. With the flat quadruple penalty removed, that charge is the 2.52
-   * the defensive score applies, so this has to stay below 2.52 outright rather
-   * than below a combined figure. 2.5 would technically hold it by 0.02, which is
-   * a margin no one should rely on; 2 holds it with room to move either weight
-   * without silently inverting the guarantee.
+   * `OBSERVED_STAT_TERMS` changed the shape of that charge rather than its size.
+   * Defensive typing modulates the *bulk* term, so once bulk is measured against
+   * its real range the charge scales with how much bulk there is to modulate:
+   *
+   * | raw bulk | quad-weakness charge |
+   * | -------- | -------------------- |
+   * | 200      | 1.02 points          |
+   * | 250      | 1.69                 |
+   * | 300      | 2.37                 |
+   * | 400      | 3.66                 |
+   *
+   * So there is no single figure to sit under any more, and 2 broke the
+   * invariant for anything under roughly 270 bulk — the frail Pokemon, where a
+   * quadruple weakness is least survivable. Pinned at the weakest case instead.
+   *
+   * That the charge is *smaller* for frail Pokemon is a real quirk of routing it
+   * through the bulk term, not a deliberate claim: it says a 4x weakness costs
+   * less when there was less to lose. Defensible, since something that dies to a
+   * neutral hit does not need a 4x one, but recorded because it is not obvious
+   * and it is the reason this weight had to move.
+   *
+   * 1 is about 2% of the 48-point quality spread. Small on purpose: this
+   * ranking's job is only to keep supporters from being pruned out of the
+   * candidate pool before team synergy — which weighs roles properly — ever sees
+   * them. It is not meant to rank them first on its own.
    */
-  supportRole: 2,
+  supportRole: 1,
   /**
    * Reachable coverage. A tiebreak: it says "can learn", never "would run".
    *

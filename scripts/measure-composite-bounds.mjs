@@ -21,6 +21,7 @@ import { chooseDefaultAbility, getBaseTypes, getDualTypes } from '../src/lib/pok
 import { applyAbilityModifiers } from '../src/lib/pokedexAbilities.ts';
 import { buildOffensiveTypeChart, getMoveCoverage } from '../src/lib/coverageMoves.ts';
 import { getEffectiveStats } from '../src/lib/statAbilities.ts';
+import { getQualityMultipliers } from '../src/lib/abilityEffects.ts';
 import { getActiveRegulation } from '../src/lib/regulations.ts';
 import { analyzeTeamCoverage } from '../src/lib/teamCoverage.ts';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from '../src/lib/abilityRoles.ts';
@@ -147,26 +148,34 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
 
 // The same question one level down: do the three stat terms inside
 // scoreMemberQuality use the range MEMBER_WEIGHTS assumes they do?
+//
+// Computed exactly as scoreMemberQuality computes them, ability multipliers
+// included -- Fur Coat and Multiscale move the bulk term, and a bound measured
+// without them would be too narrow at the top.
 {
   const clamp01 = (v) => Math.min(1, Math.max(0, v));
   const terms = { offense: [], bulk: [], speed: [] };
   pool.forEach((m) => {
-    terms.offense.push(clamp01(effectiveOffense(m.stats) / STAT_CEILINGS.offense));
-    terms.bulk.push(clamp01((m.stats.hp + m.stats.defense + m.stats['special-defense']) / STAT_CEILINGS.bulk));
-    terms.speed.push(clamp01(m.stats.speed / STAT_CEILINGS.speed));
+    const a = getQualityMultipliers(m.abilityName);
+    const s = m.stats;
+    terms.offense.push(clamp01((effectiveOffense(s) / STAT_CEILINGS.offense) * a.offense));
+    terms.bulk.push(clamp01(((s.hp + s.defense + s['special-defense']) / STAT_CEILINGS.bulk) * a.bulk));
+    terms.speed.push(clamp01(s.speed / STAT_CEILINGS.speed));
   });
-  process.stdout.write('\nmember-quality stat terms across the legal pool:\n');
+  process.stdout.write('\nmember-quality stat terms across the legal pool (BEFORE rescaling -- these\nare the numbers OBSERVED_STAT_TERMS is set from):\n');
+  const swings = {};
   Object.entries(terms).forEach(([name, values]) => {
     values.sort((a, b) => a - b);
-    const lo = percentile(values, 0.01);
-    const hi = percentile(values, 0.99);
+    swings[name] = MEMBER_WEIGHTS[name] * (percentile(values, 0.99) - percentile(values, 0.01));
     process.stdout.write(
-      `  ${name.padEnd(8)} min ${values[0].toFixed(3)} p01 ${lo.toFixed(3)} p99 ${hi.toFixed(3)} ` +
-      `max ${values.at(-1).toFixed(3)} | span ${(hi - lo).toFixed(3)} ` +
-      `| weight ${MEMBER_WEIGHTS[name]} -> realized swing ${(MEMBER_WEIGHTS[name] * (hi - lo)).toFixed(3)}\n`
+      `  ${name.padEnd(8)} { min: ${values[0].toFixed(4)}, max: ${values.at(-1).toFixed(4)} }` +
+      `  p01 ${percentile(values, 0.01).toFixed(4)} p99 ${percentile(values, 0.99).toFixed(4)}\n`
     );
   });
-  process.stdout.write('\n');
+  const total = Object.values(swings).reduce((a, b) => a + b, 0);
+  process.stdout.write('  realized shares: ' +
+    Object.entries(swings).map(([k, v]) => `${k} ${(v / total).toFixed(3)}`).join('  ') +
+    `  | nominal ${MEMBER_WEIGHTS.offense} / ${MEMBER_WEIGHTS.bulk} / ${MEMBER_WEIGHTS.speed}\n\n`);
 }
 
 for (const format of BATTLE_FORMAT_LIST) {
