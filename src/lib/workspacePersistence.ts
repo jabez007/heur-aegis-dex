@@ -10,9 +10,12 @@ export interface WorkspaceSnapshotV1 {
   scan: {
     inPokedex: PokedexRegion;
     regulation: string | null;
-    minimumStatsTotal: number;
+    /** @deprecated Retained only when reading an older V1 workspace. */
+    minimumStatsTotal?: number;
     minimumAttacks: number;
-    minimumDefenses: number;
+    minimumBulk?: number;
+    /** @deprecated Renamed to minimumBulk. */
+    minimumDefenses?: number;
     allowMegas: boolean;
     includeAbilityImmunities: boolean;
     includeMoveCoverage: boolean;
@@ -102,9 +105,9 @@ export function isWorkspaceSnapshot(value: unknown): value is WorkspaceSnapshotV
 
   return POKEDEX_REGIONS.has(scan.inPokedex as PokedexRegion) &&
     isNullableString(scan.regulation) &&
-    isFiniteNumber(scan.minimumStatsTotal) &&
+    (scan.minimumStatsTotal === undefined || isFiniteNumber(scan.minimumStatsTotal)) &&
     isFiniteNumber(scan.minimumAttacks) &&
-    isFiniteNumber(scan.minimumDefenses) &&
+    (isFiniteNumber(scan.minimumBulk) || isFiniteNumber(scan.minimumDefenses)) &&
     typeof scan.allowMegas === 'boolean' &&
     typeof scan.includeAbilityImmunities === 'boolean' &&
     typeof scan.includeMoveCoverage === 'boolean' &&

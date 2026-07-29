@@ -18,9 +18,8 @@ const snapshot = (): WorkspaceSnapshotV1 => ({
   scan: {
     inPokedex: 'national',
     regulation: null,
-    minimumStatsTotal: 440,
     minimumAttacks: 80,
-    minimumDefenses: 80,
+    minimumBulk: 70,
     allowMegas: false,
     includeAbilityImmunities: true,
     includeMoveCoverage: true
@@ -65,6 +64,15 @@ describe('workspace persistence', () => {
       ...snapshot(),
       team: { ...snapshot().team, bring: ['missing-pokemon'] }
     })).toBe(false);
+  });
+
+  it('accepts legacy V1 defense and total-stat fields', () => {
+    const legacy = snapshot();
+    delete legacy.scan.minimumBulk;
+    legacy.scan.minimumDefenses = 80;
+    legacy.scan.minimumStatsTotal = 440;
+
+    expect(isWorkspaceSnapshot(legacy)).toBe(true);
   });
 
   it('reports damaged stored data instead of replacing it', () => {

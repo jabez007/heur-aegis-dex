@@ -43,20 +43,32 @@ const POKEMON_DETAIL_CONCURRENCY = 12;
  * hundred varieties before these ever apply, and loosening them costs nothing
  * in requests because the detail prefetch runs ahead of every filter.
  *
- * `minimumAttacks` and `minimumDefenses` are an **either/or**. Requiring both
- * asked a Pokemon to be unremarkable at nothing, which is the opposite of what
- * wins games: it excluded Toxapex for its 63 Attack and Excadrill for its 62
- * bulk, two Pokemon that are strong precisely because they specialise. A
- * Pokemon now earns its slot by being good at *something*.
- *
- * Measured against the Regulation M-B roster on 2026-07-27, these keep 231 of
- * the 266 breedable, non-Mega legal varieties.
+ * Both floors are required. The attack floor removes Pokemon that cannot exert
+ * meaningful pressure, while HP-adjusted bulk removes glass cannons without
+ * demanding exceptional defenses. Averaging physical and special effective
+ * bulk lets a Pokemon have one vulnerable side; 70 keeps Lucario exactly on the
+ * boundary.
  */
 export const DEFAULT_STATS_FILTERS = {
-  minimumStatsTotal: 440,
   minimumAttacks: 80,
-  minimumDefenses: 80
+  minimumBulk: 70
 } as const;
+
+/**
+ * Approximates average physical and special durability on a base-stat scale.
+ * Damage endurance is proportional to HP multiplied by the relevant defense;
+ * the square root returns each product to the same scale as ordinary stats.
+ *
+ * @param stats HP, Defense and Special Defense after unconditional abilities.
+ * @returns Mean physical and special effective bulk.
+ */
+export function hpAdjustedBulk(
+  stats: Pick<PokemonStats, 'hp' | 'defense' | 'special-defense'>
+): number {
+  const physicalBulk = Math.sqrt(stats.hp * stats.defense);
+  const specialBulk = Math.sqrt(stats.hp * stats['special-defense']);
+  return (physicalBulk + specialBulk) / 2;
+}
 
 /**
  * Returns every unordered pair drawn from the supplied items.
@@ -474,12 +486,15 @@ export async function getResistantTypes(options: {
     regulation?: string | null;
   };
   /**
-   * Stat floors. `minimumAttacks` and `minimumDefenses` are an *either/or*:
-   * a Pokemon is kept when it reaches one of them. See DEFAULT_STATS_FILTERS.
+   * Stat floors. A Pokemon must reach both its best attacking-stat floor and
+   * its HP-adjusted effective-bulk floor. See DEFAULT_STATS_FILTERS.
    */
   statsFilters?: {
+    /** @deprecated Ignored. Total base stats are no longer a scan filter. */
     minimumStatsTotal?: number;
     minimumAttacks?: number;
+    minimumBulk?: number;
+    /** @deprecated Use minimumBulk. Retained for saved settings and API compatibility. */
     minimumDefenses?: number;
   };
 } = {}): Promise<ResistantTypeResult[]> {
@@ -492,7 +507,11 @@ export async function getResistantTypes(options: {
 
   const _typeFilters = { maxDamageFromScore: true, allowQuadrupleDamage: true, limitQuadrupleDamage: true, ...typeFilters };
   const _pokemonFilters = { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, includeMoveCoverage: true, regulation: null, ...pokemonFilters };
-  const _statsFilters = { ...DEFAULT_STATS_FILTERS, ...statsFilters };
+  const _statsFilters = {
+    minimumAttacks: statsFilters?.minimumAttacks ?? DEFAULT_STATS_FILTERS.minimumAttacks,
+    minimumBulk:
+      statsFilters?.minimumBulk ?? statsFilters?.minimumDefenses ?? DEFAULT_STATS_FILTERS.minimumBulk
+  };
 
   // An unknown regulation id must not silently degrade into an unfiltered scan,
   // which would quietly hand back an illegal roster.
@@ -592,16 +611,14 @@ export async function getResistantTypes(options: {
         p.stats = stats;
         p.stat_ability_name = getStatAbilityName(abilityNames);
 
-        // Either/or, not both. A Pokemon holds a slot by being good at
-        // something; demanding it clear both floors selected for Pokemon that
-        // are unremarkable at nothing, which is not how teams are built.
+        // Require offensive pressure and reasonable HP-adjusted bulk. Averaging
+        // physical and special bulk allows one vulnerable defensive side.
         const bestAttack = Math.max(stats.attack, stats['special-attack']);
-        const averageDefenses = (stats.defense + stats['special-defense']) / 2;
-        if (bestAttack < _statsFilters.minimumAttacks && averageDefenses < _statsFilters.minimumDefenses) return null;
+        const effectiveBulk = hpAdjustedBulk(stats);
+        if (bestAttack < _statsFilters.minimumAttacks || effectiveBulk < _statsFilters.minimumBulk) return null;
 
         const statsTotal = totalStats(stats);
         p.stats_total = statsTotal;
-        if (statsTotal < _statsFilters.minimumStatsTotal) return null;
 
         const baseDamageRelations = cloneDamageRelations(t.damage_relations);
         const { abilityProfiles } = _pokemonFilters.includeAbilityImmunities

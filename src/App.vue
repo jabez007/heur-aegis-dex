@@ -119,16 +119,6 @@
               Include Mega Evolutions
             </label>
             <label class="gba-label">
-              Min Total Stats:
-              <input
-                v-model.number="minStatsTotal"
-                type="number"
-                class="gba-input"
-                step="10"
-                @change="fetchTypesImmediate"
-              >
-            </label>
-            <label class="gba-label">
               Min Attacks:
               <input
                 v-model.number="minAttacks"
@@ -139,9 +129,9 @@
               >
             </label>
             <label class="gba-label">
-              Min Defenses:
+              Min Effective Bulk:
               <input
-                v-model.number="minDefenses"
+                v-model.number="minBulk"
                 type="number"
                 class="gba-input"
                 step="5"
@@ -149,8 +139,8 @@
               >
             </label>
             <p class="filter-hint">
-              Attacks and Defenses are either/or — a Pokemon is kept when it reaches
-              one of them, so specialists count.
+              Both floors are required. Attack uses the higher of Attack and Special Attack.
+              Effective Bulk averages sqrt(HP x Defense) and sqrt(HP x Special Defense).
             </p>
           </div>
         </section>
@@ -250,9 +240,8 @@ const workspace = useWorkspaceState();
 const {
   inPokedex,
   regulation,
-  minStatsTotal,
   minAttacks,
-  minDefenses,
+  minBulk,
   allowMegas,
   includeAbilityImmunities,
   includeMoveCoverage,
@@ -332,9 +321,8 @@ const fetchTypes = async (): Promise<boolean> => {
     limitQuadrupleDamage: true,
   };
   const statsFilters = {
-    minimumStatsTotal: minStatsTotal.value,
     minimumAttacks: minAttacks.value,
-    minimumDefenses: minDefenses.value,
+    minimumBulk: minBulk.value,
   };
   const pokedexFilter = {
     inPokedex: inPokedex.value,
@@ -347,7 +335,7 @@ const fetchTypes = async (): Promise<boolean> => {
   // Every filter that changes the result must appear in the key, or switching it
   // serves a cached scan from different settings. The version prefix is bumped
   // whenever the stored shape changes.
-  const key = `heur_aegis_dex_v18_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
+  const key = `heur_aegis_dex_v19_types_${inPokedex.value}_${minAttacks.value}_${minBulk.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
 
   const cached = lscache.get(key);
   if (cached) {

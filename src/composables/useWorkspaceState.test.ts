@@ -8,9 +8,8 @@ describe('useWorkspaceState', () => {
     workspace.restoreScan({
       inPokedex: 'national',
       regulation: null,
-      minimumStatsTotal: 440,
       minimumAttacks: 80,
-      minimumDefenses: 80,
+      minimumBulk: 70,
       allowMegas: false,
       includeAbilityImmunities: true,
       includeMoveCoverage: true
@@ -22,9 +21,8 @@ describe('useWorkspaceState', () => {
     workspace.restoreScan({
       inPokedex: 'paldea',
       regulation: null,
-      minimumStatsTotal: 500,
       minimumAttacks: 90,
-      minimumDefenses: 95,
+      minimumBulk: 75,
       allowMegas: true,
       includeAbilityImmunities: false,
       includeMoveCoverage: false
@@ -33,13 +31,29 @@ describe('useWorkspaceState', () => {
     expect(workspace.snapshotScan()).toEqual({
       inPokedex: 'paldea',
       regulation: null,
-      minimumStatsTotal: 500,
       minimumAttacks: 90,
-      minimumDefenses: 95,
+      minimumBulk: 75,
       allowMegas: true,
       includeAbilityImmunities: false,
       includeMoveCoverage: false
     });
+  });
+
+  it('migrates the old defense metric to the new effective-bulk default', () => {
+    workspace.restoreScan({
+      inPokedex: 'national',
+      regulation: null,
+      minimumStatsTotal: 440,
+      minimumAttacks: 80,
+      minimumDefenses: 82,
+      allowMegas: false,
+      includeAbilityImmunities: true,
+      includeMoveCoverage: true
+    });
+
+    expect(workspace.minBulk.value).toBe(70);
+    expect(workspace.snapshotScan()).not.toHaveProperty('minimumStatsTotal');
+    expect(workspace.snapshotScan()).not.toHaveProperty('minimumDefenses');
   });
 
   it('replaces and updates ability overrides by Pokemon name', () => {

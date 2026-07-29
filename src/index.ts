@@ -58,7 +58,13 @@ export type {
   WorkspaceStorage
 } from './lib/workspacePersistence'
 // The scan itself, so consumers can drive the engine without mounting the app.
-export { DEFAULT_STATS_FILTERS, getBaseTypes, getDualTypes, getResistantTypes } from './lib/pokedex'
+export {
+  DEFAULT_STATS_FILTERS,
+  getBaseTypes,
+  getDualTypes,
+  getResistantTypes,
+  hpAdjustedBulk
+} from './lib/pokedex'
 export type {
   PokemonTypeData,
   DamageRelations,

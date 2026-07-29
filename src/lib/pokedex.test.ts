@@ -1,5 +1,12 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { DEFAULT_STATS_FILTERS, __resetPokedexResourceCaches, getBaseTypes, getDualTypes, getResistantTypes } from './pokedex';
+import {
+  DEFAULT_STATS_FILTERS,
+  __resetPokedexResourceCaches,
+  getBaseTypes,
+  getDualTypes,
+  getResistantTypes,
+  hpAdjustedBulk
+} from './pokedex';
 
 const mockState = vi.hoisted(() => ({
   duplicateCharmanderAcrossTypes: false,
@@ -652,54 +659,60 @@ describe('pokedex.js API integration logic', () => {
     expect(resistant.find(t => t.name === 'fire')!.pokemon[0].battle_form_name).toBeUndefined();
   });
 
-  // The mocked charmander is 39/52/43/60/50/65: best attack 60, average
-  // defenses 46.5. Squirtle is 44/48/65/50/64/43: best attack 50, defenses 64.5.
-  const scanWithFloors = (minimumAttacks: number, minimumDefenses: number) => getResistantTypes({
+  // The mocked Charmander is 39/52/43/60/50/65: best attack 60 and HP-adjusted
+  // effective bulk 42.6. Squirtle is 44/48/65/50/64/43: attack 50, bulk 53.3.
+  const scanWithFloors = (minimumAttacks: number, minimumBulk: number) => getResistantTypes({
     baseScore: 18,
     typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
     pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
-    statsFilters: { minimumStatsTotal: 100, minimumAttacks, minimumDefenses }
+    statsFilters: { minimumAttacks, minimumBulk }
   });
   const firePokemon = (result: Awaited<ReturnType<typeof getResistantTypes>>) =>
     result.find(t => t.name === 'fire')!.pokemon;
 
   describe('stat floors', () => {
-    it('keeps a Pokemon that clears the attack floor but not the defense floor', () => {
-      // The Excadrill case: elite because it is all offense. Requiring both
-      // floors rejected exactly the Pokemon that specialise.
-      return scanWithFloors(55, 90).then(r => expect(firePokemon(r)).toHaveLength(1));
+    it('defaults to an 80 attack floor and a 70 effective-bulk floor', () => {
+      expect(DEFAULT_STATS_FILTERS).toEqual({
+        minimumAttacks: 80,
+        minimumBulk: 70
+      });
     });
 
-    it('keeps a Pokemon that clears the defense floor but not the attack floor', () => {
-      // The Toxapex case, the same failure in the other direction.
-      return scanWithFloors(90, 40).then(r => expect(firePokemon(r)).toHaveLength(1));
+    it('factors HP into physical and special bulk', () => {
+      expect(hpAdjustedBulk({ hp: 70, defense: 70, 'special-defense': 70 })).toBe(70);
+      expect(hpAdjustedBulk({ hp: 60, defense: 60, 'special-defense': 75 })).toBeCloseTo(63.54, 2);
     });
 
-    it('rejects a Pokemon that clears neither', () => {
-      return scanWithFloors(90, 90).then(r => expect(firePokemon(r)).toHaveLength(0));
+    it('rejects a Pokemon that clears the attack floor but not the defense floor', () => {
+      return scanWithFloors(55, 90).then(r => expect(firePokemon(r)).toHaveLength(0));
     });
 
-    it('still applies the total floor on its own', () => {
-      // The total is a genuine conjunct: either/or applies only to the two
-      // stat floors, not to everything.
+    it('rejects a Pokemon that clears the defense floor but not the attack floor', () => {
+      return scanWithFloors(90, 40).then(r => expect(firePokemon(r)).toHaveLength(0));
+    });
+
+    it('keeps a Pokemon that reaches both floors', () => {
+      return scanWithFloors(60, 42).then(r => expect(firePokemon(r)).toHaveLength(1));
+    });
+
+    it('ignores the removed total-stat floor from legacy callers', () => {
       return getResistantTypes({
         baseScore: 18,
         typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
         pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
-        statsFilters: { minimumStatsTotal: 900, minimumAttacks: 1, minimumDefenses: 1 }
-      }).then(r => expect(firePokemon(r)).toHaveLength(0));
+        statsFilters: { minimumStatsTotal: 900, minimumAttacks: 1, minimumBulk: 1 }
+      }).then(r => expect(firePokemon(r)).toHaveLength(1));
     });
 
     it('defaults to DEFAULT_STATS_FILTERS when none are supplied', async () => {
-      // Charmander totals 309, under the 440 default, so an omitted
-      // statsFilters must not silently mean "no floors".
+      // Charmander misses both active defaults, so omitted statsFilters must
+      // not silently mean "no floors".
       const resistant = await getResistantTypes({
         baseScore: 18,
         typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
         pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true }
       });
 
-      expect(DEFAULT_STATS_FILTERS.minimumStatsTotal).toBe(440);
       expect(firePokemon(resistant)).toHaveLength(0);
     });
   });
