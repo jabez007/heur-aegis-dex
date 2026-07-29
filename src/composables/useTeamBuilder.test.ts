@@ -305,6 +305,72 @@ describe('useTeamBuilder', () => {
       );
     });
 
+    it('cycles through every completion within the score threshold', () => {
+      fillRoster(addPokemon, 3);
+      const locked = roster.value.map((member) => member.name);
+      const scan = scanOf([
+        'fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel', 'psychic', 'flying'
+      ]);
+
+      const completions = new Set<string>();
+      for (let option = 0; option < 6; option++) {
+        builder.fillRemainingSlots(scan, scan);
+        completions.add(roster.value.map((member) => member.name).sort().join('|'));
+      }
+
+      expect(completions.size).toBe(6);
+      expect(roster.value.map((member) => member.name)).toEqual(expect.arrayContaining(locked));
+      expect(builder.canTryAnotherRoster.value).toBe(true);
+    });
+
+    it('does not offer another roster when only one completion qualifies', () => {
+      fillRoster(addPokemon, 3);
+      const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock']);
+
+      builder.fillRemainingSlots(scan, scan);
+
+      expect(builder.canTryAnotherRoster.value).toBe(false);
+    });
+
+    it('does not cycle into completions more than three points behind the best', () => {
+      fillRoster(addPokemon, 3);
+      const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel']);
+      const weakStats = {
+        hp: 1, attack: 1, defense: 1, 'special-attack': 1, 'special-defense': 1, speed: 1
+      };
+      scan[7] = pokemon('mon-7', {
+        typeName: 'steel',
+        types: ['steel'],
+        stats: weakStats,
+        baseStats: weakStats,
+        statsTotal: 6,
+        normalizedDamageToScore: 0,
+        normalizedDamageFromScore: 0
+      });
+
+      for (let option = 0; option < 8; option++) {
+        builder.fillRemainingSlots(scan, scan);
+        expect(roster.value.map((member) => member.name)).not.toContain('mon-7');
+      }
+    });
+
+    it('preserves a locked member selected ability across alternatives', () => {
+      addPokemon(pokemon('mon-0'), 'blaze');
+      addPokemon(pokemon('mon-1', { typeName: 'water', types: ['water'] }));
+      addPokemon(pokemon('mon-2', { typeName: 'grass', types: ['grass'] }));
+      const scan = scanOf([
+        'fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel', 'psychic', 'flying'
+      ]);
+
+      builder.fillRemainingSlots(scan, scan);
+      builder.fillRemainingSlots(scan, scan);
+
+      const locked = roster.value.find((member) => member.name === 'mon-0');
+      expect(locked?.abilityName).toBe('blaze');
+      expect(locked?.weaknesses).toEqual(['water', 'rock', 'ground']);
+      expect(locked?.immunities).toEqual([]);
+    });
+
     // The seed used to drop anything the scan could not resolve, and
     // runGeneration replaces roster.value wholesale — so a member this function
     // documents as kept was quietly swapped for whatever the search preferred.

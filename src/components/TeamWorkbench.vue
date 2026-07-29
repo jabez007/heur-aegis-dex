@@ -18,6 +18,7 @@ const {
   formatId,
   maxRosterSize,
   bringSize,
+  canTryAnotherRoster,
   bringIndices,
   broughtTeam,
   isBrought,
@@ -41,6 +42,7 @@ const {
 
 const rosterIsFull = computed(() => roster.value.length >= maxRosterSize.value);
 const canFieldATeam = computed(() => bringIndices.value.length === bringSize.value);
+const broughtNames = computed(() => broughtTeam.value.map((member) => member.name).join(' · '));
 
 // Under open team list the opponent picks against all six, so what matters is
 // how many *different* teams the roster can field — not how many subsets exist.
@@ -139,10 +141,12 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
         </label>
         <button
           class="gba-btn action-btn mini"
-          :disabled="rosterIsFull || isGenerating"
+          :disabled="(rosterIsFull && !canTryAnotherRoster) || isGenerating"
           @click="fillRemainingSlots(props.allPokemon, props.filteredPokemon)"
         >
-          {{ isGenerating ? '...' : (roster.length === 0 ? 'Generate Roster' : 'Fill Roster') }}
+          {{ isGenerating ? '...' : (roster.length === 0
+            ? 'Generate Roster'
+            : (canTryAnotherRoster ? 'Try Another' : 'Fill Roster')) }}
         </button>
         <button
           class="gba-btn action-btn mini"
@@ -188,7 +192,7 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
         <template v-else>
           <strong>Your pick</strong>
         </template>
-        <span class="bring-names">{{ broughtTeam.map((m) => m.name).join(' · ') }}</span>
+        <span class="bring-names">{{ broughtNames }}</span>
         <span
           v-if="currentBringScore !== null"
           class="bring-score"
