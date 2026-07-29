@@ -78,8 +78,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          # The shared action runs `npm install` and `npm publish`, no git, and
-          # authenticates through NODE_AUTH_TOKEN from the environment.
+          # The shared action runs `npm install` and `npm publish` and no git at
+          # all, so nothing here needs the credential checkout would persist.
           persist-credentials: false
 
       - name: Shared Publish to GHPR
@@ -87,4 +87,9 @@ jobs:
         with:
           node_version: 22.x
         env:
+          # The action reads this name, then re-exports it as NODE_AUTH_TOKEN for
+          # `npm publish` against npm.pkg.github.com. Recorded because the
+          # requirement is invisible from here: it is an undeclared env input
+          # rather than one of the action's `inputs`, so nothing fails at parse
+          # time if it goes missing — the publish just fails to authenticate.
           GHPR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
