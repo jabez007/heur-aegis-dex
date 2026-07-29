@@ -1,21 +1,20 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import PokemonCard from './PokemonCard.vue';
-import type { ActiveTypeDataLike } from '../lib/activePokemon';
+import type { PokemonEntry } from '../lib/pokemonEntry';
 
 const props = defineProps<{
-  filteredTypes: ActiveTypeDataLike[];
+  pokemon: PokemonEntry[];
   selectedTypesCount: number;
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:selected-pokemon-index', typeName: string, nextIndex: number): void;
-  (e: 'update:selected-ability-name', typeName: string, abilityName: string): void;
+  (e: 'update:selected-ability-name', pokemonName: string, abilityName: string): void;
 }>();
 
 const visibleCount = ref(20);
 
-watch(() => props.filteredTypes, () => {
+watch(() => props.pokemon, () => {
   visibleCount.value = 20;
 });
 
@@ -26,7 +25,7 @@ const showMore = () => {
 
 <template>
   <section class="gba-container">
-    <h2>Meta Analysis: Top Typing</h2>
+    <h2>Pokemon Browser</h2>
     
     <Transition
       name="state-fade"
@@ -44,14 +43,14 @@ const showMore = () => {
       </div>
       
       <div
-        v-else-if="filteredTypes.length === 0"
+        v-else-if="pokemon.length === 0"
         key="no-pokemon"
         class="empty-state"
       >
         <p class="status-msg">
           No compatible Pokemon found.
         </p>
-        <p>Try adjusting your stat filters or region, or uncheck "Hide Empty Types".</p>
+        <p>Try adjusting your stat filters or region, or uncheck "Require All Types".</p>
       </div>
 
       <div
@@ -59,31 +58,30 @@ const showMore = () => {
         key="results"
         class="results-container"
       >
-        <p>Ranked by Balance (High Coverage vs. Low Weaknesses).</p>
-        
+        <p>{{ pokemon.length }} Pokemon, ranked by balance (high coverage vs. low weaknesses).</p>
+
         <TransitionGroup
           name="grid-fade"
           tag="div"
           class="type-grid"
         >
-          <PokemonCard 
-            v-for="t in filteredTypes.slice(0, visibleCount)" 
-            :key="t.name" 
-            :type-data="t"
-            @update:selected-pokemon-index="(nextIndex) => emit('update:selected-pokemon-index', t.name, nextIndex)"
-            @update:selected-ability-name="(abilityName) => emit('update:selected-ability-name', t.name, abilityName)"
+          <PokemonCard
+            v-for="entry in pokemon.slice(0, visibleCount)"
+            :key="entry.name"
+            :pokemon="entry"
+            @update:selected-ability-name="(abilityName) => emit('update:selected-ability-name', entry.name, abilityName)"
           />
         </TransitionGroup>
 
         <div
-          v-if="filteredTypes.length > visibleCount"
+          v-if="pokemon.length > visibleCount"
           class="grid-actions"
         >
           <button
             class="gba-btn action-btn show-more-btn"
             @click="showMore"
           >
-            Show More ({{ filteredTypes.length - visibleCount }} Left)
+            Show More ({{ pokemon.length - visibleCount }} Left)
           </button>
         </div>
       </div>

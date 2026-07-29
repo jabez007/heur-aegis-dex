@@ -1,19 +1,32 @@
 import { ref } from 'vue';
+import { createInjectableState } from './injectableState';
 
 export const ALL_TYPES = [
   'normal', 'fighting', 'flying', 'poison', 'ground', 'rock', 'bug', 'ghost', 'steel',
   'fire', 'water', 'grass', 'electric', 'psychic', 'ice', 'dragon', 'dark', 'fairy'
 ];
 
-const selectedTypes = ref<string[]>([...ALL_TYPES]);
-const hideEmptyTypes = ref(true);
+const metaFilterState = createInjectableState('heur-aegis-dex:meta-filters', () => ({
+  selectedTypes: ref<string[]>([...ALL_TYPES]),
+  /**
+   * Require a Pokemon to have *every* selected type rather than any of them.
+   * Replaces the old hideEmptyTypes flag, which had no meaning once the grid
+   * started listing Pokemon instead of type combinations.
+   */
+  requireAllTypes: ref(false)
+}));
+
+export const provideMetaFilters = metaFilterState.provideState;
+export const __resetMetaFiltersState = metaFilterState.resetFallbackState;
 
 /**
- * Provides shared meta-analysis filters for visible type combinations.
+ * Provides meta-analysis filters for visible type combinations, scoped to the
+ * current Vue app.
  *
- * @returns Shared type-selection state and filter preset helpers.
+ * @returns Type-selection state and filter preset helpers.
  */
 export function useMetaFilters() {
+  const { selectedTypes, requireAllTypes } = metaFilterState.useState();
 
   const toggleType = (type: string) => {
     const index = selectedTypes.value.indexOf(type);
@@ -42,7 +55,7 @@ export function useMetaFilters() {
 
   return {
     selectedTypes,
-    hideEmptyTypes,
+    requireAllTypes,
     toggleType,
     clearTypes,
     selectAll,

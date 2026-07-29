@@ -15,6 +15,11 @@
         <p v-else>
           System Online // Waiting for Scan...
         </p>
+        <p class="status-regulation">
+          {{ selectedRegulation
+            ? `${selectedRegulation.label} // ${selectedRegulation.legalSpecies.size} legal species`
+            : 'No regulation filter // all breedable species' }}
+        </p>
         <p
           v-if="fetchError"
           class="status-error"
@@ -37,6 +42,24 @@
               {{ loading ? 'Loading...' : (fetchError ? 'Retry Scan' : 'Scan Types') }}
             </button>
             
+            <label class="gba-label">
+              Regulation:
+              <select
+                v-model="regulation"
+                class="gba-select regulation-select"
+                @change="fetchTypesImmediate"
+              >
+                <option value="">Any (no legality filter)</option>
+                <option
+                  v-for="reg in REGULATIONS"
+                  :key="reg.id"
+                  :value="reg.id"
+                >
+                  {{ reg.id }}{{ reg.id === activeRegulationId ? ' (current)' : '' }}
+                </option>
+              </select>
+            </label>
+
             <label class="gba-label">
               Pokedex Region:
               <select
@@ -63,6 +86,15 @@
                 @change="fetchTypesDebounced"
               >
               Include Ability Immunities
+            </label>
+            <label class="gba-label checkbox-label">
+              <input
+                v-model="includeMoveCoverage"
+                type="checkbox"
+                class="gba-checkbox"
+                @change="fetchTypesDebounced"
+              >
+              Include Move Coverage
             </label>
             <label class="gba-label checkbox-label">
               <input
@@ -103,6 +135,10 @@
                 @change="fetchTypesImmediate"
               >
             </label>
+            <p class="filter-hint">
+              Attacks and Defenses are either/or — a Pokemon is kept when it reaches
+              one of them, so specialists count.
+            </p>
           </div>
         </section>
 
@@ -167,30 +203,44 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeUnmount, onMounted } from 'vue';
+import { computed, ref, onBeforeUnmount, onMounted } from 'vue';
 import lscache from 'lscache';
-import { getResistantTypes } from './lib/pokedex';
+import { DEFAULT_STATS_FILTERS, REGULATIONS, getActiveRegulation, getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
 import GbaNotification from './components/GbaNotification.vue';
 import { useNotifications } from './composables/useNotifications';
-import type { TypeDataLike } from './lib/activePokemon';
+import type { ResistantTypeResult } from './lib/pokedexTypes';
 
 const loading = ref(false);
-const types = ref<TypeDataLike[]>([]);
+const types = ref<ResistantTypeResult[]>([]);
 const fetchError = ref('');
 const inPokedex = ref('national');
-const minStatsTotal = ref(480);
-const minAttacks = ref(80);
-const minDefenses = ref(80);
+// Default to whichever regulation is in force today so the tool is correct for
+// the format being played without the user having to know which one that is.
+const activeRegulationId = getActiveRegulation()?.id ?? '';
+const regulation = ref<string>(activeRegulationId);
+const selectedRegulation = computed(() => REGULATIONS.find(reg => reg.id === regulation.value));
+const minStatsTotal = ref(DEFAULT_STATS_FILTERS.minimumStatsTotal);
+const minAttacks = ref(DEFAULT_STATS_FILTERS.minimumAttacks);
+const minDefenses = ref(DEFAULT_STATS_FILTERS.minimumDefenses);
 const allowMegas = ref(false);
 const includeAbilityImmunities = ref(true);
+const includeMoveCoverage = ref(true);
 const { notify } = useNotifications();
 let fetchTypesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Scans cannot be aborted mid-flight, so each one claims a token and only the
+// most recent claim is allowed to write back. Without this a slow scan that was
+// superseded by a newer one can resolve last and overwrite the current results.
+let latestScanToken = 0;
+
 const fetchTypes = () => {
+  const scanToken = ++latestScanToken;
+  const isCurrentScan = () => scanToken === latestScanToken;
+
   loading.value = true;
   fetchError.value = '';
-  
+
   const filters = {
     maxDamageFromScore: true,
     allowQuadrupleDamage: true,
@@ -204,10 +254,15 @@ const fetchTypes = () => {
   const pokedexFilter = {
     inPokedex: inPokedex.value,
     allowMegas: allowMegas.value,
-    includeAbilityImmunities: includeAbilityImmunities.value
+    includeAbilityImmunities: includeAbilityImmunities.value,
+    includeMoveCoverage: includeMoveCoverage.value,
+    regulation: regulation.value || null
   };
 
-  const key = `heur_aegis_dex_v3_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}`;
+  // Every filter that changes the result must appear in the key, or switching it
+  // serves a cached scan from different settings. The version prefix is bumped
+  // whenever the stored shape changes.
+  const key = `heur_aegis_dex_v18_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
 
   const cached = lscache.get(key);
   if (cached) {
@@ -219,11 +274,15 @@ const fetchTypes = () => {
       pokemonFilters: pokedexFilter,
       statsFilters: statsFilters
     }).then(data => {
+      // The cache key encodes the filters this scan ran with, so the result is
+      // worth keeping even when a newer scan has already superseded the view.
       lscache.set(key, data, 60 * 24);
+      if (!isCurrentScan()) return;
       types.value = data;
       loading.value = false;
     }).catch(err => {
       console.error(err);
+      if (!isCurrentScan()) return;
       types.value = [];
       fetchError.value = 'Pokedex scan failed. Check your connection and try again.';
       notify(fetchError.value, 'error');
@@ -283,6 +342,13 @@ onBeforeUnmount(() => {
   }
 }
 
+.status-regulation {
+  margin-top: 8px;
+  font-family: var(--gba-font-body);
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
 .status-error {
   margin-top: 12px;
   color: #ffdce0;
@@ -336,6 +402,13 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
+.filter-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.75;
+}
+
 .stat-controls .checkbox-label {
   flex-direction: row;
   align-items: center;
@@ -346,33 +419,17 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.gba-checkbox {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--gba-accent-cyan);
-}
-
 @media (max-width: 600px) {
   .stat-controls {
     grid-template-columns: 1fr;
   }
 }
 
-.gba-label {
-  font-family: var(--gba-font-heading);
-  font-size: 1.2rem;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.gba-select, .gba-input {
-  font-family: var(--gba-font-body);
-  background: var(--gba-text-light);
-  border: 2px solid var(--gba-text-dark);
-  padding: 4px 8px;
-  text-transform: uppercase;
-  width: 100px;
+// The shared control styles live in assets/scss/main.scss so every component
+// gets them. Only the App-specific overrides stay here.
+.regulation-select {
+  width: auto;
+  min-width: 100px;
 }
 
 .status-ready {

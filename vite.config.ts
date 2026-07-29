@@ -12,6 +12,9 @@ export default defineConfig(({ mode }) => {
       vue(),
       isLib ? dts({
         include: ['src/**/*.ts', 'src/**/*.vue'],
+        // Test files and their fixtures live inside src, so without this the
+        // published package ships a .d.ts stub for each of them.
+        exclude: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/**/*.fixture.ts'],
         outDir: 'lib',
         staticImport: true,
         insertTypesEntry: true,

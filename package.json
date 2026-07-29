@@ -1,12 +1,13 @@
 {
   "name": "@jabez007/heur-aegis-dex",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "main": "lib/heur-aegis-dex.cjs",
   "module": "lib/heur-aegis-dex.es.js",
   "types": "lib/index.d.ts",
   "files": [
-    "lib"
+    "lib",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -36,16 +37,19 @@
     "build:all": "npm run build && npm run build:lib",
     "preview": "vite preview",
     "test": "vitest",
+    "test:run": "vitest run",
     "type-check": "vue-tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "predeploy": "npm run build",
-    "deploy": "push-dir --dir=dist --branch=main --cleanup"
+    "deploy": "push-dir --dir=dist --branch=main --cleanup",
+    "check:browser": "bash scripts/check-browser-bundle.sh",
+    "gen:coverage-moves": "node scripts/gen-coverage-moves.mjs",
+    "gen:scoring-fixture": "npx tsx scripts/gen-scoring-fixture.mjs",
+    "measure:composite-bounds": "npx tsx scripts/measure-composite-bounds.mjs"
   },
   "dependencies": {
     "events": "^3.3.0",
-    "lodash": "^4.18.1",
-    "lodash.combinations": "^18.11.1",
     "lscache": "^1.3.2",
     "pokedex-promise-v2": "^4.2.3"
   },
@@ -54,7 +58,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/lodash": "^4.17.24",
     "@types/node": "^25.8.0",
     "@vitejs/plugin-vue": "^6.0.6",
     "eslint": "^10.4.0",

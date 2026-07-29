@@ -24,6 +24,8 @@ export interface PokemonTypeData {
   weaknesses?: string[];
   quadruple_weaknesses?: string[];
   resistances?: string[];
+  /** Types dealing 0x damage. A strict subset of `resistances`. */
+  immunities?: string[];
   ineffectives?: string[];
   coverages?: string[];
   damage_from_score?: number;
@@ -35,6 +37,10 @@ export interface TeamTypeData {
   weaknesses: string[];
   quadruple_weaknesses?: string[];
   resistances: string[];
+  /** Types dealing 0x damage. A strict subset of `resistances`. */
+  immunities?: string[];
+  /** Types reachable super-effectively via any learnable move. */
+  move_coverages?: string[];
   ineffectives: string[];
   coverages: string[];
   damage_from_score?: number;
@@ -72,18 +78,45 @@ export interface AbilityProfile {
   weaknesses?: string[];
   quadruple_weaknesses?: string[];
   resistances?: string[];
+  immunities?: string[];
   ineffectives?: string[];
   coverages?: string[];
   damage_from_score?: number;
   damage_to_score?: number;
+  /**
+   * Stats with this ability's own multiplier applied. Huge Power and its kin
+   * change the stat line, so each ability carries the numbers it fights with.
+   */
+  stats?: PokemonStats;
+  stats_total?: number;
+  /** Move coverage resolved against this ability's stat line. */
+  move_coverages?: string[];
 }
 
 export interface PokemonListEntry {
   pokemon: PokemonRef;
+  /** PokeAPI species name. Regional forms and Megas share their base species. */
+  species_name?: string;
   types?: PokemonTypeSlot[];
   sprite?: string | null;
   abilities?: PokemonAbilitySlot[];
+  /**
+   * Battle-only form these stats describe, when the Pokemon registers as one
+   * form and fights as another. Absent when the registered form is the one
+   * being rated, which is the overwhelmingly common case.
+   */
+  battle_form_name?: string;
+  /**
+   * Stats the Pokemon fights with: the published line after any unconditional
+   * stat ability. This is what the scan's floors and all scoring judge on.
+   */
   stats?: PokemonStats;
+  /** The published line, before abilities. Kept so a UI can show both. */
+  base_stats?: PokemonStats;
+  /** Ability responsible for the difference, when there is one. */
+  stat_ability_name?: string;
+  /** Whether this is the species' default variety, used to pick a survivor when varieties collapse. */
+  is_default_variety?: boolean;
   stats_total?: number;
   selected_ability_name?: string;
   ability_profiles?: Record<string, AbilityProfile>;
@@ -91,6 +124,9 @@ export interface PokemonListEntry {
   effective_weaknesses?: string[];
   effective_quadruple_weaknesses?: string[];
   effective_resistances?: string[];
+  effective_immunities?: string[];
+  /** Types reachable super-effectively via any learnable move, not just STAB. */
+  effective_move_coverages?: string[];
   effective_ineffectives?: string[];
   effective_coverages?: string[];
   effective_damage_from_score?: number;
@@ -101,41 +137,3 @@ export interface ResistantTypeResult extends TeamTypeData {
   include_ability_immunities: boolean;
 }
 
-export interface TeamMemberResult {
-  types: string[];
-  name: string;
-  sprite?: string | null;
-  stats: PokemonStats;
-  selected_ability_name?: string;
-  effective_weaknesses: string[];
-  effective_quadruple_weaknesses: string[];
-  effective_resistances: string[];
-  effective_ineffectives: string[];
-  effective_coverages: string[];
-  normalized_damage_to_score: number;
-  normalized_damage_from_score: number;
-}
-
-export interface GeneratedTeamResult {
-  types: string[];
-  typesTotal: number;
-  pokemon: TeamMemberResult[];
-  uncoveredWeaknesses: string[];
-  uncoveredQuadrupleWeaknesses: string[];
-  sharedWeaknesses: string[];
-  sharedQuadrupleWeaknesses: string[];
-  uniqueResistances: number;
-  uniqueCoverages: number;
-  score: number;
-}
-
-export interface GenerateTeamsOptions {
-  allowedTypes?: Array<PokemonTypeData | ResistantTypeResult | TeamTypeData>;
-  teamSize?: number;
-  teamComposition?: {
-    allowSharedTypes?: boolean;
-    allowSharedWeaknesses?: boolean;
-    coverWeaknesses?: boolean;
-  };
-  seed?: Array<PokemonTypeData | ResistantTypeResult | TeamTypeData>;
-}

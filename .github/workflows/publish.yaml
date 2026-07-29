@@ -14,6 +14,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # No git operation follows, so the persisted token would only be
+          # sitting in .git/config while `npm ci` runs install scripts. See the
+          # note in verify.yaml.
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -38,6 +43,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # This is the job where it matters most: `contents: write` above, and
+          # `npm ci` below running install scripts with that token in
+          # .git/config. action-gh-release takes its token from the environment
+          # rather than from git, so nothing here needs the credential.
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -66,10 +77,19 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # The shared action runs `npm install` and `npm publish` and no git at
+          # all, so nothing here needs the credential checkout would persist.
+          persist-credentials: false
 
       - name: Shared Publish to GHPR
         uses: McCann-Hub/create-typescript-template/.github/shared/ghpr/publish@master
         with:
           node_version: 22.x
         env:
+          # The action reads this name, then re-exports it as NODE_AUTH_TOKEN for
+          # `npm publish` against npm.pkg.github.com. Recorded because the
+          # requirement is invisible from here: it is an undeclared env input
+          # rather than one of the action's `inputs`, so nothing fails at parse
+          # time if it goes missing — the publish just fails to authenticate.
           GHPR_TOKEN: ${{ secrets.GITHUB_TOKEN }}

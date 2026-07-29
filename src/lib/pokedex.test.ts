@@ -1,20 +1,47 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { __resetPokedexResourceCaches, generateTeams, getBaseTypes, getDualTypes, getResistantTypes } from './pokedex';
+import { DEFAULT_STATS_FILTERS, __resetPokedexResourceCaches, getBaseTypes, getDualTypes, getResistantTypes } from './pokedex';
 
 const mockState = vi.hoisted(() => ({
   duplicateCharmanderAcrossTypes: false,
   expandFireRoster: false,
   failPokemon4Once: false,
+  /** Report species names that appear on the Regulation M-B roster. */
+  useRegulationLegalSpecies: false,
+  /** Report every species as legendary, exercising the breedable-only filter. */
+  treatSpeciesAsLegendary: false,
+  /** Name the fire-type entry after a Pokemon present in the coverage-move table. */
+  useCoverageTableName: false,
+  /** Add a Gigantamax, a Mega and a permanent regional form to the fire roster. */
+  includeAlternateForms: false,
+  /** Add a cosmetic variety indistinguishable from the base Pokemon. */
+  includeCosmeticVarieties: false,
+  /** Add a variety recorded as unbreedable, on a species that breeds normally. */
+  includeUnbreedableVariety: false,
+  /** Present the fire-type entry as Palafin, which registers as one form and fights as another. */
+  usePalafin: false,
+  /** Give the registered Palafin an ability that cannot reach its battle form. */
+  breakPalafinTrigger: false,
+  /** Give the fire-type entry Azumarill's ability pair: Huge Power plus a defensive immunity. */
+  useHugePower: false,
+  /** Give the fire-type entry a support ability alongside a filler and a type immunity. */
+  useSupportAbility: false,
+  /** Give the fire-type entry Skeledirge's pair: a filler first, a quality ability hidden. */
+  useQualityAbility: false,
   detailDelayMs: 0,
   requestCounts: new Map<string, number>(),
+  /** Every request in the order it was issued, for checking which phase made it. */
+  requestOrder: [] as string[],
   activeDetailRequests: 0,
   maxActiveDetailRequests: 0
 }));
 
 const trackRequest = async <T>(url: string, factory: () => T | Promise<T>) => {
   mockState.requestCounts.set(url, (mockState.requestCounts.get(url) || 0) + 1);
+  mockState.requestOrder.push(url);
 
-  const isDetailRequest = url.startsWith('/api/v2/pokemon/') || url.startsWith('/api/v2/pokemon-species/');
+  const isDetailRequest = url.startsWith('/api/v2/pokemon/')
+    || url.startsWith('/api/v2/pokemon-species/')
+    || url.startsWith('/api/v2/pokemon-form/');
   if (!isDetailRequest) {
     return await factory();
   }
@@ -89,7 +116,24 @@ vi.mock('pokedex-promise-v2', () => {
             no_damage_to: []
           },
           pokemon: [
-            { pokemon: { name: 'charmander', url: 'https://pokeapi.co/api/v2/pokemon/4/' } },
+            { pokemon: { name: mockState.useCoverageTableName ? 'garchomp' : 'charmander', url: 'https://pokeapi.co/api/v2/pokemon/4/' } },
+            ...(mockState.includeAlternateForms
+              ? [
+                { pokemon: { name: 'charmander-gmax', url: 'https://pokeapi.co/api/v2/pokemon/10001/' } },
+                { pokemon: { name: 'charmander-mega', url: 'https://pokeapi.co/api/v2/pokemon/10002/' } },
+                { pokemon: { name: 'charmander-alola', url: 'https://pokeapi.co/api/v2/pokemon/10003/' } }
+              ]
+              : []),
+            ...(mockState.includeCosmeticVarieties
+              // Same species, same stats, same typing, same abilities — a cap.
+              ? [{ pokemon: { name: 'charmander-world-cap', url: 'https://pokeapi.co/api/v2/pokemon/10500/' } }]
+              : []),
+            ...(mockState.includeUnbreedableVariety
+              // Floette-Eternal's shape: a permanent, non-Mega variety whose
+              // species breeds normally and whose stats are its own, so nothing
+              // upstream of the variety-level check has grounds to drop it.
+              ? [{ pokemon: { name: 'floette-eternal', url: 'https://pokeapi.co/api/v2/pokemon/10600/' } }]
+              : []),
             ...extraPokemon
           ]
           };
@@ -114,6 +158,26 @@ vi.mock('pokedex-promise-v2', () => {
           ]
           };
         }
+        // A cosmetic variety: identical to /pokemon/4/ in everything modelled,
+        // differing only in that it is not the default.
+        if (url.startsWith('/api/v2/pokemon/10500/')) {
+          return {
+          is_default: false,
+          forms: [{ url: 'https://pokeapi.co/api/v2/pokemon-form/10500/' }],
+          types: [{ type: { name: 'fire' } }],
+          sprites: { front_default: 'charmander-world-cap.png' },
+          stats: [
+            { base_stat: 39, stat: { name: 'hp' } },
+            { base_stat: 52, stat: { name: 'attack' } },
+            { base_stat: 43, stat: { name: 'defense' } },
+            { base_stat: 60, stat: { name: 'special-attack' } },
+            { base_stat: 50, stat: { name: 'special-defense' } },
+            { base_stat: 65, stat: { name: 'speed' } }
+          ],
+          abilities: [{ ability: { name: 'blaze' }, is_hidden: false }, { ability: { name: 'levitate' }, is_hidden: true }],
+          species: { url: 'https://pokeapi.co/api/v2/pokemon-species/4/' }
+          };
+        }
         if (url.startsWith('/api/v2/pokemon/4/')) {
           if (mockState.failPokemon4Once) {
             mockState.failPokemon4Once = false;
@@ -130,16 +194,65 @@ vi.mock('pokedex-promise-v2', () => {
             { base_stat: 50, stat: { name: 'special-defense' } },
             { base_stat: 65, stat: { name: 'speed' } }
           ],
-          abilities: [{ ability: { name: 'blaze' }, is_hidden: false }, { ability: { name: 'levitate' }, is_hidden: true }],
+          abilities: mockState.usePalafin
+            ? [{ ability: { name: mockState.breakPalafinTrigger ? 'torrent' : 'zero-to-hero' }, is_hidden: false }]
+            : mockState.useQualityAbility
+              // Skeledirge's real pair. Unaware sits in the hidden slot, so any
+              // rule that falls back to "first ability" never reaches it.
+              ? [
+                { ability: { name: 'blaze' }, is_hidden: false },
+                { ability: { name: 'unaware' }, is_hidden: true }
+              ]
+              : mockState.useSupportAbility
+              // Ninetales' real trio: a filler, the weather ability it is
+              // brought for, and a type immunity that wins on defence alone.
+              ? [
+                { ability: { name: 'white-smoke' }, is_hidden: false },
+                { ability: { name: 'drought' }, is_hidden: false },
+                { ability: { name: 'flash-fire' }, is_hidden: true }
+              ]
+              : mockState.useHugePower
+              // Azumarill's real pair: the stat ability, and a type immunity that
+              // wins on defensive merit alone.
+              ? [{ ability: { name: 'huge-power' }, is_hidden: false }, { ability: { name: 'sap-sipper' }, is_hidden: true }]
+              : [{ ability: { name: 'blaze' }, is_hidden: false }, { ability: { name: 'levitate' }, is_hidden: true }],
+          species: { url: 'https://pokeapi.co/api/v2/pokemon-species/4/' }
+          };
+        }
+        // The battle form Palafin actually fights in. Same typing as the mocked
+        // registered form, and a far larger stat line.
+        if (url.startsWith('/api/v2/pokemon/9000/')) {
+          return {
+          is_default: false,
+          types: [{ type: { name: 'fire' } }],
+          sprites: { front_default: 'palafin-hero.png' },
+          stats: [
+            { base_stat: 100, stat: { name: 'hp' } },
+            { base_stat: 160, stat: { name: 'attack' } },
+            { base_stat: 97, stat: { name: 'defense' } },
+            { base_stat: 106, stat: { name: 'special-attack' } },
+            { base_stat: 87, stat: { name: 'special-defense' } },
+            { base_stat: 100, stat: { name: 'speed' } }
+          ],
+          abilities: [{ ability: { name: 'zero-to-hero' }, is_hidden: false }],
           species: { url: 'https://pokeapi.co/api/v2/pokemon-species/4/' }
           };
         }
         if (url.startsWith('/api/v2/pokemon-species/4/')) {
           return {
-          is_legendary: false,
+          name: mockState.usePalafin
+            ? 'palafin'
+            : (mockState.useRegulationLegalSpecies ? 'charizard' : 'charmander'),
+          is_legendary: mockState.treatSpeciesAsLegendary,
           is_mythical: false,
           egg_groups: [{ name: 'monster' }],
-          pokedex_numbers: [{ pokedex: { name: 'national' } }]
+          pokedex_numbers: [{ pokedex: { name: 'national' } }],
+          varieties: mockState.usePalafin
+            ? [
+              { is_default: true, pokemon: { name: 'palafin-zero', url: 'https://pokeapi.co/api/v2/pokemon/4/' } },
+              { is_default: false, pokemon: { name: 'palafin-hero', url: 'https://pokeapi.co/api/v2/pokemon/9000/' } }
+            ]
+            : []
           };
         }
         if (url.startsWith('/api/v2/pokemon/7/')) {
@@ -160,17 +273,33 @@ vi.mock('pokedex-promise-v2', () => {
         }
         if (url.startsWith('/api/v2/pokemon-species/7/')) {
           return {
-          is_legendary: false,
+          name: mockState.useRegulationLegalSpecies ? 'blastoise' : 'squirtle',
+          is_legendary: mockState.treatSpeciesAsLegendary,
           is_mythical: false,
           egg_groups: [{ name: 'monster' }],
           pokedex_numbers: [{ pokedex: { name: 'national' } }]
           };
         }
 
+        // PokeAPI numbers alternate varieties from 10000 up, so the mock uses the
+        // same convention: anything above that is a non-default form with its own
+        // /pokemon-form resource.
+        const formMatch = url.match(/^\/api\/v2\/pokemon-form\/(\d+)\/$/);
+        if (formMatch) {
+          const id = Number(formMatch[1]);
+          return {
+            is_battle_only: id === 10001 || id === 10002,
+            is_mega: id === 10002
+          };
+        }
+
         const pokemonMatch = url.match(/^\/api\/v2\/pokemon\/(\d+)\/$/);
         if (pokemonMatch) {
           const id = Number(pokemonMatch[1]);
+          const isAlternateForm = id >= 10000;
           return {
+            is_default: !isAlternateForm,
+            forms: isAlternateForm ? [{ url: `https://pokeapi.co/api/v2/pokemon-form/${id}/` }] : undefined,
             types: [{ type: { name: 'fire' } }],
             sprites: { front_default: `firemon-${id}.png` },
             stats: [
@@ -189,7 +318,8 @@ vi.mock('pokedex-promise-v2', () => {
         const speciesMatch = url.match(/^\/api\/v2\/pokemon-species\/(\d+)\/$/);
         if (speciesMatch) {
           return {
-            is_legendary: false,
+            name: `species-${speciesMatch[1]}`,
+            is_legendary: mockState.treatSpeciesAsLegendary,
             is_mythical: false,
             egg_groups: [{ name: 'monster' }],
             pokedex_numbers: [{ pokedex: { name: 'national' } }]
@@ -208,8 +338,20 @@ beforeEach(() => {
   mockState.duplicateCharmanderAcrossTypes = false;
   mockState.expandFireRoster = false;
   mockState.failPokemon4Once = false;
+  mockState.useRegulationLegalSpecies = false;
+  mockState.treatSpeciesAsLegendary = false;
+  mockState.useCoverageTableName = false;
+  mockState.includeAlternateForms = false;
+  mockState.includeCosmeticVarieties = false;
+  mockState.includeUnbreedableVariety = false;
+  mockState.usePalafin = false;
+  mockState.breakPalafinTrigger = false;
+  mockState.useHugePower = false;
+  mockState.useSupportAbility = false;
+  mockState.useQualityAbility = false;
   mockState.detailDelayMs = 0;
   mockState.requestCounts.clear();
+  mockState.requestOrder = [];
   mockState.activeDetailRequests = 0;
   mockState.maxActiveDetailRequests = 0;
 });
@@ -280,7 +422,17 @@ describe('pokedex.js API integration logic', () => {
     expect(fireType!.pokemon[0].ability_profiles!.levitate.weaknesses).toEqual(['water', 'rock']);
     expect(fireType!.pokemon[0].effective_weaknesses).toEqual(['water', 'rock']);
     expect(fireType!.pokemon[0].effective_resistances).toContain('ground');
-    expect(fireType!.damage_from_score).toBe(17.5);
+
+    // The type row describes the typing, not its highest-stat member, so
+    // Charmander's Levitate must not remove ground from the fire type summary.
+    expect(fireType!.damage_from_score).toBe(19.5);
+    expect(fireType!.weaknesses).toContain('ground');
+    expect(fireType!.resistances).not.toContain('ground');
+
+    // Levitate grants a true 0x immunity, so ground lands in both the strict
+    // immunity set and the broader resistance set for that Pokemon.
+    expect(fireType!.pokemon[0].effective_immunities).toEqual(['ground']);
+    expect(fireType!.pokemon[0].effective_resistances).toContain('ground');
   });
 
   it('getResistantTypes should allow disabling ability immunities', async () => {
@@ -297,6 +449,381 @@ describe('pokedex.js API integration logic', () => {
     expect(fireType!.pokemon[0].effective_weaknesses).toContain('ground');
     expect(fireType!.pokemon[0].effective_resistances).not.toContain('ground');
     expect(fireType!.damage_from_score).toBe(19.5);
+  });
+
+  it('getResistantTypes should exclude species outside the selected regulation', async () => {
+    // charmander and squirtle are not on the Regulation M-B roster.
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, regulation: 'M-B' },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(resistant.every(t => t.pokemon.length === 0)).toBe(true);
+  });
+
+  it('getResistantTypes should keep species on the selected regulation roster', async () => {
+    mockState.useRegulationLegalSpecies = true;
+
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, regulation: 'M-B' },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(resistant.find(t => t.name === 'fire')!.pokemon).toHaveLength(1);
+    expect(resistant.find(t => t.name === 'water')!.pokemon).toHaveLength(1);
+  });
+
+  it('getResistantTypes should reject an unknown regulation instead of scanning unfiltered', async () => {
+    await expect(getResistantTypes({
+      pokemonFilters: { regulation: 'M-Z' }
+    })).rejects.toThrow('Unknown regulation: M-Z');
+  });
+
+  it('getResistantTypes should apply the regulation on top of the breedable filter', async () => {
+    // charizard is legal in M-B, but the species is reported as legendary here,
+    // so the breedable-only preference must still exclude it. Legality and
+    // breedability are independent filters and neither overrides the other.
+    mockState.useRegulationLegalSpecies = true;
+    mockState.treatSpeciesAsLegendary = true;
+
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, regulation: 'M-B' },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(resistant.every(t => t.pokemon.length === 0)).toBe(true);
+  });
+
+  it('getResistantTypes should resolve move coverage beyond STAB', async () => {
+    mockState.useCoverageTableName = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, includeMoveCoverage: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    // Garchomp's Champions movepool includes fire, water and steel moves, none
+    // of which its Ground/Dragon typing can see.
+    const coverage = resistant.find(t => t.name === 'fire')!.pokemon[0].effective_move_coverages!;
+    expect(coverage.length).toBeGreaterThan(0);
+    expect(coverage).toContain('rock');
+  });
+
+  it('getResistantTypes should skip move coverage when disabled', async () => {
+    mockState.useCoverageTableName = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true, includeMoveCoverage: false },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(resistant.find(t => t.name === 'fire')!.pokemon[0].effective_move_coverages).toEqual([]);
+  });
+
+  const scanWithAlternateForms = (allowMegas: boolean) => {
+    mockState.includeAlternateForms = true;
+    return getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+  };
+
+  it('getResistantTypes should collapse cosmetic varieties into the base Pokemon', async () => {
+    mockState.includeCosmeticVarieties = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+    // A cap changes nothing this tool models, so it is not a second Pokemon.
+    expect(names).toEqual(['charmander']);
+  });
+
+  it('getResistantTypes should drop varieties recorded as unbreedable', async () => {
+    mockState.includeUnbreedableVariety = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+    // Every species-level check passes here — the egg group is ordinary and the
+    // form is neither battle-only nor Mega — so only the variety-level rule can
+    // reject it. This is the case the species-keyed filter could never catch.
+    expect(names).not.toContain('floette-eternal');
+    expect(names).toContain('charmander');
+  });
+
+  it('getResistantTypes should drop battle-only forms but keep permanent ones', async () => {
+    const resistant = await scanWithAlternateForms(false);
+
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+    // Gigantamax is a state a Pokemon enters mid-battle, not a team slot.
+    expect(names).not.toContain('charmander-gmax');
+    // A regional form is a Pokemon you can actually bring, so it stays.
+    expect(names).toContain('charmander-alola');
+    expect(names).toContain('charmander');
+  });
+
+  it('getResistantTypes should gate Megas on allowMegas rather than on the name', async () => {
+    const withoutMegas = await scanWithAlternateForms(false);
+    expect(withoutMegas.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name))
+      .not.toContain('charmander-mega');
+
+    __resetPokedexResourceCaches();
+    const withMegas = await scanWithAlternateForms(true);
+    const names = withMegas.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+    // Megas are battle-only by the same flag, but they are a pre-battle choice.
+    expect(names).toContain('charmander-mega');
+    expect(names).not.toContain('charmander-gmax');
+  });
+
+  it('getResistantTypes should not request a form for default varieties', async () => {
+    await scanWithAlternateForms(false);
+
+    // The extra request is confined to alternate forms; the base Pokemon is
+    // known to be registerable without asking.
+    expect(mockState.requestCounts.get('/api/v2/pokemon-form/4/')).toBeUndefined();
+    expect(mockState.requestCounts.get('/api/v2/pokemon-form/10001/')).toBe(1);
+  });
+
+  const scanPalafin = (statsFilters = { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }) => {
+    mockState.usePalafin = true;
+    return getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters
+    });
+  };
+
+  it('getResistantTypes should rate a Pokemon on the form it fights in', async () => {
+    const entry = (await scanPalafin()).find(t => t.name === 'fire')!.pokemon[0];
+
+    // Identity stays with the registered form; only the numbers move.
+    expect(entry.pokemon.name).toBe('charmander');
+    expect(entry.species_name).toBe('palafin');
+    expect(entry.battle_form_name).toBe('palafin-hero');
+    expect(entry.stats!.attack).toBe(160);
+    expect(entry.stats_total).toBe(650);
+  });
+
+  it('getResistantTypes should apply stat floors to the fighting form', async () => {
+    // The registered Palafin-Zero form would fail this floor. Rating it there
+    // would drop from the scan a Pokemon that battles at 650.
+    const resistant = await scanPalafin({ minimumStatsTotal: 600, minimumAttacks: 150, minimumDefenses: 80 });
+
+    expect(resistant.find(t => t.name === 'fire')!.pokemon).toHaveLength(1);
+  });
+
+  it('getResistantTypes should rate as registered when the trigger ability is absent', async () => {
+    mockState.breakPalafinTrigger = true;
+    const entry = (await scanPalafin()).find(t => t.name === 'fire')!.pokemon[0];
+
+    // Without Zero to Hero the battle form is unreachable, so the registered
+    // form's own stats stand.
+    expect(entry.battle_form_name).toBeUndefined();
+    expect(entry.stats!.attack).toBe(52);
+  });
+
+  it('getResistantTypes should leave ordinary Pokemon unmarked', async () => {
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    expect(resistant.find(t => t.name === 'fire')!.pokemon[0].battle_form_name).toBeUndefined();
+  });
+
+  // The mocked charmander is 39/52/43/60/50/65: best attack 60, average
+  // defenses 46.5. Squirtle is 44/48/65/50/64/43: best attack 50, defenses 64.5.
+  const scanWithFloors = (minimumAttacks: number, minimumDefenses: number) => getResistantTypes({
+    baseScore: 18,
+    typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+    pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+    statsFilters: { minimumStatsTotal: 100, minimumAttacks, minimumDefenses }
+  });
+  const firePokemon = (result: Awaited<ReturnType<typeof getResistantTypes>>) =>
+    result.find(t => t.name === 'fire')!.pokemon;
+
+  describe('stat floors', () => {
+    it('keeps a Pokemon that clears the attack floor but not the defense floor', () => {
+      // The Excadrill case: elite because it is all offense. Requiring both
+      // floors rejected exactly the Pokemon that specialise.
+      return scanWithFloors(55, 90).then(r => expect(firePokemon(r)).toHaveLength(1));
+    });
+
+    it('keeps a Pokemon that clears the defense floor but not the attack floor', () => {
+      // The Toxapex case, the same failure in the other direction.
+      return scanWithFloors(90, 40).then(r => expect(firePokemon(r)).toHaveLength(1));
+    });
+
+    it('rejects a Pokemon that clears neither', () => {
+      return scanWithFloors(90, 90).then(r => expect(firePokemon(r)).toHaveLength(0));
+    });
+
+    it('still applies the total floor on its own', () => {
+      // The total is a genuine conjunct: either/or applies only to the two
+      // stat floors, not to everything.
+      return getResistantTypes({
+        baseScore: 18,
+        typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+        pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+        statsFilters: { minimumStatsTotal: 900, minimumAttacks: 1, minimumDefenses: 1 }
+      }).then(r => expect(firePokemon(r)).toHaveLength(0));
+    });
+
+    it('defaults to DEFAULT_STATS_FILTERS when none are supplied', async () => {
+      // Charmander totals 309, under the 440 default, so an omitted
+      // statsFilters must not silently mean "no floors".
+      const resistant = await getResistantTypes({
+        baseScore: 18,
+        typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+        pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true }
+      });
+
+      expect(DEFAULT_STATS_FILTERS.minimumStatsTotal).toBe(440);
+      expect(firePokemon(resistant)).toHaveLength(0);
+    });
+  });
+
+  // The mocked charmander is 39/52/43/60/50/65 — an Attack of 52 that Huge
+  // Power takes to 104.
+  const scanHugePower = (statsFilters = { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }) => {
+    mockState.useHugePower = true;
+    return getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters
+    });
+  };
+
+  it('getResistantTypes should apply an unconditional stat ability', async () => {
+    const entry = (await scanHugePower()).find(t => t.name === 'fire')!.pokemon[0];
+
+    expect(entry.stats!.attack).toBe(104);
+    expect(entry.base_stats!.attack).toBe(52);
+    expect(entry.stat_ability_name).toBe('huge-power');
+    // Only the one stat moves.
+    expect(entry.stats!['special-attack']).toBe(60);
+  });
+
+  it('getResistantTypes should test the stat floors against the ability', async () => {
+    // 52 Attack fails this floor; the 104 it actually swings with clears it.
+    const resistant = await scanHugePower({ minimumStatsTotal: 100, minimumAttacks: 100, minimumDefenses: 10 });
+
+    expect(resistant.find(t => t.name === 'fire')!.pokemon).toHaveLength(1);
+  });
+
+  it('getResistantTypes should prefer a stat ability over a purely defensive one', async () => {
+    const entry = (await scanHugePower()).find(t => t.name === 'fire')!.pokemon[0];
+
+    // Sap Sipper grants a Grass immunity and so wins on defensive merit, which
+    // is the only thing the ability selector used to weigh. Doubling Attack
+    // outweighs one type immunity for the Pokemon built around it.
+    expect(entry.selected_ability_name).toBe('huge-power');
+  });
+
+  it('getResistantTypes should give each ability its own stat line', async () => {
+    const entry = (await scanHugePower()).find(t => t.name === 'fire')!.pokemon[0];
+
+    expect(entry.ability_profiles!['huge-power'].stats!.attack).toBe(104);
+    // Switching ability in the UI must not keep the doubled Attack.
+    expect(entry.ability_profiles!['sap-sipper'].stats!.attack).toBe(52);
+  });
+
+  it('getResistantTypes should leave ordinary Pokemon on their published stats', async () => {
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+    const entry = resistant.find(t => t.name === 'fire')!.pokemon[0];
+
+    expect(entry.stats!.attack).toBe(52);
+    expect(entry.stat_ability_name).toBeUndefined();
+  });
+
+  it('getResistantTypes should select a support ability over a type immunity', async () => {
+    mockState.useSupportAbility = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+    const entry = resistant.find(t => t.name === 'fire')!.pokemon[0];
+
+    // Flash Fire wins on defensive merit, which was the only thing weighed.
+    // Drought is the reason the Pokemon gets brought at all.
+    expect(entry.selected_ability_name).toBe('drought');
+    // Every ability is still offered; only the default changed.
+    expect(Object.keys(entry.ability_profiles!).sort()).toEqual(['drought', 'flash-fire', 'white-smoke']);
+  });
+
+  it('getResistantTypes should select a quality ability out of a hidden slot', async () => {
+    mockState.useQualityAbility = true;
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+    const entry = resistant.find(t => t.name === 'fire')!.pokemon[0];
+
+    // Unaware changes neither the stats nor a type matchup, so every earlier
+    // version of the selection rule fell through to the first slot and picked
+    // Blaze — which left abilityEffects.ts with nothing in the app using it.
+    expect(entry.selected_ability_name).toBe('unaware');
+  });
+
+  it('getResistantTypes should fetch a battle form inside the concurrency budget', async () => {
+    // Enough entries that the prefetch cannot drain in a single wave, so there
+    // are provably later requests to compare against.
+    mockState.expandFireRoster = true;
+    await scanPalafin();
+
+    const order = mockState.requestOrder;
+    const battleFormIndex = order.indexOf('/api/v2/pokemon/9000/');
+    expect(battleFormIndex).toBeGreaterThanOrEqual(0);
+
+    // The prefetch warms every detail request under mapWithConcurrency, and
+    // processPokemon then issues none of its own. A battle form resolved lazily
+    // instead would be the *last* detail request of the whole scan, since by
+    // then everything else is cached — so the presence of later ones is the
+    // signal that this fetch happened inside the budget.
+    const laterDetailRequests = order
+      .slice(battleFormIndex + 1)
+      .filter((url) => url.startsWith('/api/v2/pokemon'));
+
+    expect(laterDetailRequests.length).toBeGreaterThan(0);
+    expect(mockState.maxActiveDetailRequests).toBeLessThanOrEqual(12);
+  });
+
+  it('getResistantTypes should fetch a battle form once across every typing', async () => {
+    mockState.duplicateCharmanderAcrossTypes = true;
+    await scanPalafin();
+
+    expect(mockState.requestCounts.get('/api/v2/pokemon/9000/')).toBe(1);
   });
 
   it('getResistantTypes should dedupe repeated pokemon and species detail fetches', async () => {
@@ -346,391 +873,5 @@ describe('pokedex.js API integration logic', () => {
 
     expect(resistant.find((type) => type.name === 'fire')?.pokemon[0].pokemon.name).toBe('charmander');
     expect(mockState.requestCounts.get('/api/v2/pokemon/4/')).toBe(2);
-  });
-
-  it('generateTeams should respect a selected pokemon ability profile', () => {
-    const abilityTypes = [{
-      name: 'fire',
-      damage_from_score: 19.5,
-      damage_to_score: 20,
-      weaknesses: ['water', 'rock', 'ground'],
-      resistances: ['fire', 'grass', 'bug'],
-      coverages: ['grass', 'bug', 'ice'],
-      ineffectives: ['water', 'fire', 'rock'],
-      pokemon: [{
-        pokemon: { name: 'charizard' },
-        sprite: 'charizard.png',
-        stats: { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 },
-        selected_ability_name: 'levitate',
-        ability_profiles: {
-          blaze: { weaknesses: ['water', 'rock', 'ground'], quadruple_weaknesses: [], resistances: ['fire', 'grass', 'bug'], ineffectives: ['water', 'fire', 'rock'], coverages: ['grass', 'bug', 'ice'], damage_from_score: 19.5, damage_to_score: 20 },
-          levitate: { weaknesses: ['water', 'rock'], quadruple_weaknesses: [], resistances: ['fire', 'grass', 'bug', 'ground'], ineffectives: ['water', 'fire', 'rock'], coverages: ['grass', 'bug', 'ice'], damage_from_score: 17.5, damage_to_score: 20 }
-        },
-        effective_weaknesses: ['water', 'rock'],
-        effective_quadruple_weaknesses: [],
-        effective_resistances: ['fire', 'grass', 'bug', 'ground'],
-        effective_ineffectives: ['water', 'fire', 'rock'],
-        effective_coverages: ['grass', 'bug', 'ice'],
-        effective_damage_from_score: 17.5,
-        effective_damage_to_score: 20
-      }]
-    }];
-
-    const teams = generateTeams({
-      allowedTypes: abilityTypes as any,
-      teamSize: 1
-    });
-
-    expect(teams[0].pokemon[0].selected_ability_name).toBe('levitate');
-    expect(teams[0].pokemon[0].effective_weaknesses).toEqual(['water', 'rock']);
-  });
-});
-
-describe('pokedex.js - generateTeams', () => {
-  const mockTypes = [
-    {
-      name: 'fire',
-      damage_from_score: 18,
-      damage_to_score: 20,
-      weaknesses: ['water', 'rock', 'ground'],
-      resistances: ['fire', 'grass', 'bug'],
-      coverages: ['grass', 'bug', 'ice'],
-      ineffectives: ['water', 'fire', 'rock'],
-      pokemon: [{
-        pokemon: { name: 'charizard' },
-        sprite: 'charizard.png',
-        stats: { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 }
-      }]
-    },
-    {
-      name: 'water',
-      damage_from_score: 17,
-      damage_to_score: 19,
-      weaknesses: ['grass', 'electric'],
-      resistances: ['fire', 'water', 'ice'],
-      coverages: ['fire', 'rock', 'ground'],
-      ineffectives: ['water', 'grass', 'dragon'],
-      pokemon: [{
-        pokemon: { name: 'blastoise' },
-        sprite: 'blastoise.png',
-        stats: { hp: 79, attack: 83, defense: 100, 'special-attack': 85, 'special-defense': 105, speed: 78 }
-      }]
-    },
-    {
-      name: 'grass',
-      damage_from_score: 19,
-      damage_to_score: 18,
-      weaknesses: ['fire', 'flying', 'bug', 'ice', 'poison'],
-      resistances: ['water', 'grass', 'electric', 'ground'],
-      coverages: ['water', 'rock', 'ground'],
-      ineffectives: ['fire', 'grass', 'bug', 'dragon', 'poison', 'flying', 'steel'],
-      pokemon: [{
-        pokemon: { name: 'venusaur' },
-        sprite: 'venusaur.png',
-        stats: { hp: 80, attack: 82, defense: 83, 'special-attack': 100, 'special-defense': 100, speed: 80 }
-      }]
-    }
-  ];
-
-  it('should generate a team of size 3', () => {
-    const teams = generateTeams({
-      allowedTypes: [...mockTypes],
-      teamSize: 3,
-      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
-    });
-
-    expect(teams.length).toBeGreaterThan(0);
-    expect(teams[0].pokemon.length).toBe(3);
-    expect(teams[0].typesTotal).toBe(3); // 'fire', 'water', 'grass' = 3 base types
-  });
-
-  it('should not generate a team if team size exceeds available types', () => {
-    const teams = generateTeams({
-      allowedTypes: [...mockTypes],
-      teamSize: 4,
-      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
-    });
-
-    expect(teams.length).toBe(0);
-  });
-
-  it('should exclude combinations with shared weaknesses if allowSharedWeaknesses is false', () => {
-    const mockTypesWithSharedWeakness = [
-      ...mockTypes,
-      {
-        name: 'rock',
-        damage_from_score: 20,
-        damage_to_score: 18,
-        weaknesses: ['water', 'grass', 'fighting', 'ground', 'steel'], // Shares 'water' weakness with fire
-        resistances: ['normal', 'fire', 'poison', 'flying'],
-        coverages: ['fire', 'ice', 'flying', 'bug'],
-        ineffectives: ['fighting', 'ground', 'steel'],
-        pokemon: [{
-          pokemon: { name: 'golem' },
-          sprite: 'golem.png',
-          stats: { hp: 80, attack: 120, defense: 130, 'special-attack': 55, 'special-defense': 65, speed: 45 }
-        }]
-      }
-    ];
-
-    const teamsSharedAllowed = generateTeams({
-      allowedTypes: [...mockTypesWithSharedWeakness],
-      teamSize: 2,
-      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
-    });
-
-    const hasFireAndRock = teamsSharedAllowed.some(team => 
-      team.types.includes('fire') && team.types.includes('rock')
-    );
-    expect(hasFireAndRock).toBe(true);
-
-    const teamsSharedDisallowed = generateTeams({
-      allowedTypes: [...mockTypesWithSharedWeakness],
-      teamSize: 2,
-      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: false, coverWeaknesses: false }
-    });
-
-    const hasFireAndRockDisallowed = teamsSharedDisallowed.some((team: any) => 
-      team.types.includes('fire') && team.types.includes('rock')
-    );
-    expect(hasFireAndRockDisallowed).toBe(false);
-  });
-  
-  it('should calculate valid score metric for generated team', () => {
-    const teams = generateTeams({
-      allowedTypes: [...mockTypes],
-      teamSize: 3,
-      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
-    });
-    
-    expect(Array.isArray(teams)).toBe(true);
-    expect(teams.length).toBeGreaterThan(0);
-    expect(typeof teams[0].score).toBe('number');
-    expect(Number.isFinite(teams[0].score)).toBe(true);
-    expect(teams[0].score).toBeGreaterThan(0);
-  });
-
-  it('should expose team-level synergy metrics for ranking', () => {
-    const teams = generateTeams({
-      allowedTypes: [...mockTypes],
-      teamSize: 3,
-      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
-    });
-
-    expect(teams[0].sharedWeaknesses).toEqual([]);
-    expect(teams[0].uncoveredWeaknesses).toEqual(['flying', 'poison']);
-    expect(teams[0].uniqueResistances).toBe(7);
-    expect(teams[0].uniqueCoverages).toBe(7);
-  });
-
-  it('should penalize shared quadruple weaknesses in team ranking', () => {
-    const severityTypes = [
-      {
-        name: 'bug/steel',
-        damage_from_score: 12,
-        damage_to_score: 19,
-        weaknesses: ['fire', 'rock'],
-        quadruple_weaknesses: ['fire'],
-        resistances: ['grass', 'ice', 'fairy'],
-        coverages: ['grass', 'psychic'],
-        ineffectives: [],
-        pokemon: [{
-          pokemon: { name: 'forretress' },
-          sprite: 'forretress.png',
-          stats: { hp: 75, attack: 140, defense: 180, 'special-attack': 40, 'special-defense': 120, speed: 40 }
-        }]
-      },
-      {
-        name: 'grass/ice',
-        damage_from_score: 13,
-        damage_to_score: 18,
-        weaknesses: ['fire', 'steel', 'flying'],
-        quadruple_weaknesses: ['fire'],
-        resistances: ['water', 'grass', 'ground'],
-        coverages: ['water', 'ground'],
-        ineffectives: [],
-        pokemon: [{
-          pokemon: { name: 'abomasnow' },
-          sprite: 'abomasnow.png',
-          stats: { hp: 90, attack: 132, defense: 120, 'special-attack': 132, 'special-defense': 120, speed: 60 }
-        }]
-      },
-      {
-        name: 'water/dragon',
-        damage_from_score: 16,
-        damage_to_score: 17,
-        weaknesses: ['dragon', 'fairy'],
-        quadruple_weaknesses: [],
-        resistances: ['fire', 'water', 'steel'],
-        coverages: ['fire', 'rock', 'ground'],
-        ineffectives: [],
-        pokemon: [{
-          pokemon: { name: 'kingdra' },
-          sprite: 'kingdra.png',
-          stats: { hp: 75, attack: 95, defense: 95, 'special-attack': 95, 'special-defense': 95, speed: 85 }
-        }]
-      },
-      {
-        name: 'electric/steel',
-        damage_from_score: 15,
-        damage_to_score: 17,
-        weaknesses: ['ground', 'fighting'],
-        quadruple_weaknesses: [],
-        resistances: ['electric', 'flying', 'fairy'],
-        coverages: ['water', 'flying', 'ice'],
-        ineffectives: [],
-        pokemon: [{
-          pokemon: { name: 'magnezone' },
-          sprite: 'magnezone.png',
-          stats: { hp: 70, attack: 70, defense: 115, 'special-attack': 130, 'special-defense': 90, speed: 60 }
-        }]
-      }
-    ];
-
-    const teams = generateTeams({
-      allowedTypes: severityTypes as any,
-      teamSize: 2,
-      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
-    });
-
-    const sharedQuadTeam = teams.find((team: any) =>
-      team.types.includes('bug/steel') && team.types.includes('grass/ice')
-    );
-    const safeTeam = teams.find((team: any) =>
-      team.types.includes('water/dragon') && team.types.includes('electric/steel')
-    );
-
-    expect(sharedQuadTeam).toBeDefined();
-    expect(sharedQuadTeam!.sharedQuadrupleWeaknesses).toEqual(['fire']);
-    expect(safeTeam).toBeDefined();
-    expect(safeTeam!.sharedQuadrupleWeaknesses).toEqual([]);
-    expect(sharedQuadTeam!.score).toBeLessThan(safeTeam!.score);
-  });
-
-  it('should handle missing normalized scores without producing NaN', () => {
-    const typesWithMissingScores = [
-      {
-        name: 'fire',
-        pokemon: [{
-          pokemon: { name: 'charizard' },
-          sprite: 'charizard.png',
-          stats: { hp: 78, attack: 84, defense: 78, 'special-attack': 109, 'special-defense': 85, speed: 100 }
-        }],
-        weaknesses: [],
-        resistances: [],
-        coverages: [],
-        ineffectives: []
-        // normalized_damage_to_score is missing
-      }
-    ];
-
-    const teams = generateTeams({
-      allowedTypes: typesWithMissingScores as any,
-      teamSize: 1
-    });
-
-    expect(Array.isArray(teams)).toBe(true);
-    expect(teams.length).toBeGreaterThan(0);
-    expect(teams[0].score).toBeDefined();
-    expect(Number.isNaN(teams[0].score)).toBe(false);
-    expect(typeof teams[0].score).toBe('number');
-  });
-
-  it('should allow candidates when one side has no weaknesses to cover', () => {
-    const teams = generateTeams({
-      allowedTypes: [
-        {
-          name: 'steel',
-          damage_from_score: 15,
-          damage_to_score: 16,
-          weaknesses: [],
-          resistances: ['grass', 'electric'],
-          coverages: ['rock'],
-          ineffectives: [],
-          pokemon: [{
-            pokemon: { name: 'steelix' },
-            sprite: 'steelix.png',
-            stats: { hp: 75, attack: 85, defense: 200, 'special-attack': 55, 'special-defense': 65, speed: 30 }
-          }]
-        },
-        {
-          name: 'water',
-          damage_from_score: 17,
-          damage_to_score: 19,
-          weaknesses: ['electric'],
-          resistances: ['fire'],
-          coverages: ['electric'],
-          ineffectives: [],
-          pokemon: [{
-            pokemon: { name: 'blastoise' },
-            sprite: 'blastoise.png',
-            stats: { hp: 79, attack: 83, defense: 100, 'special-attack': 85, 'special-defense': 105, speed: 78 }
-          }]
-        }
-      ] as any,
-      teamSize: 2,
-      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: true }
-    });
-
-    expect(teams.some((team) => team.types.includes('steel') && team.types.includes('water'))).toBe(true);
-  });
-
-  it('should skip invalid types in seeded generation gracefully', () => {
-    const seedWithInvalidType = [
-      {
-        name: 'invalid-type', 
-        typeName: 'invalid-type',
-        weaknesses: [],
-        ineffectives: []
-      },
-      {
-        name: 'fire',
-        typeName: 'fire',
-        weaknesses: ['water', 'rock', 'ground'],
-        ineffectives: ['water', 'fire', 'rock'],
-        pokemon: mockTypes[0].pokemon,
-        selectedPokemon: mockTypes[0].pokemon[0] // Explicitly set selectedPokemon to be extra safe
-      }
-    ];
-
-    const teams = generateTeams({
-      allowedTypes: [...mockTypes],
-      teamSize: 3,
-      seed: seedWithInvalidType as any,
-      teamComposition: { allowSharedTypes: true, allowSharedWeaknesses: true, coverWeaknesses: false }
-    });
-
-    // Valid seed was 'fire'. It should have filled the remaining 2 slots with 'water' and 'grass'.
-    expect(Array.isArray(teams)).toBe(true);
-    expect(teams.length).toBeGreaterThan(0);
-    expect(Array.isArray(teams[0].pokemon)).toBe(true);
-    expect(teams[0].pokemon.length).toBe(3);
-
-    // Assert that 'invalid-type' is NOT in the team
-    const hasInvalidType = teams[0].pokemon.some((p: any) => p.name === 'missing-poke');
-    expect(hasInvalidType).toBe(false);
-
-    // Assert that 'fire' (charizard) IS in the team and it's the correct one from the seed
-    const charizard = teams[0].pokemon.find((p: any) => p.name === 'charizard');
-    expect(charizard).toBeDefined();
-    expect(charizard!.sprite).toBe('charizard.png');
-  });
-
-  it('should correctly map nested pokemon data to the team structure', () => {
-    const teams = generateTeams({
-      allowedTypes: [...mockTypes],
-      teamSize: 1
-    });
-
-    expect(Array.isArray(teams)).toBe(true);
-    expect(teams.length).toBeGreaterThan(0);
-    expect(Array.isArray(teams[0].pokemon)).toBe(true);
-    expect(teams[0].pokemon.length).toBe(1);
-
-    const poke = teams[0].pokemon[0];
-    expect(poke.name).toBeDefined();
-    expect(poke.sprite).toBeDefined();
-    expect(poke.stats).toBeDefined();
-    expect(Array.isArray(poke.types)).toBe(true);
   });
 });
