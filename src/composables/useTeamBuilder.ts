@@ -54,7 +54,10 @@ const teamBuilderState = createInjectableState('heur-aegis-dex:team-builder', ()
   isGenerating: ref(false),
   fillSeedNames: ref<string[]>([]),
   lastFilledRosterKey: ref<string | null>(null),
-  fillAlternativeCount: ref(0)
+  fillAlternativeCount: ref(0),
+  fillAlternativesDirty: ref(false),
+  /** Pokemon varieties automatic roster generation must not add. */
+  excludedPokemonNames: ref<string[]>([])
 }));
 
 export const provideTeamBuilder = teamBuilderState.provideState;
@@ -78,7 +81,9 @@ export function useTeamBuilder() {
     isGenerating,
     fillSeedNames,
     lastFilledRosterKey,
-    fillAlternativeCount
+    fillAlternativeCount,
+    fillAlternativesDirty,
+    excludedPokemonNames
   } = teamBuilderState.useState();
   const { notify } = useNotifications();
 
@@ -88,13 +93,34 @@ export function useTeamBuilder() {
   const canTryAnotherRoster = computed(() =>
     roster.value.length >= maxRosterSize.value &&
     fillSeedNames.value.length > 0 &&
-    fillAlternativeCount.value > 1
+    (fillAlternativeCount.value > 1 || fillAlternativesDirty.value)
   );
 
   const resetFillCycle = () => {
     fillSeedNames.value = [];
     lastFilledRosterKey.value = null;
     fillAlternativeCount.value = 0;
+    fillAlternativesDirty.value = false;
+  };
+
+  const isExcludedFromGeneration = (name: string) => excludedPokemonNames.value.includes(name);
+
+  const toggleGenerationExclusion = (name: string) => {
+    const index = excludedPokemonNames.value.indexOf(name);
+    if (index === -1) {
+      excludedPokemonNames.value.push(name);
+    } else {
+      excludedPokemonNames.value.splice(index, 1);
+    }
+    fillAlternativesDirty.value = fillSeedNames.value.length > 0;
+    lastFilledRosterKey.value = null;
+  };
+
+  const clearGenerationExclusions = () => {
+    if (excludedPokemonNames.value.length === 0) return;
+    excludedPokemonNames.value = [];
+    fillAlternativesDirty.value = fillSeedNames.value.length > 0;
+    lastFilledRosterKey.value = null;
   };
 
   const toRosterMember = (member: PartyMember): RosterMember => ({
@@ -337,13 +363,18 @@ export function useTeamBuilder() {
     successMessage: string,
     cycleAlternatives = false
   ): boolean => {
+    const allowedPokemon = pool.filter((entry) => !isExcludedFromGeneration(entry.name));
     const rosters = generateRosters({
-      pokemon: pool,
+      pokemon: allowedPokemon,
       format: format.value,
       rosterSize: maxRosterSize.value,
       seed
     });
 
+    if (cycleAlternatives) {
+      fillAlternativesDirty.value = false;
+      fillAlternativeCount.value = 0;
+    }
     if (rosters.length === 0) return false;
 
     const alternatives = cycleAlternatives
@@ -465,6 +496,10 @@ export function useTeamBuilder() {
     maxRosterSize,
     bringSize,
     canTryAnotherRoster,
+    excludedPokemonNames,
+    isExcludedFromGeneration,
+    toggleGenerationExclusion,
+    clearGenerationExclusions,
     bringIndices,
     broughtTeam,
     isBrought,

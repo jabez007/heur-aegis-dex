@@ -61,11 +61,19 @@ const fillRoster = (add: (entry: PokemonEntry) => boolean, count: number) => {
 
 describe('useTeamBuilder', () => {
   const builder = useTeamBuilder();
-  const { addPokemon, clearParty, roster, setFormat, teamWeaknessSummary } = builder;
+  const {
+    addPokemon,
+    clearGenerationExclusions,
+    clearParty,
+    roster,
+    setFormat,
+    teamWeaknessSummary
+  } = builder;
   const { notifications } = useNotifications();
 
   beforeEach(() => {
     clearParty();
+    clearGenerationExclusions();
     setFormat('doubles');
   });
 
@@ -391,6 +399,66 @@ describe('useTeamBuilder', () => {
         type: 'error',
         message: expect.stringContaining('mon-0')
       });
+    });
+  });
+
+  describe('generation exclusions', () => {
+    const scanOf = (types: string[]) =>
+      types.map((type, index) => pokemon(`mon-${index}`, { typeName: type, types: [type] }));
+
+    it('toggles a Pokemon form in the generation pool', () => {
+      expect(builder.isExcludedFromGeneration('feraligatr')).toBe(false);
+
+      builder.toggleGenerationExclusion('feraligatr');
+
+      expect(builder.isExcludedFromGeneration('feraligatr')).toBe(true);
+      expect(builder.excludedPokemonNames.value).toEqual(['feraligatr']);
+
+      builder.toggleGenerationExclusion('feraligatr');
+      expect(builder.isExcludedFromGeneration('feraligatr')).toBe(false);
+    });
+
+    it('keeps excluded Pokemon out of a generated roster', () => {
+      const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark']);
+      builder.toggleGenerationExclusion('mon-0');
+
+      builder.generateFullTeam(scan);
+
+      expect(roster.value).toHaveLength(6);
+      expect(roster.value.map((member) => member.name)).not.toContain('mon-0');
+    });
+
+    it('keeps an excluded registered Pokemon while filling around it', () => {
+      const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark']);
+      addPokemon(scan[0]);
+      addPokemon(scan[1]);
+      addPokemon(scan[2]);
+      builder.toggleGenerationExclusion('mon-0');
+      builder.toggleGenerationExclusion('mon-6');
+
+      builder.fillRemainingSlots(scan, scan);
+
+      expect(roster.value.map((member) => member.name)).toContain('mon-0');
+      expect(roster.value.map((member) => member.name)).not.toContain('mon-6');
+    });
+
+    it('can replace a generated Pokemon immediately after excluding it', () => {
+      const scan = scanOf([
+        'fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel', 'psychic', 'flying'
+      ]);
+      addPokemon(scan[0]);
+      addPokemon(scan[1]);
+      addPokemon(scan[2]);
+      const locked = roster.value.map((member) => member.name);
+      builder.fillRemainingSlots(scan, scan);
+      const generated = roster.value.find((member) => !locked.includes(member.name))!;
+
+      builder.toggleGenerationExclusion(generated.name);
+
+      expect(builder.canTryAnotherRoster.value).toBe(true);
+      builder.fillRemainingSlots(scan, scan);
+      expect(roster.value.map((member) => member.name)).toEqual(expect.arrayContaining(locked));
+      expect(roster.value.map((member) => member.name)).not.toContain(generated.name);
     });
   });
 

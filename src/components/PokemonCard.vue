@@ -13,7 +13,14 @@ const emit = defineEmits<{
   (e: 'update:selected-ability-name', abilityName: string): void;
 }>();
 
-const { addPokemon, hasSpecies, roster, maxRosterSize } = useTeamBuilder();
+const {
+  addPokemon,
+  hasSpecies,
+  roster,
+  maxRosterSize,
+  isExcludedFromGeneration,
+  toggleGenerationExclusion
+} = useTeamBuilder();
 
 const selectedAbilityName = ref(props.pokemon.abilityName);
 const showStats = ref(false);
@@ -51,6 +58,7 @@ const statAbilityNote = computed(() => {
 });
 const isOnRoster = computed(() => hasSpecies(props.pokemon.speciesName));
 const rosterIsFull = computed(() => roster.value.length >= maxRosterSize.value);
+const isExcluded = computed(() => isExcludedFromGeneration(props.pokemon.name));
 
 const displayWeaknesses = computed(() => props.pokemon.weaknesses);
 const displayQuadrupleWeaknesses = computed(() => props.pokemon.quadrupleWeaknesses);
@@ -72,12 +80,16 @@ const toggleStats = () => {
 const handleAddToRoster = () => {
   addPokemon(props.pokemon, selectedAbilityName.value);
 };
+
+const handleToggleExclusion = () => {
+  toggleGenerationExclusion(props.pokemon.name);
+};
 </script>
 
 <template>
   <div
     class="type-card"
-    :class="{ rostered: isOnRoster }"
+    :class="{ rostered: isOnRoster, excluded: isExcluded }"
   >
     <div class="card-header">
       <img
@@ -223,6 +235,17 @@ const handleAddToRoster = () => {
           {{ showStats ? 'Hide' : 'Stats' }}
         </button>
         <button
+          class="gba-btn mini-btn exclude-btn"
+          :class="{ active: isExcluded }"
+          :aria-pressed="isExcluded"
+          :aria-label="isExcluded
+            ? `Allow ${pokemon.name} in generated rosters`
+            : `Exclude ${pokemon.name} from generated rosters`"
+          @click="handleToggleExclusion"
+        >
+          {{ isExcluded ? 'Excluded' : 'Exclude' }}
+        </button>
+        <button
           class="gba-btn mini-btn party-btn"
           :disabled="rosterIsFull || isOnRoster"
           :aria-label="isOnRoster ? `${pokemon.name} is already on the roster` : `Add ${pokemon.name} to roster`"
@@ -278,6 +301,18 @@ const handleAddToRoster = () => {
 .type-card.rostered {
   outline: 3px solid var(--gba-accent-cyan);
   outline-offset: 2px;
+}
+
+.type-card.excluded {
+  border-color: var(--gba-accent-magenta);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255,255,255,0.1) 0,
+      rgba(255,255,255,0.1) 8px,
+      rgba(255,0,128,0.06) 8px,
+      rgba(255,0,128,0.06) 16px
+    );
 }
 
 .ability-single {
@@ -438,9 +473,19 @@ const handleAddToRoster = () => {
   background-color: var(--gba-accent-yellow);
 }
 
+.exclude-btn {
+  background-color: rgba(255,255,255,0.45);
+}
+
+.exclude-btn.active {
+  color: white;
+  background-color: var(--gba-accent-magenta);
+}
+
 .poke-actions {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 4px;
   margin-top: 8px;
 }
