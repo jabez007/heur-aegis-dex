@@ -11,6 +11,7 @@ An advanced Pokémon meta-analysis and team building engine designed with a retr
 - **Dynamic Cup Builder:** Define custom meta-games by selecting specific type pools and region constraints.
 - **Pokémon Browser:** Every eligible Pokémon, ranked by balance of coverage against vulnerability, filtered by type and with a per-Pokémon ability selector.
 - **Team Workbench:** Register a roster of up to six, then bring three (singles) or four (doubles). The workbench suggests the strongest bring and analyses the team that actually takes the field.
+- **Local Workspaces:** Automatically recover the current draft or save named workspace snapshots containing scan settings, filters, roster choices, abilities, and generation exclusions.
 - **Retro Aesthetic:** Fully themed GBA-style UI with pixel-perfect sprites and custom components.
 - **High Performance:** Client-side caching and optimized recursive team generation algorithms.
 

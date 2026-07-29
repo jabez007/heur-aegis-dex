@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import MetaControls from './MetaControls.vue';
 import TeamWorkbench from './TeamWorkbench.vue';
 import MetaAnalysisGrid from './MetaAnalysisGrid.vue';
 import { useMetaFilters } from '../composables/useMetaFilters';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
+import { useWorkspaceState } from '../composables/useWorkspaceState';
 import { flattenToPokemon, withAbility } from '../lib/pokemonEntry';
 import { candidatePriority } from '../lib/rosterGeneration';
 import type { ResistantTypeResult } from '../lib/pokedexTypes';
@@ -18,8 +19,8 @@ const { selectedTypes, requireAllTypes } = useMetaFilters();
 // format re-orders the browser the same way it re-scores the roster.
 const { format } = useTeamBuilder();
 
-/** Ability overrides, keyed by Pokemon rather than by typing. */
-const selectedAbilityNames = ref<Record<string, string>>({});
+/** Ability overrides are app-scoped so scans and workspace loads do not discard them. */
+const { selectedAbilityNames, setSelectedAbilityName } = useWorkspaceState();
 
 // The scan is still organised by type combination, so it is flattened once into
 // Pokemon. Everything downstream browses Pokemon; typings are just a filter.
@@ -48,10 +49,7 @@ const filteredPokemon = computed(() => {
 });
 
 const updateSelectedAbilityName = (pokemonName: string, abilityName: string) => {
-  selectedAbilityNames.value = {
-    ...selectedAbilityNames.value,
-    [pokemonName]: abilityName
-  };
+  setSelectedAbilityName(pokemonName, abilityName);
 };
 </script>
 

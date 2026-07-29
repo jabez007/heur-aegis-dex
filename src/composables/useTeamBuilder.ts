@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { withAbility, type PokemonEntry } from '../lib/pokemonEntry';
+import type { WorkspaceSnapshotV1 } from '../lib/workspacePersistence';
 import { generateRosters } from '../lib/rosterGeneration';
 import { analyzeTeamCoverage } from '../lib/teamCoverage';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from '../lib/abilityRoles';
@@ -57,7 +58,11 @@ const teamBuilderState = createInjectableState('heur-aegis-dex:team-builder', ()
   fillAlternativeCount: ref(0),
   fillAlternativesDirty: ref(false),
   /** Pokemon varieties automatic roster generation must not add. */
-  excludedPokemonNames: ref<string[]>([])
+  excludedPokemonNames: ref<string[]>([]),
+  /** Advances only for deliberate edits that supersede a restored team. */
+  teamEditRevision: ref(0),
+  /** Advances only when roster membership itself changes. */
+  rosterEditRevision: ref(0)
 }));
 
 export const provideTeamBuilder = teamBuilderState.provideState;
@@ -83,9 +88,16 @@ export function useTeamBuilder() {
     lastFilledRosterKey,
     fillAlternativeCount,
     fillAlternativesDirty,
-    excludedPokemonNames
+    excludedPokemonNames,
+    teamEditRevision,
+    rosterEditRevision
   } = teamBuilderState.useState();
   const { notify } = useNotifications();
+  const markTeamEdited = () => { teamEditRevision.value++; };
+  const markRosterEdited = () => {
+    rosterEditRevision.value++;
+    markTeamEdited();
+  };
 
   const format = computed(() => getBattleFormat(formatId.value));
   const maxRosterSize = computed(() => format.value.maxRosterSize);
@@ -214,6 +226,7 @@ export function useTeamBuilder() {
     // Line 0 is the best bring, which is what following the suggestion means, so
     // landing there clears the manual pick rather than pinning the same indices.
     manualBringIndices.value = next === 0 ? null : [...lines[next].indices].sort((a, b) => a - b);
+    markTeamEdited();
   };
 
   const isBrought = (index: number) => bringIndices.value.includes(index);
@@ -285,6 +298,7 @@ export function useTeamBuilder() {
     // A bring sized for the old format is meaningless under the new one.
     manualBringIndices.value = null;
     resetFillCycle();
+    markTeamEdited();
   };
 
   const toggleBring = (index: number) => {
@@ -299,11 +313,13 @@ export function useTeamBuilder() {
       current.add(index);
     }
     manualBringIndices.value = [...current].sort((a, b) => a - b);
+    markTeamEdited();
   };
 
   /** Drops the manual pick and returns to the highest scoring bring. */
   const useSuggestedBring = () => {
     manualBringIndices.value = null;
+    markTeamEdited();
   };
 
   /**
@@ -329,6 +345,7 @@ export function useTeamBuilder() {
     roster.value.push(fromPokemonEntry(withAbility(entry, abilityName)));
     manualBringIndices.value = null;
     resetFillCycle();
+    markRosterEdited();
     notify(`Added ${entry.name.toUpperCase()} to roster.`, 'success');
     return true;
   };
@@ -337,15 +354,67 @@ export function useTeamBuilder() {
     roster.value.some((member) => member.speciesName === speciesName);
 
   const removeFromParty = (index: number) => {
+    if (index < 0 || index >= roster.value.length) return;
     roster.value.splice(index, 1);
     manualBringIndices.value = null;
     resetFillCycle();
+    markRosterEdited();
   };
 
   const clearParty = () => {
+    const hadRoster = roster.value.length > 0;
     roster.value = [];
     manualBringIndices.value = null;
     resetFillCycle();
+    if (hadRoster) markRosterEdited();
+  };
+
+  const snapshotTeam = (): WorkspaceSnapshotV1['team'] => ({
+    format: formatId.value,
+    roster: roster.value.map((member) => ({
+      pokemon: member.name,
+      ability: member.abilityName ?? null
+    })),
+    bring: manualBringIndices.value === null
+      ? null
+      : manualBringIndices.value
+        .map((index) => roster.value[index]?.name)
+        .filter((name): name is string => name !== undefined),
+    excluded: [...excludedPokemonNames.value]
+  });
+
+  const restoreTeam = (team: WorkspaceSnapshotV1['team'], pokemon: PokemonEntry[]) => {
+    const byName = new Map(pokemon.map((entry) => [entry.name, entry]));
+    const unavailablePokemon: string[] = [];
+    const unavailableAbilities: string[] = [];
+    const seenSpecies = new Set<string>();
+    const restored = team.roster.flatMap((saved) => {
+      const entry = byName.get(saved.pokemon);
+      if (!entry || seenSpecies.has(entry.speciesName)) {
+        unavailablePokemon.push(saved.pokemon);
+        return [];
+      }
+      seenSpecies.add(entry.speciesName);
+      if (saved.ability && !entry.abilityProfiles[saved.ability]) {
+        unavailableAbilities.push(`${saved.pokemon}: ${saved.ability}`);
+      }
+      return [fromPokemonEntry(withAbility(entry, saved.ability))];
+    });
+
+    resetFillCycle();
+    formatId.value = team.format;
+    roster.value = restored;
+    excludedPokemonNames.value = [...new Set(team.excluded)];
+    if (team.bring === null) {
+      manualBringIndices.value = null;
+    } else {
+      const indices = team.bring
+        .map((name) => roster.value.findIndex((member) => member.name === name))
+        .filter((index) => index >= 0);
+      manualBringIndices.value = indices.length === team.bring.length ? indices : null;
+    }
+
+    return { unavailablePokemon, unavailableAbilities };
   };
 
   /**
@@ -394,6 +463,7 @@ export function useTeamBuilder() {
     roster.value = selected.members.map(fromPokemonEntry);
     manualBringIndices.value = null;
     lastFilledRosterKey.value = rosterKey(selected.members);
+    markRosterEdited();
     // Deliberately not "optimal": generateRosters prunes twice, so this is the
     // best roster the search found, not the best that exists.
     const option = cycleAlternatives && alternatives.length > 1
@@ -496,6 +566,8 @@ export function useTeamBuilder() {
     maxRosterSize,
     bringSize,
     canTryAnotherRoster,
+    teamEditRevision,
+    rosterEditRevision,
     excludedPokemonNames,
     isExcludedFromGeneration,
     toggleGenerationExclusion,
@@ -520,6 +592,8 @@ export function useTeamBuilder() {
     teamRoleSummary,
     removeFromParty,
     clearParty,
+    snapshotTeam,
+    restoreTeam,
     generateFullTeam,
     fillRemainingSlots
   };

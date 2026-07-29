@@ -462,6 +462,73 @@ describe('useTeamBuilder', () => {
     });
   });
 
+  describe('workspace state', () => {
+    it('distinguishes bring edits from roster membership edits', () => {
+      fillRoster(addPokemon, 4);
+      const teamRevision = builder.teamEditRevision.value;
+      const rosterRevision = builder.rosterEditRevision.value;
+
+      builder.toggleBring(builder.bringIndices.value[0]);
+
+      expect(builder.teamEditRevision.value).toBe(teamRevision + 1);
+      expect(builder.rosterEditRevision.value).toBe(rosterRevision);
+
+      addPokemon(pokemon('fifth', { typeName: 'dark', types: ['dark'] }));
+      expect(builder.rosterEditRevision.value).toBe(rosterRevision + 1);
+    });
+
+    it('atomically restores and snapshots identifiers and user choices', () => {
+      const scan = [
+        pokemon('charizard', { typeName: 'fire', types: ['fire'] }),
+        pokemon('blastoise', { typeName: 'water', types: ['water'] }),
+        pokemon('venusaur', { typeName: 'grass', types: ['grass'] })
+      ];
+
+      const result = builder.restoreTeam({
+        format: 'singles',
+        roster: [
+          { pokemon: 'charizard', ability: 'blaze' },
+          { pokemon: 'blastoise', ability: 'levitate' },
+          { pokemon: 'venusaur', ability: null }
+        ],
+        bring: ['charizard', 'venusaur'],
+        excluded: ['incineroar']
+      }, scan);
+
+      expect(result).toEqual({ unavailablePokemon: [], unavailableAbilities: [] });
+      expect(roster.value.map((member) => member.abilityName)).toEqual(['blaze', 'levitate', 'levitate']);
+      expect(builder.snapshotTeam()).toEqual({
+        format: 'singles',
+        roster: [
+          { pokemon: 'charizard', ability: 'blaze' },
+          { pokemon: 'blastoise', ability: 'levitate' },
+          { pokemon: 'venusaur', ability: 'levitate' }
+        ],
+        bring: ['charizard', 'venusaur'],
+        excluded: ['incineroar']
+      });
+    });
+
+    it('reports unavailable Pokemon and abilities rather than substituting them', () => {
+      const result = builder.restoreTeam({
+        format: 'doubles',
+        roster: [
+          { pokemon: 'charizard', ability: 'missing-ability' },
+          { pokemon: 'missing-pokemon', ability: null }
+        ],
+        bring: null,
+        excluded: []
+      }, [pokemon('charizard')]);
+
+      expect(roster.value.map((member) => member.name)).toEqual(['charizard']);
+      expect(roster.value[0].abilityName).toBe('levitate');
+      expect(result).toEqual({
+        unavailablePokemon: ['missing-pokemon'],
+        unavailableAbilities: ['charizard: missing-ability']
+      });
+    });
+  });
+
   it('reports whether a species is already registered', () => {
     expect(builder.hasSpecies('charizard')).toBe(false);
     addPokemon(pokemon('charizard'));

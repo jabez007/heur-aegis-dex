@@ -41,6 +41,19 @@
             >
               {{ loading ? 'Loading...' : (fetchError ? 'Retry Scan' : 'Scan Types') }}
             </button>
+
+            <WorkspaceSavesDialog
+              :saves="workspaceArchive.saves"
+              :draft-updated-at="workspaceArchive.draftUpdatedAt"
+              :disabled="!workspaceStorageAvailable"
+              :busy="loading"
+              :current-ready="workspaceReady"
+              :storage-error="workspaceStorageError"
+              @save="saveWorkspace"
+              @load="loadWorkspace"
+              @rename="renameWorkspace"
+              @delete="deleteWorkspace"
+            />
             
             <label class="gba-label">
               Regulation:
@@ -203,38 +216,110 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onBeforeUnmount, onMounted } from 'vue';
+import { computed, nextTick, ref, watch, onBeforeUnmount, onMounted } from 'vue';
 import lscache from 'lscache';
-import { DEFAULT_STATS_FILTERS, REGULATIONS, getActiveRegulation, getResistantTypes } from './lib/pokedex';
+import { REGULATIONS, getActiveRegulation, getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
 import GbaNotification from './components/GbaNotification.vue';
+import WorkspaceSavesDialog from './components/WorkspaceSavesDialog.vue';
+import { useMetaFilters } from './composables/useMetaFilters';
 import { useNotifications } from './composables/useNotifications';
+import { useTeamBuilder } from './composables/useTeamBuilder';
+import { useWorkspaceState } from './composables/useWorkspaceState';
+import { flattenToPokemon } from './lib/pokemonEntry';
+import {
+  WORKSPACE_STORAGE_KEY,
+  WORKSPACE_VERSION,
+  deleteSavedWorkspace,
+  emptyWorkspaceArchive,
+  mergeUnresolvedTeamIdentifiers,
+  readWorkspaceArchive,
+  renameSavedWorkspace,
+  saveNamedWorkspace,
+  writeWorkspaceArchive,
+  type WorkspaceArchiveV1,
+  type WorkspaceSnapshotV1,
+  type WorkspaceStorage
+} from './lib/workspacePersistence';
 import type { ResistantTypeResult } from './lib/pokedexTypes';
 
 const loading = ref(false);
 const types = ref<ResistantTypeResult[]>([]);
 const fetchError = ref('');
-const inPokedex = ref('national');
+const workspace = useWorkspaceState();
+const {
+  inPokedex,
+  regulation,
+  minStatsTotal,
+  minAttacks,
+  minDefenses,
+  allowMegas,
+  includeAbilityImmunities,
+  includeMoveCoverage,
+  selectedAbilityNames,
+  snapshotScan,
+  restoreScan,
+  restoreAbilityOverrides
+} = workspace;
+const metaFilters = useMetaFilters();
+const teamBuilder = useTeamBuilder();
+const { notify } = useNotifications();
 // Default to whichever regulation is in force today so the tool is correct for
 // the format being played without the user having to know which one that is.
 const activeRegulationId = getActiveRegulation()?.id ?? '';
-const regulation = ref<string>(activeRegulationId);
 const selectedRegulation = computed(() => REGULATIONS.find(reg => reg.id === regulation.value));
-const minStatsTotal = ref(DEFAULT_STATS_FILTERS.minimumStatsTotal);
-const minAttacks = ref(DEFAULT_STATS_FILTERS.minimumAttacks);
-const minDefenses = ref(DEFAULT_STATS_FILTERS.minimumDefenses);
-const allowMegas = ref(false);
-const includeAbilityImmunities = ref(true);
-const includeMoveCoverage = ref(true);
-const { notify } = useNotifications();
 let fetchTypesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let retainedUnresolvedTeam: {
+  team: WorkspaceSnapshotV1['team'];
+  pokemonNames: Set<string>;
+  teamEditRevision: number;
+  rosterEditRevision: number;
+} | null = null;
+
+const workspaceArchive = ref<WorkspaceArchiveV1>(emptyWorkspaceArchive());
+const workspaceStorageError = ref('');
+const workspaceStorageAvailable = ref(false);
+const workspaceReady = ref(false);
+const pendingWorkspace = ref<WorkspaceSnapshotV1 | null>(null);
+const saveDraftAfterRestore = ref(false);
+let browserStorage: WorkspaceStorage | null = null;
+
+const applyWorkspaceSettings = (snapshot: WorkspaceSnapshotV1) => {
+  const regulationExists = snapshot.scan.regulation === null ||
+    REGULATIONS.some((entry) => entry.id === snapshot.scan.regulation);
+  restoreScan({
+    ...snapshot.scan,
+    regulation: regulationExists ? snapshot.scan.regulation : null
+  });
+  metaFilters.restoreMetaFilters(snapshot.meta);
+  restoreAbilityOverrides(snapshot.abilityOverrides);
+  return regulationExists ? [] : [`Regulation ${snapshot.scan.regulation} is no longer available.`];
+};
+
+let pendingSettingWarnings: string[] = [];
+if (typeof window !== 'undefined') {
+  try {
+    browserStorage = window.localStorage;
+    workspaceArchive.value = readWorkspaceArchive(browserStorage);
+    workspaceStorageAvailable.value = true;
+    if (workspaceArchive.value.draft) {
+      pendingWorkspace.value = workspaceArchive.value.draft;
+      pendingSettingWarnings = applyWorkspaceSettings(workspaceArchive.value.draft);
+    }
+  } catch (error) {
+    workspaceStorageError.value = error instanceof Error
+      ? error.message
+      : 'Local workspace storage is unavailable.';
+  }
+}
 
 // Scans cannot be aborted mid-flight, so each one claims a token and only the
 // most recent claim is allowed to write back. Without this a slow scan that was
 // superseded by a newer one can resolve last and overwrite the current results.
 let latestScanToken = 0;
 
-const fetchTypes = () => {
+const fetchTypes = async (): Promise<boolean> => {
   const scanToken = ++latestScanToken;
   const isCurrentScan = () => scanToken === latestScanToken;
 
@@ -268,35 +353,150 @@ const fetchTypes = () => {
   if (cached) {
     types.value = cached;
     loading.value = false;
+    return true;
   } else {
-    getResistantTypes({
-      typeFilters: filters,
-      pokemonFilters: pokedexFilter,
-      statsFilters: statsFilters
-    }).then(data => {
+    try {
+      const data = await getResistantTypes({
+        typeFilters: filters,
+        pokemonFilters: pokedexFilter,
+        statsFilters: statsFilters
+      });
       // The cache key encodes the filters this scan ran with, so the result is
       // worth keeping even when a newer scan has already superseded the view.
       lscache.set(key, data, 60 * 24);
-      if (!isCurrentScan()) return;
+      if (!isCurrentScan()) return false;
       types.value = data;
       loading.value = false;
-    }).catch(err => {
-      console.error(err);
-      if (!isCurrentScan()) return;
+      return true;
+    } catch (error) {
+      console.error(error);
+      if (!isCurrentScan()) return false;
       types.value = [];
       fetchError.value = 'Pokedex scan failed. Check your connection and try again.';
       notify(fetchError.value, 'error');
       loading.value = false;
-    });
+      return false;
+    }
   }
 };
 
-const fetchTypesImmediate = () => {
+const captureWorkspace = (): WorkspaceSnapshotV1 => {
+  const currentTeam = teamBuilder.snapshotTeam();
+  const retained = retainedUnresolvedTeam;
+  let team = currentTeam;
+  if (retained && retained.rosterEditRevision === teamBuilder.rosterEditRevision.value) {
+    team = mergeUnresolvedTeamIdentifiers(
+      currentTeam,
+      retained.team,
+      retained.pokemonNames,
+      retained.teamEditRevision === teamBuilder.teamEditRevision.value
+    );
+  }
+
+  return {
+    version: WORKSPACE_VERSION,
+    scan: snapshotScan(),
+    meta: metaFilters.snapshotMetaFilters(),
+    abilityOverrides: { ...selectedAbilityNames.value },
+    team
+  };
+};
+
+const persistArchive = (next: WorkspaceArchiveV1): boolean => {
+  if (!browserStorage || !workspaceStorageAvailable.value) return false;
+  try {
+    writeWorkspaceArchive(browserStorage, next);
+    workspaceArchive.value = next;
+    return true;
+  } catch {
+    workspaceStorageError.value = 'Local save failed. Browser storage may be full or unavailable.';
+    return false;
+  }
+};
+
+const latestWorkspaceArchive = (): WorkspaceArchiveV1 | null => {
+  if (!browserStorage) return workspaceArchive.value;
+  try {
+    return readWorkspaceArchive(browserStorage);
+  } catch {
+    workspaceStorageAvailable.value = false;
+    workspaceStorageError.value = 'Saved workspace data changed or became unreadable. Reload before saving.';
+    return null;
+  }
+};
+
+const saveDraftNow = (snapshot: WorkspaceSnapshotV1 = captureWorkspace()) => {
+  const latest = latestWorkspaceArchive();
+  if (!latest) return;
+  const now = new Date().toISOString();
+  persistArchive({ ...latest, draft: snapshot, draftUpdatedAt: now });
+};
+
+const queueDraftSave = () => {
+  if (!workspaceReady.value || !workspaceStorageAvailable.value) return;
+  if (draftSaveTimer) clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => {
+    draftSaveTimer = null;
+    if (!workspaceReady.value) return;
+    saveDraftNow();
+  }, 500);
+};
+
+const completeWorkspaceRestore = async (snapshot: WorkspaceSnapshotV1) => {
+  const result = teamBuilder.restoreTeam(snapshot.team, flattenToPokemon(types.value));
+  const unavailableAbilityPokemon = result.unavailableAbilities.map((entry) => entry.split(':', 1)[0]);
+  const unresolvedNames = new Set([...result.unavailablePokemon, ...unavailableAbilityPokemon]);
+  retainedUnresolvedTeam = unresolvedNames.size > 0
+    ? {
+        team: snapshot.team,
+        pokemonNames: unresolvedNames,
+        teamEditRevision: teamBuilder.teamEditRevision.value,
+        rosterEditRevision: teamBuilder.rosterEditRevision.value
+      }
+    : null;
+  const warnings = [
+    ...pendingSettingWarnings,
+    ...result.unavailablePokemon.map((name) => `${name} is outside the restored scan.`),
+    ...result.unavailableAbilities.map((ability) => `${ability} is unavailable.`)
+  ];
+  pendingSettingWarnings = [];
+  pendingWorkspace.value = null;
+  // Let restore-triggered watchers flush while autosave is still suspended.
+  // Otherwise an unresolved roster can overwrite the intact saved snapshot.
+  await nextTick();
+  workspaceReady.value = true;
+
+  if (saveDraftAfterRestore.value) {
+    saveDraftAfterRestore.value = false;
+    // Keep unresolved identifiers in the recovery draft rather than replacing
+    // them with a partial roster assembled from the current scan.
+    saveDraftNow(warnings.length > 0 ? snapshot : captureWorkspace());
+  }
+
+  notify(
+    warnings.length > 0
+      ? `Workspace restored with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}: ${warnings.join(' ')}`
+      : 'Workspace restored.',
+    warnings.length > 0 ? 'error' : 'success'
+  );
+};
+
+const fetchTypesAndRestore = async () => {
+  const success = await fetchTypes();
+  if (success && pendingWorkspace.value) {
+    await completeWorkspaceRestore(pendingWorkspace.value);
+  } else if (!pendingWorkspace.value) {
+    workspaceReady.value = true;
+  }
+  return success;
+};
+
+const fetchTypesImmediate = async () => {
   if (fetchTypesDebounceTimer) {
     clearTimeout(fetchTypesDebounceTimer);
     fetchTypesDebounceTimer = null;
   }
-  fetchTypes();
+  return fetchTypesAndRestore();
 };
 
 const fetchTypesDebounced = () => {
@@ -306,17 +506,97 @@ const fetchTypesDebounced = () => {
 
   fetchTypesDebounceTimer = setTimeout(() => {
     fetchTypesDebounceTimer = null;
-    fetchTypes();
+    void fetchTypesAndRestore();
   }, 400);
 };
 
+const saveWorkspace = (name: string) => {
+  try {
+    const latest = latestWorkspaceArchive();
+    if (!latest) return;
+    const next = saveNamedWorkspace(
+      latest,
+      name,
+      captureWorkspace(),
+      new Date().toISOString(),
+      () => typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    if (persistArchive(next)) notify(`Saved workspace ${name}.`, 'success');
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Workspace save failed.', 'error');
+  }
+};
+
+const loadWorkspace = async (id: string) => {
+  const saved = workspaceArchive.value.saves.find((entry) => entry.id === id);
+  if (!saved) return;
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+  }
+  workspaceReady.value = false;
+  pendingWorkspace.value = saved.snapshot;
+  saveDraftAfterRestore.value = true;
+  pendingSettingWarnings = applyWorkspaceSettings(saved.snapshot);
+  await fetchTypesImmediate();
+};
+
+const renameWorkspace = (id: string, name: string) => {
+  try {
+    const latest = latestWorkspaceArchive();
+    if (!latest) return;
+    const next = renameSavedWorkspace(latest, id, name);
+    if (persistArchive(next)) notify(`Workspace renamed to ${name}.`, 'success');
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Workspace rename failed.', 'error');
+  }
+};
+
+const deleteWorkspace = (id: string) => {
+  const latest = latestWorkspaceArchive();
+  if (!latest) return;
+  const saved = latest.saves.find((entry) => entry.id === id);
+  if (!saved) return;
+  if (persistArchive(deleteSavedWorkspace(latest, id))) {
+    notify(`Deleted workspace ${saved.name}.`, 'success');
+  }
+};
+
+watch(captureWorkspace, queueDraftSave, { deep: true, flush: 'sync' });
+
+const flushDraft = () => {
+  if (!workspaceReady.value || !workspaceStorageAvailable.value || !draftSaveTimer) return;
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = null;
+  saveDraftNow();
+};
+
+const refreshWorkspaceArchive = (event: StorageEvent) => {
+  if (event.key !== WORKSPACE_STORAGE_KEY || !browserStorage) return;
+  try {
+    workspaceArchive.value = readWorkspaceArchive(browserStorage);
+  } catch {
+    // Keep the last valid in-memory archive. The other tab may be midway
+    // through recovery; a later valid storage event will refresh this list.
+  }
+};
+
 onMounted(() => {
-  fetchTypes();
+  window.addEventListener('pagehide', flushDraft);
+  window.addEventListener('storage', refreshWorkspaceArchive);
+  void fetchTypesAndRestore();
 });
 
 onBeforeUnmount(() => {
   if (fetchTypesDebounceTimer) {
     clearTimeout(fetchTypesDebounceTimer);
+  }
+  flushDraft();
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('pagehide', flushDraft);
+    window.removeEventListener('storage', refreshWorkspaceArchive);
   }
 });
 </script>

@@ -4,6 +4,7 @@ import App from './App.vue'
 import { provideTeamBuilder } from './composables/useTeamBuilder'
 import { provideMetaFilters } from './composables/useMetaFilters'
 import { provideNotifications } from './composables/useNotifications'
+import { provideWorkspaceState } from './composables/useWorkspaceState'
 
 const app = createApp(App)
 
@@ -11,5 +12,6 @@ const app = createApp(App)
 provideTeamBuilder(app)
 provideMetaFilters(app)
 provideNotifications(app)
+provideWorkspaceState(app)
 
 app.mount('#app')

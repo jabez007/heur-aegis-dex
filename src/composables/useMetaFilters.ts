@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import type { WorkspaceSnapshotV1 } from '../lib/workspacePersistence';
 import { createInjectableState } from './injectableState';
 
 export const ALL_TYPES = [
@@ -53,12 +54,24 @@ export function useMetaFilters() {
     }
   };
 
+  const snapshotMetaFilters = (): WorkspaceSnapshotV1['meta'] => ({
+    selectedTypes: [...selectedTypes.value],
+    requireAllTypes: requireAllTypes.value
+  });
+
+  const restoreMetaFilters = (meta: WorkspaceSnapshotV1['meta']) => {
+    selectedTypes.value = [...new Set(meta.selectedTypes.filter((type) => ALL_TYPES.includes(type)))];
+    requireAllTypes.value = meta.requireAllTypes;
+  };
+
   return {
     selectedTypes,
     requireAllTypes,
     toggleType,
     clearTypes,
     selectAll,
-    setPreset
+    setPreset,
+    snapshotMetaFilters,
+    restoreMetaFilters
   };
 }
