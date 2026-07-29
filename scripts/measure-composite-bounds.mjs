@@ -22,7 +22,8 @@ import { applyAbilityModifiers } from '../src/lib/pokedexAbilities.ts';
 import { buildOffensiveTypeChart, getMoveCoverage } from '../src/lib/coverageMoves.ts';
 import { getEffectiveStats } from '../src/lib/statAbilities.ts';
 import { getQualityMultipliers } from '../src/lib/abilityEffects.ts';
-import { getActiveRegulation } from '../src/lib/regulations.ts';
+import { getRegulation } from '../src/lib/regulations.ts';
+import { hpAdjustedBulk } from '../src/lib/statMetrics.ts';
 import { analyzeTeamCoverage } from '../src/lib/teamCoverage.ts';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from '../src/lib/abilityRoles.ts';
 import {
@@ -38,7 +39,7 @@ import {
 /** Subsets drawn per format. Large enough that the percentiles below settle. */
 const SAMPLES = 200000;
 
-const regulation = getActiveRegulation() ?? { legalSpecies: new Set(), id: 'none' };
+const regulation = getRegulation('M-B') ?? { legalSpecies: new Set(), id: 'none' };
 const species = [...regulation.legalSpecies].sort();
 process.stderr.write(`regulation ${regulation.id}: ${species.length} legal species\n`);
 
@@ -58,9 +59,9 @@ const getJson = async (url) => {
   return res.json();
 };
 
-// Every legal species in its default form. Alternate forms are deliberately
-// skipped: they widen the pool without widening its extremes, and the bound only
-// needs to contain what a roster can hold.
+// Every legal species in its default form. This deliberately defines a stable
+// global calibration pool independent of user-adjustable scan filters. Alternate
+// varieties are a separate default-pool audit rather than inputs to these bounds.
 //
 // Resolved through the species endpoint rather than by name, because a dozen
 // species have no bare `pokemon/{name}` resource — Aegislash, Palafin, Mimikyu
@@ -115,8 +116,8 @@ for (const [index, name] of species.entries()) {
 
 process.stderr.write(`scored pool: ${pool.length}\n`);
 
-// Every species above can `continue` on a fetch failure, and getActiveRegulation
-// falls back to an empty set when nothing matches, so an offline run reaches the
+// Every species above can `continue` on a fetch failure, and an unavailable
+// pinned regulation falls back to an empty set, so an offline run reaches the
 // sampling loop with an empty pool. `Math.random() * 0` is always 0, so `picked`
 // sticks at one index and `while (picked.size < broughtToBattle)` spins forever
 // at full CPU, printing nothing. Fail here instead: a bound measured over a pool
@@ -173,7 +174,7 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
     const a = getQualityMultipliers(m.abilityName);
     const s = m.stats;
     terms.offense.push(clamp01((effectiveOffense(s) / STAT_CEILINGS.offense) * a.offense));
-    terms.bulk.push(clamp01(((s.hp + s.defense + s['special-defense']) / STAT_CEILINGS.bulk) * a.bulk));
+    terms.bulk.push(clamp01((hpAdjustedBulk(s) / STAT_CEILINGS.bulk) * a.bulk));
     terms.speed.push(clamp01((s.speed / STAT_CEILINGS.speed) * a.speed));
   });
   process.stdout.write('\nmember-quality stat terms across the legal pool (BEFORE rescaling -- these\nare the numbers OBSERVED_STAT_TERMS is set from):\n');
@@ -196,9 +197,14 @@ for (const format of BATTLE_FORMAT_LIST) {
   const qualities = [];
   const synergies = [];
 
+  let seed = 20260729;
+  const random = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
   for (let i = 0; i < SAMPLES; i++) {
     const picked = new Set();
-    while (picked.size < format.broughtToBattle) picked.add(Math.floor(Math.random() * pool.length));
+    while (picked.size < format.broughtToBattle) picked.add(Math.floor(random() * pool.length));
     const { quality, synergy } = halves([...picked].map((index) => pool[index]), format);
     qualities.push(quality);
     synergies.push(synergy);

@@ -65,6 +65,20 @@ describe('scoreMemberQuality', () => {
     // A bad typing must not zero out the member's stats entirely.
     expect(badTyping).toBeGreaterThan(goodTyping * 0.5);
   });
+
+  it('does not treat low HP and high defenses as equivalent durable bulk', () => {
+    const quality = (stats: ReturnType<typeof statsOf>) => scoreMemberQuality({
+      stats,
+      normalizedDamageToScore: 0.5,
+      normalizedDamageFromScore: 0.5
+    });
+
+    const lowHp = statsOf({ hp: 40, defense: 85, 'special-defense': 85 });
+    const balanced = statsOf({ hp: 70, defense: 70, 'special-defense': 70 });
+
+    // Both additive lines total 210; effective durability is about 58 vs 70.
+    expect(quality(balanced)).toBeGreaterThan(quality(lowHp));
+  });
 });
 
 describe('scoreTeamSynergy', () => {

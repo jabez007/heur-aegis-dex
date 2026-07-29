@@ -335,7 +335,7 @@ const fetchTypes = async (): Promise<boolean> => {
   // Every filter that changes the result must appear in the key, or switching it
   // serves a cached scan from different settings. The version prefix is bumped
   // whenever the stored shape changes.
-  const key = `heur_aegis_dex_v19_types_${inPokedex.value}_${minAttacks.value}_${minBulk.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
+  const key = `heur_aegis_dex_v20_types_${inPokedex.value}_${minAttacks.value}_${minBulk.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
 
   const cached = lscache.get(key);
   if (cached) {

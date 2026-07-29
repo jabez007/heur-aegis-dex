@@ -241,7 +241,8 @@ export function hasStatAbilityRule(abilityName: string | undefined | null): bool
  * Multipliers round down, matching how the games truncate stat calculations.
  *
  * @param stats Base stats as published.
- * @param abilityNames Abilities to consider — one name to score a specific choice, or all of them to ask what the Pokemon is capable of.
+ * @param abilityNames Abilities active on the same stat line. Alternative ability
+ * choices must be evaluated in separate calls rather than combined.
  * @returns The stats the Pokemon actually fights with.
  */
 export function getEffectiveStats(

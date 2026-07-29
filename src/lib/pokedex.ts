@@ -8,6 +8,7 @@ import { getEffectiveStats, getStatAbilityName, totalStats } from './statAbiliti
 import { collapseIndistinctVarieties } from './pokemonEntry';
 import { getAbilityEffect } from './abilityRoles';
 import { scoreMemberQuality } from './teamScoring';
+import { hpAdjustedBulk } from './statMetrics';
 import { CANDIDATE_WEIGHTS } from './rosterGeneration';
 import {
   DEFAULT_BASE_SCORE,
@@ -62,13 +63,7 @@ export const DEFAULT_STATS_FILTERS = {
  * @param stats HP, Defense and Special Defense after unconditional abilities.
  * @returns Mean physical and special effective bulk.
  */
-export function hpAdjustedBulk(
-  stats: Pick<PokemonStats, 'hp' | 'defense' | 'special-defense'>
-): number {
-  const physicalBulk = Math.sqrt(stats.hp * stats.defense);
-  const specialBulk = Math.sqrt(stats.hp * stats['special-defense']);
-  return (physicalBulk + specialBulk) / 2;
-}
+export { hpAdjustedBulk } from './statMetrics';
 
 /**
  * Returns every unordered pair drawn from the supplied items.
@@ -602,23 +597,7 @@ export async function getResistantTypes(options: {
         });
         p.base_stats = baseStats;
 
-        // Huge Power and its kin are the entire reason their Pokemon are used,
-        // so the stat floors have to see the doubled number. Judging Azumarill
-        // on 50 Attack rejected it for failing a floor its ability clears twice
-        // over.
         const abilityNames = (p.abilities || []).map((ability) => ability.name);
-        const stats = getEffectiveStats(baseStats, abilityNames);
-        p.stats = stats;
-        p.stat_ability_name = getStatAbilityName(abilityNames);
-
-        // Require offensive pressure and reasonable HP-adjusted bulk. Averaging
-        // physical and special bulk allows one vulnerable defensive side.
-        const bestAttack = Math.max(stats.attack, stats['special-attack']);
-        const effectiveBulk = hpAdjustedBulk(stats);
-        if (bestAttack < _statsFilters.minimumAttacks || effectiveBulk < _statsFilters.minimumBulk) return null;
-
-        const statsTotal = totalStats(stats);
-        p.stats_total = statsTotal;
 
         const baseDamageRelations = cloneDamageRelations(t.damage_relations);
         const { abilityProfiles } = _pokemonFilters.includeAbilityImmunities
@@ -643,6 +622,16 @@ export async function getResistantTypes(options: {
           };
         });
 
+        // Abilities are alternatives, not a stack. A Pokemon is eligible when
+        // one real loadout clears both floors; combining Huge Power from one
+        // slot with Fur Coat from another would describe an impossible form.
+        const clearsStatFloors = profilesWithStats.some((profile) => {
+          const bestAttack = Math.max(profile.stats.attack, profile.stats['special-attack']);
+          return bestAttack >= _statsFilters.minimumAttacks &&
+            hpAdjustedBulk(profile.stats) >= _statsFilters.minimumBulk;
+        });
+        if (!clearsStatFloors) return null;
+
         const selectedProfile = chooseDefaultAbility(profilesWithStats, baseScore);
 
         p.ability_profiles = Object.fromEntries(profilesWithStats.map((profile) => [profile.ability_name || '', profile]));
@@ -666,6 +655,7 @@ export async function getResistantTypes(options: {
         // the one that cleared the floors above.
         p.stats = selectedProfile.stats;
         p.stats_total = selectedProfile.stats_total;
+        p.stat_ability_name = getStatAbilityName([selectedProfile.ability_name]);
 
         return p;
       })

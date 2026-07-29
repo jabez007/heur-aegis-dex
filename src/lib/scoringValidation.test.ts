@@ -184,7 +184,7 @@ const TEAMS = {
   strongAttackers: {
     label: 'strong attackers',
     why: 'Bulky attackers with unshared weaknesses. Placed above the defensive core '
-      + 'deliberately — see the assertion, which turns on the two teams having the same bulk.',
+      + 'deliberately — they retain enough HP-adjusted bulk to convert their offensive edge.',
     members: team('garchomp', 'sneasler', 'annihilape', 'kingambit', 'lucario', 'glimmora')
   }
 } as const;
@@ -220,52 +220,27 @@ describe('scoring validation — member ranking', () => {
     expect(worstThreat).toBeGreaterThan(bestFiller);
   });
 
-  it('ranks defensive walls above bulky Pokemon with ordinary typing', () => {
+  it('lets an actually bulky defensive wall beat ordinary typing', () => {
     // The reported symptom of the compressed typing signal, kept as the case
     // that has to stay fixed.
     //
-    // Skarmory and Corviknight resist ten types and are immune to two. Blastoise
-    // resists four and is immune to none — but carries comparable raw bulk and
-    // slightly more offence. Under the old formula-extreme normalization that
-    // twelve-versus-four difference was worth a 3.6% multiplier on one term, so
-    // the water starter won on offence and led both walls.
+    // Corviknight resists ten types and is immune to two. Blastoise resists four
+    // and is immune to none. Corviknight also has the HP to turn its defenses
+    // into more effective bulk, so this remains the clean defensive-typing case.
     //
     // This is the assertion the tool exists to get right: resisting most of the
     // chart is what defensive typing *is*, and it has to outweigh being merely
     // bulky. If it fails, check pokedexScoring's bounds before touching a weight.
-    const walls = ['skarmory', 'corviknight'];
-    const worstWall = Math.min(...walls.map((n) => candidatePriority(mon(n))));
-
-    expect(worstWall).toBeGreaterThan(candidatePriority(mon('blastoise')));
+    expect(candidatePriority(mon('corviknight')))
+      .toBeGreaterThan(candidatePriority(mon('blastoise')));
   });
 
-  it('lets a bulky attacker edge the walls, but only just', () => {
-    // Feraligatr used to be paired with Blastoise in the assertion above, as a
-    // second example of "merely bulky". Measuring the stat terms against their
-    // real ranges separated them, and the separation is the point rather than an
-    // exception to be waived:
-    //
-    //   blastoise    268 bulk, 85 best attacking stat  -> 43.8
-    //   skarmory     275 bulk, 80                      -> 44.8
-    //   feraligatr   268 bulk, 105                     -> 45.2
-    //
-    // Blastoise and Skarmory sit either side of an offensive stat neither can
-    // use, and the typing decides it — the original claim, intact. Feraligatr
-    // carries 25 more Attack than Skarmory on the same bulk, which is the third
-    // gate of this project's premise: strong typing, then bulk within it, then a
-    // real attacking stat out of what survives. Skarmory fails that gate.
-    //
-    // Before OBSERVED_STAT_TERMS an 80 Attack collected 52% of the offence term,
-    // because the term's implicit floor was a Pokemon with no attacking stat at
-    // all and nothing in the pool is close to that. The gate could not bite.
-    //
-    // The margin is asserted small in both directions deliberately. A defensive
-    // typing this good is worth nearly as much as 25 points of Attack, and if
-    // either side of that ever runs away from the other, something is wrong.
-    const gap = candidatePriority(mon('feraligatr')) - candidatePriority(mon('skarmory'));
-
-    expect(gap).toBeGreaterThan(0);
-    expect(gap).toBeLessThan(2);
+  it('ranks a bulky attacker above a low-HP wall', () => {
+    // Feraligatr has both more effective bulk (88.1 to 81.4) and 25 more Attack
+    // than Skarmory. Additive bulk used to hide the first advantage by treating
+    // high defenses as durability without asking how much HP they protect.
+    expect(candidatePriority(mon('feraligatr')))
+      .toBeGreaterThan(candidatePriority(mon('skarmory')));
   });
 
   it('rates a one-sided attacker on the stat it actually attacks with', () => {
@@ -298,12 +273,10 @@ describe('scoring validation — member ranking', () => {
     expect(candidatePriority(mon('azumarill'))).toBeGreaterThan(candidatePriority(mon('klefki')));
   });
 
-  it('does not pretend Azumarill wins on member quality', () => {
-    // The counterweight to the assertion above, and the honest limit of it.
-    //
-    // Azumarill has the *lowest* member quality of that group — 260 bulk and 50
-    // Speed are genuinely worse than Blastoise's 284 and 78, and the model is
-    // right about that. It outranks them on coverage breadth, not on quality.
+  it('keeps Azumarill and Blastoise close without their defining moves', () => {
+    // HP-adjusted bulk puts these nearly level (89.4 against 90.0). Huge Power
+    // gives Azumarill the offensive edge while Blastoise retains Speed; neither
+    // should run away on individual quality.
     //
     // What actually makes Azumarill good is Belly Drum and Aqua Jet: a setup
     // move and a priority move that between them answer the low Speed the model
@@ -317,10 +290,12 @@ describe('scoring validation — member ranking', () => {
     // handed most of it back, which is the correct outcome and worth recording:
     // the ordering had been resting on an arithmetic error rather than on
     // anything the model believed.
-    expect(scoreMemberQuality(mon('azumarill')))
-      .toBeLessThan(scoreMemberQuality(mon('blastoise')));
-    expect(candidatePriority(mon('azumarill')))
-      .toBeLessThan(candidatePriority(mon('blastoise')));
+    expect(Math.abs(
+      scoreMemberQuality(mon('azumarill')) - scoreMemberQuality(mon('blastoise'))
+    )).toBeLessThan(0.01);
+    expect(Math.abs(
+      candidatePriority(mon('azumarill')) - candidatePriority(mon('blastoise'))
+    )).toBeLessThan(2);
   });
 
   it('does not demote a Pokemon for the weakness its typing already pays for', () => {
@@ -463,8 +438,8 @@ describe('scoring validation — team ranking', () => {
     //
     //   gate 1, defensive typing — the walls win, seventeen unique resistances
     //           to sixteen. This is the whole point of the team.
-    //   gate 2, decent bulk      — a TIE. Averaged over the six, bulk is 0.651
-    //           for the core and 0.649 for the attackers.
+    //   gate 2, decent bulk      — close enough that neither side wins here by
+    //           durability alone.
     //   gate 3, an attacking stat — the attackers win outright, 0.747 to 0.543.
     //
     // Gate 2 is the one that decides it, and it is the one that surprises. The

@@ -69,10 +69,24 @@ const displayMoveCoverages = computed(() =>
 
 const defenseScore = computed(() => props.pokemon.normalizedDamageFromScore.toFixed(2));
 const offenseScore = computed(() => props.pokemon.normalizedDamageToScore.toFixed(2));
-const scoreSummary = computed(() =>
-  `Defense score ${defenseScore.value}, offense score ${offenseScore.value}, lower defense is better`
-);
-
+const defenseHint = computed(() => [
+  `Defense ${defenseScore.value} out of 1 // lower is better`,
+  '',
+  'Measures this typing and selected ability against all 18 attacking types.',
+  'Weaknesses raise the score; 4x weaknesses raise it further.',
+  'Resistances and immunities lower it.',
+  '',
+  'Normalized across real defensive profiles: 0 is strongest, 1 is weakest.'
+].join('\n'));
+const offenseHint = computed(() => [
+  `Offense ${offenseScore.value} out of 1 // higher is better`,
+  '',
+  'Measures this Pokemon\'s STAB typing against all 18 defending types.',
+  'Super-effective targets raise the score; resisted and immune targets lower it.',
+  '',
+  'Reachable move coverage is shown separately below and does not change this score.',
+  'Normalized across real offensive typings: 0 is narrowest, 1 is broadest.'
+].join('\n'));
 const toggleStats = () => {
   showStats.value = !showStats.value;
 };
@@ -131,18 +145,21 @@ const handleToggleExclusion = () => {
       <div class="score-grid">
         <p
           class="score"
-          :aria-label="`Defense score ${defenseScore}, lower is better`"
+          tabindex="0"
+          :title="defenseHint"
+          :aria-label="defenseHint"
         >
           Def: {{ defenseScore }}
         </p>
         <p
           class="score"
-          :aria-label="`Offense score ${offenseScore}`"
+          tabindex="0"
+          :title="offenseHint"
+          :aria-label="offenseHint"
         >
           Off: {{ offenseScore }}
         </p>
       </div>
-      <span class="sr-only">{{ scoreSummary }}</span>
 
       <div
         v-if="displayWeaknesses.length - displayQuadrupleWeaknesses.length > 0"
@@ -322,18 +339,6 @@ const handleToggleExclusion = () => {
   margin: 4px 0;
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 .type-card {
   border: 2px solid var(--gba-text-dark);
   padding: 8px;
@@ -342,6 +347,17 @@ const handleToggleExclusion = () => {
   flex-direction: column;
   align-items: center;
   text-align: center;
+}
+
+.score[tabindex] {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.score[tabindex]:focus-visible {
+  outline: 3px solid var(--gba-accent-cyan);
+  outline-offset: 2px;
 }
 
 .type-header {

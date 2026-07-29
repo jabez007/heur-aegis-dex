@@ -107,8 +107,9 @@ export interface PokemonListEntry {
    */
   battle_form_name?: string;
   /**
-   * Stats the Pokemon fights with: the published line after any unconditional
-   * stat ability. This is what the scan's floors and all scoring judge on.
+   * Stats the Pokemon fights with under its selected ability. Scoring uses this
+   * line; eligibility passes when at least one individual ability profile clears
+   * the scan's stat floors.
    */
   stats?: PokemonStats;
   /** The published line, before abilities. Kept so a UI can show both. */
@@ -136,4 +137,3 @@ export interface PokemonListEntry {
 export interface ResistantTypeResult extends TeamTypeData {
   include_ability_immunities: boolean;
 }
-

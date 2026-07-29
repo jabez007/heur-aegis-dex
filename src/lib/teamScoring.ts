@@ -13,6 +13,7 @@
  */
 
 import type { PokemonStats } from './pokedexTypes';
+import { hpAdjustedBulk } from './statMetrics';
 import type { TeamCoverageAnalysis } from './teamCoverage';
 import { getApplicableRoles, type TeamRoleAnalysis } from './abilityRoles';
 import { getQualityMultipliers } from './abilityEffects';
@@ -31,8 +32,8 @@ const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 export const STAT_CEILINGS = {
   /** Effective offence: see `effectiveOffense`. Not the raw sum of both stats. */
   offense: 195,
-  /** hp + defense + special-defense */
-  bulk: 400,
+  /** HP-adjusted effective bulk: see `hpAdjustedBulk`. */
+  bulk: 150,
   speed: 150
 } as const;
 
@@ -126,15 +127,15 @@ export const MEMBER_WEIGHTS = {
  *
  * | term    | floor | ceiling | realized share | nominal |
  * | ------- | ----- | ------- | -------------- | ------- |
- * | offense | 0.320 | 0.992   | 0.317          | 0.35    |
- * | bulk    | 0.313 | 0.988   | 0.440          | 0.45    |
- * | speed   | 0.133 | 0.947   | 0.243          | 0.20    |
+  * | offense | 0.320 | 0.992   | 0.349          | 0.35    |
+  * | bulk    | 0.264 | 0.876   | 0.419          | 0.45    |
+  * | speed   | 0.133 | 1.000   | 0.232          | 0.20    |
  *
  * The floors are what matter here. An 85 Attack — unusable in a format where the
  * Pokemon worth bringing carry 130 — still collected **52%** of the offence term,
- * because the term's implicit zero was a Pokemon with no attacking stat at all
- * and nothing in the pool is close to that. Steelix ranked 21st in the browser on
- * 340 bulk and an attacking stat that cannot knock anything out.
+  * because the term's implicit zero was a Pokemon with no attacking stat at all
+  * and nothing in the pool is close to that. Under the old additive bulk metric,
+  * Steelix ranked 21st despite an attacking stat that cannot knock anything out.
  *
  * That is the third gate of this project's premise — defensive typing, then bulk
  * within it, then a real attacking stat — failing to bite, and it failed because
@@ -145,14 +146,12 @@ export const MEMBER_WEIGHTS = {
  * Rescaling each term against its own range does three things at once, which is
  * why it is worth the churn:
  *
- * 1. MEMBER_WEIGHTS becomes near-exact (0.33 / 0.46 / 0.21 against 0.35 / 0.45 /
- *    0.20), so bulk leading is a fact rather than an intention.
- * 2. The third gate bites. Klefki falls 111 to 171, Skarmory 51 to 91, Tinkaton
- *    33 to 80 — all of them Pokemon that cannot threaten anything.
- * 3. Speed's influence drops from 0.243 to 0.21, which **reduces** the documented
- *    Trick Room bias instead of amplifying it. Slow bulky Pokemon rise: Avalugg
- *    116 to 61, Hatterene 119 to 90. That was the outcome to check before
- *    committing to this, since the opposite would have been a reason not to.
+  * 1. MEMBER_WEIGHTS stays close to its intended balance (0.35 / 0.42 / 0.23
+  *    against 0.35 / 0.45 / 0.20), so bulk leads without erasing the other terms.
+  * 2. HP-rich tanks rise while low-HP Pokemon can no longer buy maximum bulk from
+  *    high defenses they lack the HP to exploit.
+  * 3. Speed remains a separate, softly weighted term rather than compensating for
+  *    either offensive pressure or durability.
  *
  * ## Why min/max rather than percentiles
  *
@@ -176,14 +175,14 @@ export const MEMBER_WEIGHTS = {
  * the speed of the other 204. The effect is small and it is not a side effect
  * nobody chose.
  *
- * Measured 2026-07-28 by `npm run measure:composite-bounds` over all 208 legal
+  * Measured 2026-07-29 by `npm run measure:composite-bounds` over all 208 legal
  * species of Regulation M-B, computed exactly as `scoreMemberQuality` computes
  * them with ability multipliers applied. Rerun after changing STAT_CEILINGS,
  * SECONDARY_OFFENSE_WEIGHT, the ability tables or MEMBER_WEIGHTS.
  */
 export const OBSERVED_STAT_TERMS = {
   offense: { min: 0.32, max: 0.9923 },
-  bulk: { min: 0.3125, max: 0.9882 },
+  bulk: { min: 0.2642, max: 0.876 },
   speed: { min: 0.1333, max: 1 }
 } as const;
 
@@ -320,8 +319,8 @@ export const COMPOSITE_WEIGHTS = {
  *
  * | half           | nominal weight | points of swing |
  * | -------------- | -------------- | --------------- |
- * | member quality | 0.45           | 7.8             |
- * | team synergy   | 0.55           | 31.2            |
+  * | member quality | 0.45           | 8.0             |
+  * | team synergy   | 0.55           | 31.1            |
  *
  * A stated 45/55 split behaving as **4 to 1**. Half of all large member-quality
  * gaps were overturned by synergy, so how good the Pokemon were was close to a
@@ -379,7 +378,7 @@ export const COMPOSITE_WEIGHTS = {
  * percentile of 0.635. Clamping there would blind the search at exactly the point
  * it does its work. These bounds clamp nothing.
  *
- * The residual is **1.89:1 in doubles and 1.74:1 in singles**, against a nominal
+  * The residual is **1.81:1 in doubles and 1.71:1 in singles**, against a nominal
  * 1.22:1 — recorded rather than tuned away. Synergy keeps roughly half again the
  * influence the weights claim, because its own -1 clamp compresses the bottom of
  * its range and normalizing cannot undo that. Closing the rest means changing
@@ -387,11 +386,11 @@ export const COMPOSITE_WEIGHTS = {
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.1491, max: 0.5711 },
+    quality: { min: 0.145, max: 0.567 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1307, max: 0.579 },
+    quality: { min: 0.1289, max: 0.577 },
     synergy: { min: -1, max: 0.8078 }
   }
 } as const;
@@ -438,7 +437,7 @@ export function scoreMemberQuality(member: MemberQualityInput): number {
     OBSERVED_STAT_TERMS.offense
   );
   const bulk = rescale(
-    ((stats.hp + stats.defense + stats['special-defense']) / STAT_CEILINGS.bulk) * ability.bulk,
+    (hpAdjustedBulk(stats) / STAT_CEILINGS.bulk) * ability.bulk,
     OBSERVED_STAT_TERMS.bulk
   );
   const speed = rescale(

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, useId, watch } from 'vue';
 import PokemonCard from './PokemonCard.vue';
 import type { PokemonEntry } from '../lib/pokemonEntry';
 
@@ -13,13 +13,36 @@ const emit = defineEmits<{
 }>();
 
 const visibleCount = ref(20);
+const searchQuery = ref('');
+const searchInputId = `pokemon-browser-search-${useId().replace(/:/g, '')}`;
 
-watch(() => props.pokemon, () => {
+const searchTerms = computed(() =>
+  searchQuery.value.toLocaleLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+);
+
+const filteredPokemon = computed(() => {
+  if (searchTerms.value.length === 0) return props.pokemon;
+
+  return props.pokemon.filter((entry) => {
+    const searchable = `${entry.name} ${entry.speciesName}`.toLocaleLowerCase();
+    return searchTerms.value.every((term) => searchable.includes(term));
+  });
+});
+
+watch([() => props.pokemon, searchQuery], () => {
   visibleCount.value = 20;
 });
 
 const showMore = () => {
   visibleCount.value += 20;
+};
+
+const clearSearch = () => {
+  searchQuery.value = '';
+};
+
+const updateSelectedAbilityName = (pokemonName: string, abilityName: string) => {
+  emit('update:selected-ability-name', pokemonName, abilityName);
 };
 </script>
 
@@ -58,30 +81,75 @@ const showMore = () => {
         key="results"
         class="results-container"
       >
-        <p>{{ pokemon.length }} Pokemon, ranked by balance (high coverage vs. low weaknesses).</p>
+        <div class="browser-search">
+          <label
+            class="gba-label"
+            :for="searchInputId"
+          >Find a Pokemon</label>
+          <div class="search-row">
+            <input
+              :id="searchInputId"
+              v-model="searchQuery"
+              class="gba-input search-input"
+              type="search"
+              autocomplete="off"
+              placeholder="Feraligatr"
+            >
+            <button
+              v-if="searchQuery"
+              class="gba-btn clear-search"
+              type="button"
+              @click="clearSearch"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <p>
+          <template v-if="searchTerms.length">
+            {{ filteredPokemon.length }} of {{ pokemon.length }} Pokemon match.
+          </template>
+          <template v-else>
+            {{ pokemon.length }} Pokemon.
+          </template>
+          Ranked by overall candidate quality:
+          offense, effective bulk, Speed, typing, abilities, and usable coverage.
+        </p>
+
+        <div
+          v-if="filteredPokemon.length === 0"
+          class="empty-state search-empty"
+        >
+          <p class="status-msg">
+            No Pokemon match "{{ searchQuery.trim() }}".
+          </p>
+          <p>Try a species, form, or shorter name.</p>
+        </div>
 
         <TransitionGroup
+          v-else
           name="grid-fade"
           tag="div"
           class="type-grid"
         >
           <PokemonCard
-            v-for="entry in pokemon.slice(0, visibleCount)"
+            v-for="entry in filteredPokemon.slice(0, visibleCount)"
             :key="entry.name"
             :pokemon="entry"
-            @update:selected-ability-name="(abilityName) => emit('update:selected-ability-name', entry.name, abilityName)"
+            @update:selected-ability-name="updateSelectedAbilityName(entry.name, $event)"
           />
         </TransitionGroup>
 
         <div
-          v-if="pokemon.length > visibleCount"
+          v-if="filteredPokemon.length > visibleCount"
           class="grid-actions"
         >
           <button
             class="gba-btn action-btn show-more-btn"
             @click="showMore"
           >
-            Show More ({{ pokemon.length - visibleCount }} Left)
+            Show More ({{ filteredPokemon.length - visibleCount }} Left)
           </button>
         </div>
       </div>
@@ -104,6 +172,30 @@ const showMore = () => {
   width: 100%;
 }
 
+.browser-search {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 2px dashed var(--gba-text-dark);
+}
+
+.search-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.search-input {
+  width: min(100%, 420px);
+  min-height: 40px;
+  box-sizing: border-box;
+}
+
+.clear-search {
+  font-size: 0.85rem;
+  padding: 4px 10px;
+}
+
 .empty-state {
   text-align: center;
   padding: 32px 16px;
@@ -122,6 +214,10 @@ const showMore = () => {
     margin: 0;
     opacity: 0.8;
   }
+}
+
+.search-empty {
+  margin-bottom: 16px;
 }
 
 .grid-fade-move,
@@ -164,5 +260,17 @@ const showMore = () => {
   background-color: var(--gba-accent-magenta);
   color: var(--gba-text-light);
   border-color: var(--gba-text-dark);
+}
+
+@media (max-width: 560px) {
+  .search-row {
+    flex-direction: column;
+  }
+
+  .search-input,
+  .clear-search {
+    width: 100%;
+    min-height: 44px;
+  }
 }
 </style>

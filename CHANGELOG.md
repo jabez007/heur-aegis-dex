@@ -4,6 +4,11 @@
 
 ### Added
 
+- **The Pokemon Browser can be searched by species or form.** Results filter as
+  the user types without changing their candidate-quality order. Search is
+  case-insensitive, accepts space-separated form names, resets pagination, and
+  includes match counts, an empty state, and a clear action.
+
 - **Speed Boost and Protean are scored.** An audit of every ability the 208 legal species carry found 182 distinct abilities, of which 30 were modelled and applied. Most of the remainder genuinely do nothing this tool can measure — Keen Eye, Gluttony, Frisk — but four Pokémon were carrying Speed Boost and two Protean with no credit at all.
 
   Worse than uncredited: **unrecognised abilities lost the default-ability choice on PokeAPI slot order.** `chooseDefaultAbility` scores each profile through `scoreMemberQuality`, so an ability in none of the tables ties with its alternatives and the first one listed wins. Blaziken was being scored with Blaze instead of Speed Boost, Greninja with Torrent instead of Protean. Adding a rule is enough to fix that — Basculegion already resolved to Adaptability for exactly this reason.
@@ -57,6 +62,30 @@
   **It found a real defect on its first run.** `supportRole: 12` and `quadrupleWeakness: 15` were carried over from the previous formula, whose terms ran to 44. The rework compressed the base to a roughly 30-point spread, so those adjuncts could swing 27 points against it — enough to rank Arbok above Garchomp. Rescaled to 4 and 5, with `coverage` to 0.75 and `moveCoverage` to 0.2. A structural assertion now pins the invariant: the largest single-Pokemon adjustment must stay under half the observed spread of member quality, measured from the fixture rather than assumed.
 
 ### Changed
+
+- **Eligibility and ranking now agree on HP-adjusted bulk.** The scan requires a
+  best attacking stat of 80 and effective bulk of 70, where bulk is the mean of
+  `sqrt(HP x Defense)` and `sqrt(HP x Special Defense)`. Browser sorting and
+  Workbench member quality previously went back to `HP + Defense + Special
+  Defense`, which overrated low-HP Pokemon for defenses they could not convert
+  into comparable durability. On the 67-variety default doubles pool, the old
+  and new `candidatePriority` rankings have Spearman correlation 0.864 and share
+  17 of their top 20 entries.
+
+  Stat-floor eligibility is now evaluated one ability profile at a time. The old
+  check stacked every listed unconditional stat ability, allowing mutually
+  exclusive abilities to clear different halves of the gate. A Pokemon now
+  qualifies when at least one real ability profile clears both floors; profiles
+  that fail either floor remain selectable after the variety is admitted. No
+  Regulation M-B species currently combines two modeled unconditional stat
+  abilities, so this is a correctness guard rather than a default-pool change.
+
+  The pinned M-B calibration over 208 legal species moves
+  `OBSERVED_STAT_TERMS.bulk` to 0.2642-0.8760 and exact quality bounds to
+  0.1450-0.5670 in doubles and 0.1289-0.5770 in singles. The default scan contains
+  67 varieties, below the candidate-pruning limit. Hard floors still exclude
+  support specialists such as Whimsicott before role scoring can value them. See
+  `docs/audits/2026-07-29-stat-floors-and-bulk.md`.
 
 - **Generated rosters no longer spend a slot on a type they already carry.** Reported case: seeding Goodra-Hisui and filling the roster added Excadrill. They are not the same typing, so the duplicate-typing rule did not catch it — they share only Steel.
 

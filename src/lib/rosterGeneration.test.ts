@@ -29,13 +29,10 @@ const mon = (name: string, overrides: Partial<PokemonEntry> = {}): PokemonEntry 
   ...overrides
 });
 
-// A quadruple weakness is charged twice over: `calculateDamageFromScore` adds 3
-// for it, which reaches the score through normalization and the bulk term, and
-// `CANDIDATE_WEIGHTS.quadrupleWeakness` adds a flat penalty beside it. A fixture
-// that sets the weakness lists without moving the defensive score carries only
-// the flat half, so it reads any rebalance between the two as a regression —
-// which is exactly what it did when the empirical bounds landed and the flat
-// penalty halved to match. These keep both halves in step.
+// A quadruple weakness adds 3 to `calculateDamageFromScore`, reaching member
+// quality through defensive typing's modulation of the bulk term. The fixture
+// has to move that normalized score with the weakness list; there is deliberately
+// no second flat candidate penalty for the same property.
 const QUAD_FREE = normalizeDamageFromScore(19, DEFAULT_BASE_SCORE);
 const WITH_QUAD = normalizeDamageFromScore(19 + 3, DEFAULT_BASE_SCORE);
 

@@ -30,6 +30,8 @@ const mockState = vi.hoisted(() => ({
   breakPalafinTrigger: false,
   /** Give the fire-type entry Azumarill's ability pair: Huge Power plus a defensive immunity. */
   useHugePower: false,
+  /** Give the entry mutually exclusive attack and defense stat abilities. */
+  useSplitStatAbilities: false,
   /** Give the fire-type entry a support ability alongside a filler and a type immunity. */
   useSupportAbility: false,
   /** Give the fire-type entry Skeledirge's pair: a filler first, a quality ability hidden. */
@@ -218,6 +220,11 @@ vi.mock('pokedex-promise-v2', () => {
                 { ability: { name: 'drought' }, is_hidden: false },
                 { ability: { name: 'flash-fire' }, is_hidden: true }
               ]
+              : mockState.useSplitStatAbilities
+                ? [
+                  { ability: { name: 'huge-power' }, is_hidden: false },
+                  { ability: { name: 'fur-coat' }, is_hidden: true }
+                ]
               : mockState.useHugePower
               // Azumarill's real pair: the stat ability, and a type immunity that
               // wins on defensive merit alone.
@@ -354,6 +361,7 @@ beforeEach(() => {
   mockState.usePalafin = false;
   mockState.breakPalafinTrigger = false;
   mockState.useHugePower = false;
+  mockState.useSplitStatAbilities = false;
   mockState.useSupportAbility = false;
   mockState.useQualityAbility = false;
   mockState.detailDelayMs = 0;
@@ -702,6 +710,38 @@ describe('pokedex.js API integration logic', () => {
         pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
         statsFilters: { minimumStatsTotal: 900, minimumAttacks: 1, minimumBulk: 1 }
       }).then(r => expect(firePokemon(r)).toHaveLength(1));
+    });
+
+    it.each([true, false])(
+      'does not combine mutually exclusive stat abilities when immunities=%s',
+      async (includeAbilityImmunities) => {
+        mockState.useSplitStatAbilities = true;
+        const result = await getResistantTypes({
+          baseScore: 18,
+          typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+          pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities },
+          statsFilters: { minimumAttacks: 100, minimumBulk: 50 }
+        });
+
+        // Huge Power clears Attack but not Bulk; Fur Coat clears Bulk but not
+        // Attack. The Pokemon cannot use both abilities at once.
+        expect(firePokemon(result)).toHaveLength(0);
+      }
+    );
+
+    it('keeps all ability profiles when one profile clears both floors', async () => {
+      mockState.useSplitStatAbilities = true;
+      const result = await getResistantTypes({
+        baseScore: 18,
+        typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+        pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+        statsFilters: { minimumAttacks: 100, minimumBulk: 40 }
+      });
+      const entry = firePokemon(result)[0];
+
+      expect(Object.keys(entry.ability_profiles!)).toEqual(['huge-power', 'fur-coat']);
+      expect(entry.ability_profiles!['huge-power'].stats!.attack).toBe(104);
+      expect(entry.ability_profiles!['fur-coat'].stats!.defense).toBe(86);
     });
 
     it('defaults to DEFAULT_STATS_FILTERS when none are supplied', async () => {
