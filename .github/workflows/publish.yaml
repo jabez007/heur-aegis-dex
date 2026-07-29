@@ -14,6 +14,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # No git operation follows, so the persisted token would only be
+          # sitting in .git/config while `npm ci` runs install scripts. See the
+          # note in verify.yaml.
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -38,6 +43,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # This is the job where it matters most: `contents: write` above, and
+          # `npm ci` below running install scripts with that token in
+          # .git/config. action-gh-release takes its token from the environment
+          # rather than from git, so nothing here needs the credential.
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -66,6 +77,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # The shared action runs `npm install` and `npm publish`, no git, and
+          # authenticates through NODE_AUTH_TOKEN from the environment.
+          persist-credentials: false
 
       - name: Shared Publish to GHPR
         uses: McCann-Hub/create-typescript-template/.github/shared/ghpr/publish@master

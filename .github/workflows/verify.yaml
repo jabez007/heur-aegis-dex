@@ -27,6 +27,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # `npm ci` below runs install scripts from the whole dependency tree,
+          # and checkout otherwise leaves the job's token in .git/config where
+          # any of them can read it. Nothing here performs a git operation after
+          # checkout, so the credential has no purpose but to be stolen. The
+          # `contents: read` grant above already caps what it could do; this
+          # removes the reach entirely rather than relying on that alone.
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

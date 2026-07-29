@@ -17,6 +17,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # This job does push, but not with the credential checkout persists:
+          # the Configure Git step below writes the token into the origin URL
+          # itself, which is what `npm run deploy` uses. So the persisted copy
+          # was never load-bearing here — it only widened the window during
+          # `npm ci`, which runs first and executes dependency install scripts
+          # under a `contents: write` token.
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

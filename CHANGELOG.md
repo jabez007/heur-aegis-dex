@@ -313,6 +313,10 @@
 
   Also routes `coverageAnalysis` through `toRosterMember` instead of spreading the `PartyMember`. The analysis reads snake\_case, so a spread supplies nothing for any field whose two names differ; that asymmetry is how the field went missing while every neighbouring one worked.
 
+- **CI no longer leaves a repository token where `npm ci` can read it.** `actions/checkout` persists the job's token in `.git/config` by default, and every job here then runs `npm ci`, which executes install scripts from the entire dependency tree. None of the five checkouts needs the credential afterwards, so it existed only to be stolen. `persist-credentials: false` on all of them.
+
+  The job that mattered was not the one flagged. `verify` holds `contents: read`, which caps the damage; `upload-to-release` holds **`contents: write`** and runs `npm ci` under it, and `deploy` does the same before writing the token into the origin URL itself — so the persisted copy was never load-bearing there, it only widened the window.
+
 - **Fill Roster no longer silently replaces a member it promised to keep.** `fillRemainingSlots` resolved each registered member against the scan and filtered out anything it could not find, then handed the survivors to a generation that overwrites `roster.value` wholesale. A rescan under a different regulation is enough to lose one — and the member did not merely fail to seed, it was replaced by whatever the search preferred, with a success notification.
 
   It now refuses, naming the members it cannot resolve. Removing a Pokémon from the roster is a decision the user is entitled to make; it is not a decision the tool should make on their behalf and report as a fill.
