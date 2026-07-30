@@ -39,8 +39,11 @@ complete normalized candidate passes semantic validation.
 Phase 1 creates and validates the artifact without changing runtime acquisition.
 Phase 2 makes post-acquisition enrichment source-agnostic, adds a pure catalog
 adapter, and verifies equivalent live and catalog facts produce the same scan
-entry. Runtime acquisition remains live until full-scan parity supports making
-the catalog the default source. The existing public scan interface remains unchanged.
+entry. Phase 3 moves option resolution, dual-type construction, filtering,
+summarization, and ranking into a shared runner, then verifies complete live and
+catalog scans are equivalent. Runtime acquisition remains live until a separate
+cutover adds lazy catalog loading and offline browser coverage. The existing
+public scan interface remains unchanged.
 
 ## Alternatives Considered
 

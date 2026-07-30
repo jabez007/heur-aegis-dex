@@ -7,7 +7,11 @@ import {
   getResistantTypes,
   hpAdjustedBulk
 } from './pokedex';
-import { catalogTypeToPokemonType, enrichCatalogVariety } from './pokemonCatalogScan';
+import {
+  catalogTypeToPokemonType,
+  enrichCatalogVariety,
+  getCatalogResistantTypes
+} from './pokemonCatalogScan';
 import { isResistantTypeResultList } from './pokedexTypes';
 import type { PokemonCatalogV1 } from './pokemonCatalog';
 
@@ -276,6 +280,7 @@ vi.mock('pokedex-promise-v2', () => {
         }
         if (url.startsWith('/api/v2/pokemon/7/')) {
           return {
+          is_default: true,
           types: [{ type: { name: 'water' } }],
           sprites: { front_default: 'squirtle.png' },
           stats: [
@@ -379,6 +384,140 @@ beforeEach(() => {
   mockState.maxActiveDetailRequests = 0;
 });
 
+const parityCatalog = () => ({
+  types: [
+    {
+      id: 10,
+      name: 'fire',
+      damageRelations: {
+        doubleDamageFrom: ['water', 'rock', 'ground'],
+        halfDamageFrom: ['fire', 'grass', 'bug'],
+        noDamageFrom: [],
+        doubleDamageTo: ['grass', 'bug'],
+        halfDamageTo: ['water', 'fire', 'rock'],
+        noDamageTo: []
+      }
+    },
+    {
+      id: 11,
+      name: 'water',
+      damageRelations: {
+        doubleDamageFrom: ['electric', 'grass'],
+        halfDamageFrom: ['water', 'fire', 'ice'],
+        noDamageFrom: [],
+        doubleDamageTo: ['fire', 'rock', 'ground'],
+        halfDamageTo: ['water', 'grass', 'dragon'],
+        noDamageTo: []
+      }
+    },
+    {
+      id: 12,
+      name: 'bug',
+      damageRelations: {
+        doubleDamageFrom: ['fire', 'flying', 'rock'],
+        halfDamageFrom: ['fighting', 'ground', 'grass'],
+        noDamageFrom: [],
+        doubleDamageTo: ['grass', 'psychic', 'dark'],
+        halfDamageTo: ['fire', 'fighting', 'poison', 'flying', 'ghost', 'steel', 'fairy'],
+        noDamageTo: []
+      }
+    },
+    {
+      id: 13,
+      name: 'steel',
+      damageRelations: {
+        doubleDamageFrom: ['fire', 'fighting', 'ground'],
+        halfDamageFrom: [
+          'normal', 'flying', 'rock', 'bug', 'steel', 'grass', 'psychic', 'ice', 'dragon', 'fairy'
+        ],
+        noDamageFrom: ['poison'],
+        doubleDamageTo: ['rock', 'ice', 'fairy'],
+        halfDamageTo: ['steel', 'fire', 'water', 'electric'],
+        noDamageTo: []
+      }
+    }
+  ],
+  species: [
+    {
+      id: 4,
+      name: 'charmander',
+      isLegendary: false,
+      isMythical: false,
+      eggGroups: ['monster'],
+      pokedexes: ['national'],
+      varietyNames: ['charmander']
+    },
+    {
+      id: 7,
+      name: 'squirtle',
+      isLegendary: false,
+      isMythical: false,
+      eggGroups: ['monster'],
+      pokedexes: ['national'],
+      varietyNames: ['squirtle']
+    }
+  ],
+  varieties: [
+    {
+      id: 4,
+      name: 'charmander',
+      speciesName: 'charmander',
+      isDefault: true,
+      types: ['fire'],
+      abilityStatus: 'known',
+      abilities: [
+        { slot: 1, name: 'blaze', isHidden: false },
+        { slot: 3, name: 'levitate', isHidden: true }
+      ],
+      stats: {
+        hp: 39,
+        attack: 52,
+        defense: 43,
+        'special-attack': 60,
+        'special-defense': 50,
+        speed: 65
+      },
+      sprite: 'charmander.png',
+      form: { isMega: false, isBattleOnly: false }
+    },
+    {
+      id: 7,
+      name: 'squirtle',
+      speciesName: 'squirtle',
+      isDefault: true,
+      types: ['water'],
+      abilityStatus: 'known',
+      abilities: [{ slot: 1, name: 'torrent', isHidden: false }],
+      stats: {
+        hp: 44,
+        attack: 48,
+        defense: 65,
+        'special-attack': 50,
+        'special-defense': 64,
+        speed: 43
+      },
+      sprite: 'squirtle.png',
+      form: { isMega: false, isBattleOnly: false }
+    }
+  ]
+}) as unknown as PokemonCatalogV1;
+
+const parityOptions = {
+  baseScore: 18,
+  typeFilters: {
+    maxDamageFromScore: false,
+    allowQuadrupleDamage: true,
+    limitQuadrupleDamage: false
+  },
+  pokemonFilters: {
+    inPokedex: 'national',
+    allowMegas: false,
+    includeAbilityImmunities: true,
+    includeMoveCoverage: true
+  },
+  statsFilters: { minimumAttacks: 10, minimumBulk: 10 }
+} as const;
+
 describe('pokedex.js API integration logic', () => {
   it('getBaseTypes should calculate base type damage scores', async () => {
     const types = await getBaseTypes(18);
@@ -432,75 +571,38 @@ describe('pokedex.js API integration logic', () => {
   });
 
   it('produces the same canonical entry from equivalent live and catalog facts', async () => {
-    const live = await getResistantTypes({
-      baseScore: 18,
-      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
-      pokemonFilters: {
+    const live = await getResistantTypes(parityOptions);
+    const liveEntry = live.find((type) => type.name === 'fire')!.pokemon[0];
+    const catalog = parityCatalog();
+    const catalogType = catalogTypeToPokemonType(catalog.types[0], catalog, 18);
+    const catalogEntry = enrichCatalogVariety(
+      catalog,
+      catalog.varieties[0],
+      catalogType,
+      {},
+      {
+        baseScore: 18,
         inPokedex: 'national',
         allowMegas: false,
         includeAbilityImmunities: true,
-        includeMoveCoverage: true
-      },
-      statsFilters: { minimumAttacks: 10, minimumBulk: 10 }
-    });
-    const liveEntry = live.find((type) => type.name === 'fire')!.pokemon[0];
-    const catalog = {
-      types: [{
-        id: 10,
-        name: 'fire',
-        damageRelations: {
-          doubleDamageFrom: ['water', 'rock', 'ground'],
-          halfDamageFrom: ['fire', 'grass', 'bug'],
-          noDamageFrom: [],
-          doubleDamageTo: ['grass', 'bug'],
-          halfDamageTo: ['water', 'fire', 'rock'],
-          noDamageTo: []
-        }
-      }],
-      species: [{
-        id: 4,
-        name: 'charmander',
-        isLegendary: false,
-        isMythical: false,
-        eggGroups: ['monster'],
-        pokedexes: ['national'],
-        varietyNames: ['charmander']
-      }],
-      varieties: [{
-        id: 4,
-        name: 'charmander',
-        speciesName: 'charmander',
-        isDefault: true,
-        types: ['fire'],
-        abilityStatus: 'known',
-        abilities: [
-          { slot: 1, name: 'blaze', isHidden: false },
-          { slot: 3, name: 'levitate', isHidden: true }
-        ],
-        stats: {
-          hp: 39,
-          attack: 52,
-          defense: 43,
-          'special-attack': 60,
-          'special-defense': 50,
-          speed: 65
-        },
-        sprite: 'charmander.png',
-        form: { isMega: false, isBattleOnly: false }
-      }]
-    } as unknown as PokemonCatalogV1;
-    const catalogType = catalogTypeToPokemonType(catalog.types[0], catalog, 18);
-    const catalogEntry = enrichCatalogVariety(catalog, catalog.varieties[0], catalogType, {}, {
-      baseScore: 18,
-      inPokedex: 'national',
-      allowMegas: false,
-      includeAbilityImmunities: true,
-      includeMoveCoverage: true,
-      minimumAttacks: 10,
-      minimumBulk: 10
-    });
+        includeMoveCoverage: true,
+        minimumAttacks: 10,
+        minimumBulk: 10
+      }
+    );
 
     expect(catalogEntry).toEqual(liveEntry);
+  });
+
+  it('produces identical complete results from equivalent live and catalog facts', async () => {
+    const live = await getResistantTypes(parityOptions);
+    const fromCatalog = await getCatalogResistantTypes(parityCatalog(), parityOptions);
+
+    expect(fromCatalog).toEqual(live);
+  });
+
+  it('keeps live and catalog full scans aligned under default options', async () => {
+    expect(await getCatalogResistantTypes(parityCatalog())).toEqual(await getResistantTypes());
   });
 
   it('getResistantTypes should apply ability immunities by default', async () => {

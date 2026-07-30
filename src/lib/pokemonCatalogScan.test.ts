@@ -3,8 +3,10 @@ import catalogData from '../../data/pokemon-catalog.v1.json';
 import { buildOffensiveTypeChart } from './coverageMoves';
 import {
   enrichCatalogVariety,
+  getCatalogResistantTypes,
   getCatalogBaseTypes
 } from './pokemonCatalogScan';
+import { isResistantTypeResultList } from './pokedexTypes';
 import type { PokemonCatalogV1 } from './pokemonCatalog';
 
 const catalog = catalogData as unknown as PokemonCatalogV1;
@@ -70,5 +72,28 @@ describe('catalog scan adapter', () => {
     expect(entry?.abilities).toEqual([]);
     expect(Object.keys(entry?.ability_profiles || {})).toEqual(['']);
     expect(entry?.selected_ability_name).toBe('');
+  });
+
+  it('runs the complete committed catalog deterministically without acquisition', async () => {
+    const options = {
+      typeFilters: {
+        maxDamageFromScore: false,
+        allowQuadrupleDamage: true,
+        limitQuadrupleDamage: false
+      },
+      statsFilters: { minimumAttacks: 1, minimumBulk: 1 }
+    } as const;
+    const first = await getCatalogResistantTypes(catalog, options);
+    const second = await getCatalogResistantTypes(catalog, options);
+    const groundDragon = first.find((type) => type.name === 'ground/dragon');
+    const names = first.flatMap((type) => type.pokemon.map((entry) => entry.pokemon.name));
+
+    expect(first).toHaveLength(171);
+    expect(isResistantTypeResultList(first)).toBe(true);
+    expect(groundDragon?.pokemon.some((entry) => entry.pokemon.name === 'garchomp')).toBe(true);
+    expect(names).toContain('palafin-zero');
+    expect(names).not.toContain('palafin-hero');
+    expect(names).not.toContain('floette-eternal');
+    expect(second).toEqual(first);
   });
 });

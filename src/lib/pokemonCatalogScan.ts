@@ -1,6 +1,10 @@
 import { getMergedBattleForm, sharesTyping } from './battleForms';
 import { enrichPokemon } from './pokemonEnrichment';
 import { calculateDamageFromScore, calculateDamageToScore } from './pokedexScoring';
+import {
+  resolveResistantTypeScanOptions,
+  runResistantTypeScan
+} from './resistantTypeScan';
 import type { OffensiveTypeChart } from './coverageMoves';
 import type {
   CatalogTypeV1,
@@ -8,7 +12,14 @@ import type {
   PokemonCatalogV1
 } from './pokemonCatalog';
 import type { PokemonEnrichmentFacts, PokemonEnrichmentOptions } from './pokemonEnrichment';
-import type { DamageRelations, NamedResource, PokemonListEntry, PokemonTypeData } from './pokedexTypes';
+import type {
+  DamageRelations,
+  NamedResource,
+  PokemonListEntry,
+  PokemonTypeData,
+  ResistantTypeResult
+} from './pokedexTypes';
+import type { ResistantTypeScanOptions } from './resistantTypeScan';
 
 const resources = (names: readonly string[]): NamedResource[] => names.map((name) => ({ name }));
 
@@ -99,4 +110,32 @@ export function enrichCatalogVariety(
   options: PokemonEnrichmentOptions
 ): PokemonListEntry | null {
   return enrichPokemon(toFacts(catalog, variety), type, offensiveChart, options);
+}
+
+/**
+ * Runs the complete scan from a validated catalog without live acquisition.
+ * This remains an internal parity path until the runtime source is cut over.
+ */
+export async function getCatalogResistantTypes(
+  catalog: PokemonCatalogV1,
+  options: ResistantTypeScanOptions = {}
+): Promise<ResistantTypeResult[]> {
+  const resolvedOptions = resolveResistantTypeScanOptions(options);
+  const baseTypes = getCatalogBaseTypes(catalog, resolvedOptions.baseScore);
+  const varietiesByName = new Map(catalog.varieties.map((variety) => [variety.name, variety]));
+
+  return runResistantTypeScan(baseTypes, resolvedOptions, {
+    enrichType: (type, offensiveChart, enrichmentOptions) =>
+      (type.pokemon || []).map((entry) => {
+        const variety = varietiesByName.get(entry.pokemon.name);
+        if (!variety) throw new Error(`Catalog type ${type.name} references missing variety ${entry.pokemon.name}`);
+        return enrichCatalogVariety(
+          catalog,
+          variety,
+          type,
+          offensiveChart,
+          enrichmentOptions
+        );
+      })
+  });
 }
