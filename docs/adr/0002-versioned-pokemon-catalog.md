@@ -37,8 +37,10 @@ Generation writes atomically only after all pinned resources have loaded and the
 complete normalized candidate passes semantic validation.
 
 Phase 1 creates and validates the artifact without changing runtime acquisition.
-A later phase will compare catalog and live scan output before making the catalog
-the default source. The existing public scan interface remains unchanged.
+Phase 2 makes post-acquisition enrichment source-agnostic, adds a pure catalog
+adapter, and verifies equivalent live and catalog facts produce the same scan
+entry. Runtime acquisition remains live until full-scan parity supports making
+the catalog the default source. The existing public scan interface remains unchanged.
 
 ## Alternatives Considered
 

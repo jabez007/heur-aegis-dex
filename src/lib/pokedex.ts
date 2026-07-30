@@ -1,32 +1,21 @@
 import Pokedex from 'pokedex-promise-v2';
-import { applyAbilityModifiers, createRawAbilityProfile } from './pokedexAbilities';
-import { canMegaEvolve, getRegulation, hasCompleteData, isSpeciesLegal } from './regulations';
-import { buildOffensiveTypeChart, getMoveCoverage } from './coverageMoves';
+import { getRegulation } from './regulations';
+import { buildOffensiveTypeChart } from './coverageMoves';
 import { getMergedBattleForm, sharesTyping } from './battleForms';
-import { isVarietyBreedable } from './unbreedableForms';
-import { getEffectiveStats, getStatAbilityName, totalStats } from './statAbilities';
 import { collapseIndistinctVarieties } from './pokemonEntry';
-import { getAbilityEffect } from './abilityRoles';
-import { scoreMemberQuality } from './teamScoring';
-import { hpAdjustedBulk } from './statMetrics';
-import { CANDIDATE_WEIGHTS } from './rosterGeneration';
+import { enrichPokemon } from './pokemonEnrichment';
 import {
   DEFAULT_BASE_SCORE,
   calculateDamageFromScore,
   calculateDamageToScore,
   cloneDamageRelations,
   createTypeSummary,
-  filterUniqueBy,
-  normalizeDamageFromScore,
-  normalizeDamageToScore
+  filterUniqueBy
 } from './pokedexScoring';
 import type { OffensiveTypeChart } from './coverageMoves';
-import type { Regulation } from './regulations';
 import type {
-  AbilityProfile,
   DamageRelations,
   NamedResource,
-  PokemonAbilitySlot,
   PokemonListEntry,
   PokemonStats,
   PokemonTypeData,
@@ -96,6 +85,7 @@ export const pokedex = new Pokedex({
 });
 
 export type { NamedResource, DamageRelations, PokemonTypeData } from './pokedexTypes';
+export { chooseDefaultAbility } from './pokemonEnrichment';
 export {
   REGULATIONS,
   getActiveRegulation,
@@ -186,7 +176,7 @@ function fetchPokemonFormResource(id: number) {
 }
 
 /**
- * Decides whether a variety is something a player can actually register.
+ * Loads the form flags used by the source-agnostic eligibility rules.
  *
  * Gigantamax, Mimikyu-Busted, Eiscue-Noice and the rest only exist mid-battle:
  * they are states a Pokemon enters, not separate Pokemon, so listing them
@@ -202,31 +192,18 @@ function fetchPokemonFormResource(id: number) {
  * alternate forms instead of being paid for every Pokemon in the Pokedex.
  *
  * @param poke Fetched `/pokemon` resource.
- * @param allowMegas Whether Mega Evolutions are permitted by the current scan.
- * @param regulation Regulation whose verified Mega roster should be enforced.
- * @param speciesName PokeAPI species name for regulation lookup.
- * @returns Whether the variety may appear as its own Pokemon.
+ * @returns The normalized Mega and battle-only flags.
  */
-async function isRegisterableForm(
-  poke: any,
-  allowMegas: boolean,
-  regulation?: Regulation,
-  speciesName?: string
-): Promise<boolean> {
-  if (poke.is_default) return true;
-
+async function resolveFormState(poke: any): Promise<{ isMega: boolean; isBattleOnly: boolean }> {
+  if (poke.is_default) return { isMega: false, isBattleOnly: false };
   const formUrl = poke.forms?.[0]?.url;
-  if (!formUrl) return true;
+  if (!formUrl) return { isMega: false, isBattleOnly: false };
 
   const form = await fetchPokemonFormResource(getPokemonIdFromUrl(formUrl));
-  if (form.is_mega) {
-    if (!allowMegas) return false;
-    if (regulation && speciesName && hasCompleteData(regulation, 'megaCapableSpecies')) {
-      return canMegaEvolve(regulation, speciesName);
-    }
-    return true;
-  }
-  return !form.is_battle_only;
+  return {
+    isMega: form.is_mega === true,
+    isBattleOnly: form.is_battle_only === true
+  };
 }
 
 /**
@@ -270,52 +247,6 @@ async function resolveCombatantForm(
   if (!sharesTyping(typeNames(poke), typeNames(battleForm))) return asRegistered;
 
   return { resource: battleForm, battleFormName: rule.variety };
-}
-
-/**
- * Picks the ability a Pokemon should default to.
- *
- * This began as a single rule — lowest incoming damage — and then grew a
- * precedence chain in front of it as each new ability layer landed: stat
- * abilities first, then support roles, then defensive merit. Every addition was
- * reactive, the ordering between them was never argued for, and the chain still
- * missed a whole category. Unaware, Multiscale, Magic Guard and Adaptability
- * all sit in a Pokemon's second or third ability slot, so `abilityEffects.ts`
- * shipped with nothing in the app ever selecting one of them.
- *
- * So the chain is gone. The default is whichever ability makes the Pokemon best
- * by the model's own reckoning — the same question the browser and the roster
- * search ask. One rule, no ordering to justify, and it stays correct as the
- * ability layers grow instead of needing another clause each time.
- *
- * The old special cases fall out of it rather than being encoded: Huge Power
- * beats Sap Sipper because doubling Attack moves quality more than one type
- * immunity, and Drought beats Flash Fire because a support role is worth more
- * than turning a resistance into an immunity.
- *
- * @param profiles Ability profiles carrying their own stat lines.
- * @param baseScore Baseline the damage scores were calculated with.
- * @returns The profile to present as selected. Never empty for a non-empty input.
- */
-export function chooseDefaultAbility<T extends AbilityProfile & { stats: PokemonStats }>(
-  profiles: T[],
-  baseScore: number
-): T {
-  // Member quality cannot see a support role, so it is added back on the same
-  // 0..1 scale the candidate ranking uses.
-  const supportBonus = CANDIDATE_WEIGHTS.supportRole / CANDIDATE_WEIGHTS.quality;
-
-  const score = (profile: T) =>
-    scoreMemberQuality({
-      stats: profile.stats,
-      normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, baseScore),
-      normalizedDamageFromScore: normalizeDamageFromScore(profile.damage_from_score, baseScore),
-      abilityName: profile.ability_name
-    }) + (getAbilityEffect(profile.ability_name) ? supportBonus : 0);
-
-  // Ties keep the earlier profile, which is PokeAPI slot order — the Pokemon's
-  // primary ability.
-  return profiles.reduce((best, profile) => (score(profile) > score(best) ? profile : best));
 }
 
 function clonePokemonEntry(entry: PokemonListEntry): PokemonListEntry {
@@ -529,35 +460,6 @@ export async function getResistantTypes(options: {
     throw new Error(`Unknown regulation: ${_pokemonFilters.regulation}`);
   }
 
-  const pokedexMaps: Record<string, string[]> = {
-    national: ['national'],
-    kanto: ['letsgo-kanto'],
-    galar: ['galar', 'isle-of-armor', 'crown-tundra'],
-    sinnoh: ['sinnoh'],
-    hisui: ['hisui'],
-    paldea: ['paldea', 'kitakami', 'blueberry']
-  };
-
-  /**
-   * Two questions, asked at two levels, because breedability lives at both.
-   *
-   * The species answers for almost everything: egg groups and the legendary and
-   * mythical flags cover the Paradox Pokemon, Gholdengo and the box legendaries
-   * outright, all of which PokeAPI reports as `no-eggs`. A hardcoded list of
-   * those names used to sit here as a third check; it was redundant on every one
-   * of its 21 entries, which is presumably why nobody noticed it was also the
-   * wrong tool for the case it looked like it should catch.
-   *
-   * That case is the variety level. Floette-Eternal belongs to a species with a
-   * perfectly ordinary Fairy egg group, so no species-level question can reject
-   * it. `unbreedableForms.ts` records those by variety name, with reasoning.
-   */
-  const isBreedable = (species: any, pokeName: string) => {
-    if (species.is_legendary || species.is_mythical) return false;
-    if (species.egg_groups.length > 0 && species.egg_groups.every((eg: any) => eg.name === 'no-eggs')) return false;
-    return isVarietyBreedable(pokeName);
-  };
-
   const processPokemon = async (t: PokemonTypeData, offensiveChart: OffensiveTypeChart): Promise<PokemonListEntry[]> => {
     const pokemon = await Promise.all(
       (t.pokemon || []).map(async (p: PokemonListEntry) => {
@@ -568,37 +470,8 @@ export async function getResistantTypes(options: {
         const speciesId = getPokemonIdFromUrl(poke.species.url);
         const species = await fetchPokemonSpeciesResource(speciesId);
 
-        // Battle-only forms are not team slots. Megas additionally have to be
-        // present in a regulation's roster when that roster is complete.
-        if (!await isRegisterableForm(poke, _pokemonFilters.allowMegas, regulation, species.name)) return null;
-
-        // Two independent filters. Legality is what the format permits;
-        // breedability is a play-style preference. Neither implies the other,
-        // so both are applied and neither replaces the other.
-        if (!isBreedable(species, p.pokemon.name)) return null;
-        if (regulation && !isSpeciesLegal(regulation, species.name)) return null;
-
-        if (!species.pokedex_numbers.some((pn: any) =>
-          (pokedexMaps[_pokemonFilters.inPokedex] || []).some((pm: any) => pn.pokedex.name.includes(pm))
-        )) {
-          return null;
-        }
-
-        p.species_name = species.name;
-        p.is_default_variety = poke.is_default === true;
-        p.types = poke.types;
-        p.sprite = poke.sprites.front_default;
-        p.abilities = poke.abilities.map((abilityEntry: any): PokemonAbilitySlot => ({
-          name: abilityEntry.ability.name,
-          is_hidden: abilityEntry.is_hidden
-        }));
-
-        // Identity stays with the registered form; only the numbers move. A
-        // Palafin on your team list is a Palafin, but every turn it takes is
-        // taken as Hero, so that is what the stat filters and scoring see.
+        const form = await resolveFormState(poke);
         const combatant = await resolveCombatantForm(poke, species);
-        p.battle_form_name = combatant.battleFormName;
-
         const baseStats = combatant.resource.stats.reduce((merged: PokemonStats, curr: any) => {
           merged[curr.stat.name] = curr.base_stat;
           return merged;
@@ -610,69 +483,35 @@ export async function getResistantTypes(options: {
           'special-defense': 0,
           speed: 0
         });
-        p.base_stats = baseStats;
-
-        const abilityNames = (p.abilities || []).map((ability) => ability.name);
-
-        const baseDamageRelations = cloneDamageRelations(t.damage_relations);
-        const { abilityProfiles } = _pokemonFilters.includeAbilityImmunities
-          ? applyAbilityModifiers(baseDamageRelations, abilityNames, baseScore)
-          : {
-            abilityProfiles: abilityNames.length > 0
-              ? abilityNames.map((abilityName: string) => createRawAbilityProfile(baseDamageRelations, abilityName, baseScore))
-              : [createRawAbilityProfile(baseDamageRelations, '', baseScore)],
-          };
-
-        // Each ability carries its own stat line, so switching ability in the UI
-        // moves the numbers as well as the resistances.
-        const profilesWithStats = abilityProfiles.map((profile) => {
-          const profileStats = getEffectiveStats(baseStats, [profile.ability_name]);
-          return {
-            ...profile,
-            stats: profileStats,
-            stats_total: totalStats(profileStats),
-            move_coverages: _pokemonFilters.includeMoveCoverage
-              ? getMoveCoverage(p.pokemon.name, offensiveChart, profileStats)
-              : []
-          };
+        return enrichPokemon({
+          id,
+          name: p.pokemon.name,
+          url: p.pokemon.url,
+          speciesName: species.name,
+          isDefault: poke.is_default === true,
+          types: poke.types || [],
+          sprite: poke.sprites.front_default,
+          abilities: (poke.abilities || []).map((abilityEntry: any) => ({
+            name: abilityEntry.ability.name,
+            is_hidden: abilityEntry.is_hidden
+          })),
+          stats: baseStats,
+          battleFormName: combatant.battleFormName,
+          isLegendary: species.is_legendary,
+          isMythical: species.is_mythical,
+          eggGroups: (species.egg_groups || []).map((entry: any) => entry.name),
+          pokedexes: (species.pokedex_numbers || []).map((entry: any) => entry.pokedex.name),
+          form
+        }, t, offensiveChart, {
+          baseScore,
+          inPokedex: _pokemonFilters.inPokedex,
+          allowMegas: _pokemonFilters.allowMegas,
+          includeAbilityImmunities: _pokemonFilters.includeAbilityImmunities,
+          includeMoveCoverage: _pokemonFilters.includeMoveCoverage,
+          minimumAttacks: _statsFilters.minimumAttacks,
+          minimumBulk: _statsFilters.minimumBulk,
+          regulation
         });
-
-        // Abilities are alternatives, not a stack. A Pokemon is eligible when
-        // one real loadout clears both floors; combining Huge Power from one
-        // slot with Fur Coat from another would describe an impossible form.
-        const clearsStatFloors = profilesWithStats.some((profile) => {
-          const bestAttack = Math.max(profile.stats.attack, profile.stats['special-attack']);
-          return bestAttack >= _statsFilters.minimumAttacks &&
-            hpAdjustedBulk(profile.stats) >= _statsFilters.minimumBulk;
-        });
-        if (!clearsStatFloors) return null;
-
-        const selectedProfile = chooseDefaultAbility(profilesWithStats, baseScore);
-
-        p.ability_profiles = Object.fromEntries(profilesWithStats.map((profile) => [profile.ability_name || '', profile]));
-        p.selected_ability_name = selectedProfile.ability_name;
-        p.effective_damage_relations = selectedProfile.damage_relations;
-        p.effective_weaknesses = selectedProfile.weaknesses;
-        p.effective_quadruple_weaknesses = selectedProfile.quadruple_weaknesses;
-        p.effective_resistances = selectedProfile.resistances;
-        p.effective_immunities = selectedProfile.immunities;
-        // Move coverage is a property of the Pokemon rather than its typing, so
-        // it is resolved per entry from the variety name the scan already holds.
-        // The learnset belongs to the registered variety, but which half of it
-        // is worth a moveslot depends on the stats it fights with — for a merged
-        // battle form those are not the same Pokemon's numbers.
-        p.effective_move_coverages = selectedProfile.move_coverages;
-        p.effective_ineffectives = selectedProfile.ineffectives;
-        p.effective_coverages = selectedProfile.coverages;
-        p.effective_damage_from_score = selectedProfile.damage_from_score;
-        p.effective_damage_to_score = selectedProfile.damage_to_score;
-        // The selected ability decides the stat line too, and it is not always
-        // the one that cleared the floors above.
-        p.stats = selectedProfile.stats;
-        p.stats_total = selectedProfile.stats_total;
-        p.stat_ability_name = getStatAbilityName([selectedProfile.ability_name]);
-
-        return p;
       })
     );
 

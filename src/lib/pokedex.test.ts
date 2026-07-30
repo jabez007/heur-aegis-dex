@@ -7,7 +7,9 @@ import {
   getResistantTypes,
   hpAdjustedBulk
 } from './pokedex';
+import { catalogTypeToPokemonType, enrichCatalogVariety } from './pokemonCatalogScan';
 import { isResistantTypeResultList } from './pokedexTypes';
+import type { PokemonCatalogV1 } from './pokemonCatalog';
 
 const mockState = vi.hoisted(() => ({
   duplicateCharmanderAcrossTypes: false,
@@ -195,6 +197,7 @@ vi.mock('pokedex-promise-v2', () => {
             throw new Error('temporary pokemon fetch failure');
           }
           return {
+          is_default: true,
           types: [{ type: { name: 'fire' } }],
           sprites: { front_default: 'charmander.png' },
           stats: [
@@ -426,6 +429,78 @@ describe('pokedex.js API integration logic', () => {
     expect(waterType!.pokemon).toHaveLength(1);
     expect(waterType!.pokemon[0].pokemon.name).toBe('squirtle');
     expect(waterType!.pokemon[0].stats_total).toBe(44 + 48 + 65 + 50 + 64 + 43); // 314
+  });
+
+  it('produces the same canonical entry from equivalent live and catalog facts', async () => {
+    const live = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: {
+        inPokedex: 'national',
+        allowMegas: false,
+        includeAbilityImmunities: true,
+        includeMoveCoverage: true
+      },
+      statsFilters: { minimumAttacks: 10, minimumBulk: 10 }
+    });
+    const liveEntry = live.find((type) => type.name === 'fire')!.pokemon[0];
+    const catalog = {
+      types: [{
+        id: 10,
+        name: 'fire',
+        damageRelations: {
+          doubleDamageFrom: ['water', 'rock', 'ground'],
+          halfDamageFrom: ['fire', 'grass', 'bug'],
+          noDamageFrom: [],
+          doubleDamageTo: ['grass', 'bug'],
+          halfDamageTo: ['water', 'fire', 'rock'],
+          noDamageTo: []
+        }
+      }],
+      species: [{
+        id: 4,
+        name: 'charmander',
+        isLegendary: false,
+        isMythical: false,
+        eggGroups: ['monster'],
+        pokedexes: ['national'],
+        varietyNames: ['charmander']
+      }],
+      varieties: [{
+        id: 4,
+        name: 'charmander',
+        speciesName: 'charmander',
+        isDefault: true,
+        types: ['fire'],
+        abilityStatus: 'known',
+        abilities: [
+          { slot: 1, name: 'blaze', isHidden: false },
+          { slot: 3, name: 'levitate', isHidden: true }
+        ],
+        stats: {
+          hp: 39,
+          attack: 52,
+          defense: 43,
+          'special-attack': 60,
+          'special-defense': 50,
+          speed: 65
+        },
+        sprite: 'charmander.png',
+        form: { isMega: false, isBattleOnly: false }
+      }]
+    } as unknown as PokemonCatalogV1;
+    const catalogType = catalogTypeToPokemonType(catalog.types[0], catalog, 18);
+    const catalogEntry = enrichCatalogVariety(catalog, catalog.varieties[0], catalogType, {}, {
+      baseScore: 18,
+      inPokedex: 'national',
+      allowMegas: false,
+      includeAbilityImmunities: true,
+      includeMoveCoverage: true,
+      minimumAttacks: 10,
+      minimumBulk: 10
+    });
+
+    expect(catalogEntry).toEqual(liveEntry);
   });
 
   it('getResistantTypes should apply ability immunities by default', async () => {
