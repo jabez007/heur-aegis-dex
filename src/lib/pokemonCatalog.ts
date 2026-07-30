@@ -1,6 +1,15 @@
+import { canonicalJson } from './canonicalJson';
 import type { PokemonStats } from './pokedexTypes';
 
 export const POKEMON_CATALOG_SCHEMA_VERSION = 1 as const;
+export const POKEMON_CATALOG_CONTENT_HASH =
+  'ab1cd34ca0fc4fd13481ea610dbb7ddb4bdd890dbe21525c556dffebe41ee1f0' as const;
+export const POKEMON_CATALOG_REGULATION_DIGEST =
+  'd7526351fb644511b27bc142e2e6a43f045a7fd2580ce2f9e28ec3fb21e7e09d' as const;
+/** Bump whenever scan rules change without changing catalog or regulation data. */
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 1 as const;
+export const POKEMON_SCAN_CACHE_REVISION =
+  `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [
   'normal', 'fighting', 'flying', 'poison', 'ground', 'rock', 'bug', 'ghost', 'steel',
   'fire', 'water', 'grass', 'electric', 'psychic', 'ice', 'dragon', 'dark', 'fairy'
@@ -180,10 +189,16 @@ export function validatePokemonCatalog(value: unknown): string[] {
 
   const catalog = value as unknown as PokemonCatalogV1;
   const expectedTypes = new Set(ELEMENTAL_TYPES);
+  const expectedTypeIds = new Map<string, number>(
+    ELEMENTAL_TYPES.map((name, index) => [name, index + 1])
+  );
   const typeNames = catalog.types.map((entry) => entry.name);
   if (catalog.types.length !== ELEMENTAL_TYPES.length || !hasUnique(typeNames) ||
     typeNames.some((name) => !expectedTypes.has(name as typeof ELEMENTAL_TYPES[number]))) {
     issues.push('catalog must contain each elemental type exactly once');
+  }
+  if (catalog.types.some((entry) => expectedTypeIds.get(entry.name) !== entry.id)) {
+    issues.push('catalog elemental type ids do not match canonical PokeAPI ids');
   }
   catalog.types.forEach((entry) => {
     Object.values(entry.damageRelations).flat().forEach((name) => {
@@ -207,6 +222,7 @@ export function validatePokemonCatalog(value: unknown): string[] {
     if (entry.types.length < 1 || entry.types.length > 2 || entry.types.some((name) => !expectedTypes.has(
       name as typeof ELEMENTAL_TYPES[number]
     ))) issues.push(`variety ${entry.name} has invalid types`);
+    if (!hasUnique(entry.types)) issues.push(`variety ${entry.name} must have unique types`);
     if (!hasUnique(entry.abilities.map((ability) => ability.slot))) {
       issues.push(`variety ${entry.name} must have uniquely slotted abilities`);
     }
@@ -248,4 +264,31 @@ export function validatePokemonCatalog(value: unknown): string[] {
 export function assertPokemonCatalog(value: unknown): asserts value is PokemonCatalogV1 {
   const issues = validatePokemonCatalog(value);
   if (issues.length > 0) throw new Error(`Invalid Pokemon catalog:\n- ${issues.join('\n- ')}`);
+}
+
+/** Validates catalog semantics and verifies the manifest's content hash. */
+export async function parseAndVerifyPokemonCatalog(value: unknown): Promise<PokemonCatalogV1> {
+  assertPokemonCatalog(value);
+  if (value.manifest.contentHash !== POKEMON_CATALOG_CONTENT_HASH ||
+    value.manifest.regulationDigest !== POKEMON_CATALOG_REGULATION_DIGEST) {
+    throw new Error('Pokemon catalog revision does not match the runtime scan contract');
+  }
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) throw new Error('Pokemon catalog integrity verification requires Web Crypto');
+
+  const payload = canonicalJson({
+    types: value.types,
+    species: value.species,
+    varieties: value.varieties
+  });
+  const digest = await subtle.digest('SHA-256', new TextEncoder().encode(payload));
+  const actualHash = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+  if (actualHash !== value.manifest.contentHash) {
+    throw new Error(
+      `Pokemon catalog content hash mismatch: expected ${value.manifest.contentHash}, received ${actualHash}`
+    );
+  }
+  return value;
 }

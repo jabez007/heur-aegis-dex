@@ -14,7 +14,12 @@ export default defineConfig(({ mode }) => {
         include: ['src/**/*.ts', 'src/**/*.vue'],
         // Test files and their fixtures live inside src, so without this the
         // published package ships a .d.ts stub for each of them.
-        exclude: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/**/*.fixture.ts'],
+        exclude: [
+          'src/**/*.test.ts',
+          'src/**/*.spec.ts',
+          'src/**/*.fixture.ts',
+          'src/lib/pokedexLive.ts'
+        ],
         outDir: 'lib',
         staticImport: true,
         insertTypesEntry: true,
@@ -26,18 +31,29 @@ export default defineConfig(({ mode }) => {
     build: isLib ? {
       lib: {
         entry: resolve(__dirname, 'src/index.ts'),
-        name: 'HeurAegisDex',
-        formats: ['es', 'cjs'],
-        fileName: (format) => format === 'cjs' ? 'heur-aegis-dex.cjs' : `heur-aegis-dex.${format}.js`
+        name: 'HeurAegisDex'
       },
       rollupOptions: {
         external: ['vue'],
-        output: {
-          exports: 'named',
-          globals: {
-            vue: 'Vue'
+        output: [
+          {
+            format: 'es',
+            entryFileNames: 'heur-aegis-dex.es.js',
+            chunkFileNames: '[name]-[hash].js',
+            globals: {
+              vue: 'Vue'
+            }
+          },
+          {
+            format: 'cjs',
+            entryFileNames: 'heur-aegis-dex.cjs',
+            chunkFileNames: '[name]-[hash].cjs',
+            exports: 'named',
+            globals: {
+              vue: 'Vue'
+            }
           }
-        }
+        ]
       },
       outDir: 'lib'
     } : {

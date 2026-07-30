@@ -73,6 +73,12 @@ jobs:
         run: npm run build:all
 
       - name: Verify browser dependencies
-        # The unit suite runs in Node and cannot detect Vite externalizing the
-        # EventEmitter implementation used by pokedex-promise-v2 in browsers.
+        # The unit suite cannot prove that the catalog stayed in a lazy chunk or
+        # that live acquisition stayed out of the production graph.
         run: npm run check:browser
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify external-offline scan
+        run: npx playwright test

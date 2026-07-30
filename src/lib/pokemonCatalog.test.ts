@@ -3,7 +3,10 @@ import catalogData from '../../data/pokemon-catalog.v1.json';
 import { BATTLE_FORMS } from './battleForms';
 import {
   ELEMENTAL_TYPES,
+  POKEMON_CATALOG_CONTENT_HASH,
+  POKEMON_CATALOG_REGULATION_DIGEST,
   POKEMON_CATALOG_SCHEMA_VERSION,
+  parseAndVerifyPokemonCatalog,
   validatePokemonCatalog,
   type PokemonCatalogV1
 } from './pokemonCatalog';
@@ -110,6 +113,20 @@ describe('Pokemon catalog validation', () => {
     ]));
   });
 
+  it('rejects noncanonical type ids and duplicate variety typings', () => {
+    const catalog = fixture();
+    const invalid = {
+      ...catalog,
+      types: [{ ...catalog.types[0], id: 99 }, ...catalog.types.slice(1)],
+      varieties: [{ ...catalog.varieties[0], types: ['grass', 'grass'] }]
+    };
+
+    expect(validatePokemonCatalog(invalid)).toEqual(expect.arrayContaining([
+      'catalog elemental type ids do not match canonical PokeAPI ids',
+      'variety bulbasaur must have unique types'
+    ]));
+  });
+
   it('rejects incomplete relation and provenance contracts', () => {
     const catalog = fixture();
     const invalid = {
@@ -165,12 +182,27 @@ describe('generated Pokemon catalog', () => {
 
   it('is semantically valid and content-addressed', async () => {
     expect(validatePokemonCatalog(catalog)).toEqual([]);
+    expect(catalog.manifest.contentHash).toBe(POKEMON_CATALOG_CONTENT_HASH);
+    expect(catalog.manifest.regulationDigest).toBe(POKEMON_CATALOG_REGULATION_DIGEST);
+    await expect(parseAndVerifyPokemonCatalog(catalog)).resolves.toBe(catalog);
     const hash = await sha256(canonicalJson({
       types: catalog.types,
       species: catalog.species,
       varieties: catalog.varieties
     }));
     expect(hash).toBe(catalog.manifest.contentHash);
+  });
+
+  it('rejects semantically valid catalog data whose content hash was not updated', async () => {
+    const first = catalog.varieties[0];
+    const tampered = {
+      ...catalog,
+      varieties: [{ ...first, sprite: 'https://example.test/tampered.png' }, ...catalog.varieties.slice(1)]
+    };
+
+    await expect(parseAndVerifyPokemonCatalog(tampered)).rejects.toThrow(
+      'Pokemon catalog content hash mismatch'
+    );
   });
 
   it('contains every regulation and curated-form dependency', () => {

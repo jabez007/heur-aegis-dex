@@ -36,9 +36,10 @@ against its manifest, regulation digest, forms, and variety joins. Generation is
 atomic: an incomplete or malformed source walk leaves the previous artifact
 untouched.
 
-The runtime still uses live PokeAPI acquisition while catalog parity work is in
-progress. See `docs/adr/0002-versioned-pokemon-catalog.md` for the migration
-decision and constraints.
+Runtime scans lazy-load this committed catalog, verify its semantic contract and
+content hash, then recompute scores and filters locally. A valid revision-bound browser cache
+hit avoids loading the catalog chunk. Live PokeAPI acquisition remains isolated
+to development parity tests and data-generation tools.
 
 ### Domain Model
 
@@ -72,7 +73,7 @@ Move reach is kept **separate** from STAB coverage rather than replacing it. The
 - **Language:** TypeScript
 - **Build Tool:** Vite
 - **Styling:** SASS (SCSS)
-- **Data Source:** PokeAPI via `pokedex-promise-v2`
+- **Data Source:** Versioned PokeAPI catalog, verified and scanned locally
 - **Quality Assurance:** Vitest for unit testing, ESLint for code standards.
 - **Deployment:** GitHub Actions for automated deployment to GitHub Pages.
 
@@ -170,11 +171,19 @@ npm run lint
 # Automatically fix linting issues
 npm run lint:fix
 
-# Verify the browser bundle does not externalize a Node builtin
+# Verify lazy catalog chunks and production package formats
 npm run check:browser
+
+# Verify scanning with every external service blocked
+npm run test:browser:offline
 ```
 
-> **Browser polyfills:** `events` is a runtime dependency even though nothing in `src/` imports it. `node-cache`, reached through `pokedex-promise-v2`, extends `EventEmitter` at module scope; Vite externalizes Node builtins for the browser, so without the polyfill the app fails to boot. The unit suite runs in Node where builtins resolve natively and cannot catch this, so `src/browserDeps.test.ts` asserts the packaging invariant and `npm run check:browser` verifies the real bundle.
+The production graph contains neither `pokedex-promise-v2` nor its Node-oriented
+cache and `events` polyfill. `npm run check:browser` verifies that exclusion and
+loads the lazy catalog through both ES and CommonJS package builds.
+
+Catalog verification requires Web Crypto. The deployed browser app therefore
+requires a secure context, and package consumers require Node.js 22 or newer.
 
 ## 🛡 Stability and Security
 

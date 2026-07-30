@@ -42,7 +42,9 @@ adapter, and verifies equivalent live and catalog facts produce the same scan
 entry. Phase 3 moves option resolution, dual-type construction, filtering,
 summarization, and ranking into a shared runner, then verifies complete live and
 catalog scans are equivalent. Runtime acquisition remains live until a separate
-cutover adds lazy catalog loading and offline browser coverage. The existing
+cutover adds lazy catalog loading and offline browser coverage. Phase 4 performs
+that cutover: the public scan facade verifies and lazy-loads the catalog, while
+live acquisition remains isolated to development parity checks. The existing
 public scan interface remains unchanged.
 
 ## Alternatives Considered
@@ -71,8 +73,10 @@ derived data using the currently shipped engine.
 - The generator must be rerun when the pinned upstream revision changes.
 - PokeAPI names remain the join keys for regulations, forms, coverage, and saved
   workspaces.
-- The readable artifact is about 1.5 MB and roughly 92 KB gzip; it must be lazy
-  loaded when runtime cutover occurs.
+- The readable artifact is about 1.5 MB and is emitted as a separate lazy chunk;
+  valid browser scan caches avoid requesting it.
 - Remote sprite URLs remain a separate availability concern.
-- Runtime PokeAPI dependencies remain until parity and offline tests support the
-  later cutover.
+- Catalog schema and content-hash failures stop the scan without falling back to
+  mutable live data.
+- Live PokeAPI acquisition is a development dependency used by parity tests and
+  data-generation tools, not part of the production application graph.

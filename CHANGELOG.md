@@ -8,7 +8,8 @@
   emits a content-addressed catalog containing 18 types, 1,025 species and 1,351
   varieties. The generator verifies the authoritative source indexes; semantic
   tests verify joins, regulation coverage, curated forms and hashes. Runtime
-  scanning is deliberately unchanged until catalog/live parity is established.
+  scans now lazy-load and verify this artifact, recomputing all scores locally;
+  live PokeAPI acquisition remains only for development parity checks.
 
 - **Regulation expiry fails closed.** Fresh sessions with no active regulation
   must explicitly choose a known regulation or unrestricted play before scanning.

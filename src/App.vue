@@ -39,9 +39,9 @@
               class="gba-btn"
               :class="{ active: loading }"
               :disabled="loading"
-              @click="fetchTypesImmediate"
+              @click="handleScanAction"
             >
-              {{ loading ? 'Loading...' : (fetchError ? 'Retry Scan' : 'Scan Types') }}
+              {{ loading ? 'Loading...' : (scanRequiresReload ? 'Reload App' : 'Scan Types') }}
             </button>
 
             <WorkspaceSavesDialog
@@ -176,12 +176,12 @@
           <h2 id="scan-error-title">
             Scan Interrupted
           </h2>
-          <p>The Pokedex database could not be loaded.</p>
+          <p>The verified Pokemon catalog could not be loaded.</p>
           <button
             class="gba-btn action-btn"
-            @click="fetchTypesImmediate"
+            @click="handleScanAction"
           >
-            Retry Scan
+            Reload App
           </button>
         </section>
         <section
@@ -215,7 +215,7 @@
               SCANNING DATABASE
             </div>
             <div class="loading-subtext">
-              CONNECTED TO POKEAPI_
+              VERIFIED LOCAL CATALOG_
             </div>
           </div>
         </div>
@@ -251,10 +251,12 @@ import {
   type WorkspaceStorage
 } from './lib/workspacePersistence';
 import { isResistantTypeResultList, type ResistantTypeResult } from './lib/pokedexTypes';
+import { POKEMON_SCAN_CACHE_REVISION } from './lib/pokemonCatalog';
 
 const loading = ref(false);
 const types = ref<ResistantTypeResult[]>([]);
 const fetchError = ref('');
+const scanRequiresReload = ref(false);
 const workspace = useWorkspaceState();
 const {
   inPokedex,
@@ -342,6 +344,7 @@ if (typeof window !== 'undefined') {
 // most recent claim is allowed to write back. Without this a slow scan that was
 // superseded by a newer one can resolve last and overwrite the current results.
 let latestScanToken = 0;
+const scansInFlight = new Map<string, Promise<ResistantTypeResult[]>>();
 
 const fetchTypes = async (): Promise<boolean> => {
   const scanToken = ++latestScanToken;
@@ -374,35 +377,49 @@ const fetchTypes = async (): Promise<boolean> => {
     regulation: regulation.value || null
   };
 
-  // Every filter that changes the result must appear in the key, or switching it
-  // serves a cached scan from different settings. The version prefix is bumped
-  // whenever the stored shape changes.
-  const key = `heur_aegis_dex_v20_types_${inPokedex.value}_${minAttacks.value}_${minBulk.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
+  // Every filter that changes the result must appear in the key. The prefix
+  // covers result shape; the scan revision covers catalog, regulation and rule
+  // changes that leave the shape intact.
+  const key = `heur_aegis_dex_v21_${POKEMON_SCAN_CACHE_REVISION}_types_${inPokedex.value}_${minAttacks.value}_${minBulk.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
 
   const cached: unknown = lscache.get(key);
   if (isResistantTypeResultList(cached)) {
     types.value = cached;
+    scanRequiresReload.value = false;
     loading.value = false;
     return true;
   } else {
     try {
-      const data = await getResistantTypes({
-        typeFilters: filters,
-        pokemonFilters: pokedexFilter,
-        statsFilters: statsFilters
-      });
+      let scan = scansInFlight.get(key);
+      if (!scan) {
+        scan = getResistantTypes({
+          typeFilters: filters,
+          pokemonFilters: pokedexFilter,
+          statsFilters: statsFilters
+        });
+        scansInFlight.set(key, scan);
+        scan.then(
+          () => scansInFlight.delete(key),
+          () => scansInFlight.delete(key)
+        );
+      }
+      const data = await scan;
       // The cache key encodes the filters this scan ran with, so the result is
       // worth keeping even when a newer scan has already superseded the view.
       lscache.set(key, data, 60 * 24);
       if (!isCurrentScan()) return false;
       types.value = data;
+      scanRequiresReload.value = false;
       loading.value = false;
       return true;
     } catch (error) {
       console.error(error);
       if (!isCurrentScan()) return false;
       types.value = [];
-      fetchError.value = 'Pokedex scan failed. Check your connection and try again.';
+      fetchError.value = error instanceof Error && error.message.includes('requires Web Crypto')
+        ? 'Catalog verification requires a secure, modern browser.'
+        : 'Catalog scan failed. Reload the app and try again.';
+      scanRequiresReload.value = true;
       notify(fetchError.value, 'error');
       loading.value = false;
       return false;
@@ -534,6 +551,14 @@ const fetchTypesImmediate = async () => {
     fetchTypesDebounceTimer = null;
   }
   return fetchTypesAndRestore();
+};
+
+const handleScanAction = () => {
+  if (scanRequiresReload.value) {
+    window.location.reload();
+    return;
+  }
+  void fetchTypesImmediate();
 };
 
 const fetchTypesDebounced = () => {

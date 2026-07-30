@@ -41,6 +41,8 @@ pnpm-debug.log*
 # Testing
 coverage/
 __snapshots__/
+playwright-report/
+test-results/
 
 # Temporary Files
 .temp/

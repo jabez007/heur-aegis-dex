@@ -6,7 +6,7 @@ import {
   getDualTypes,
   getResistantTypes,
   hpAdjustedBulk
-} from './pokedex';
+} from './pokedexLive';
 import {
   catalogTypeToPokemonType,
   enrichCatalogVariety,
