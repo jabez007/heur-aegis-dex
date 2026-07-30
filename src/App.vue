@@ -231,7 +231,7 @@ import {
   type WorkspaceSnapshotV1,
   type WorkspaceStorage
 } from './lib/workspacePersistence';
-import type { ResistantTypeResult } from './lib/pokedexTypes';
+import { isResistantTypeResultList, type ResistantTypeResult } from './lib/pokedexTypes';
 
 const loading = ref(false);
 const types = ref<ResistantTypeResult[]>([]);
@@ -272,6 +272,7 @@ const workspaceStorageAvailable = ref(false);
 const workspaceReady = ref(false);
 const pendingWorkspace = ref<WorkspaceSnapshotV1 | null>(null);
 const saveDraftAfterRestore = ref(false);
+let saveDraftWhenReady = false;
 let browserStorage: WorkspaceStorage | null = null;
 
 const applyWorkspaceSettings = (snapshot: WorkspaceSnapshotV1) => {
@@ -337,8 +338,8 @@ const fetchTypes = async (): Promise<boolean> => {
   // whenever the stored shape changes.
   const key = `heur_aegis_dex_v20_types_${inPokedex.value}_${minAttacks.value}_${minBulk.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
 
-  const cached = lscache.get(key);
-  if (cached) {
+  const cached: unknown = lscache.get(key);
+  if (isResistantTypeResultList(cached)) {
     types.value = cached;
     loading.value = false;
     return true;
@@ -459,7 +460,10 @@ const completeWorkspaceRestore = async (snapshot: WorkspaceSnapshotV1) => {
     // Keep unresolved identifiers in the recovery draft rather than replacing
     // them with a partial roster assembled from the current scan.
     saveDraftNow(warnings.length > 0 ? snapshot : captureWorkspace());
+  } else if (saveDraftWhenReady) {
+    saveDraftNow();
   }
+  saveDraftWhenReady = false;
 
   notify(
     warnings.length > 0
@@ -475,6 +479,10 @@ const fetchTypesAndRestore = async () => {
     await completeWorkspaceRestore(pendingWorkspace.value);
   } else if (!pendingWorkspace.value) {
     workspaceReady.value = true;
+    if (saveDraftWhenReady) {
+      saveDraftWhenReady = false;
+      saveDraftNow();
+    }
   }
   return success;
 };
@@ -565,6 +573,13 @@ const refreshWorkspaceArchive = (event: StorageEvent) => {
   if (event.key !== WORKSPACE_STORAGE_KEY || !browserStorage) return;
   try {
     workspaceArchive.value = readWorkspaceArchive(browserStorage);
+    workspaceStorageAvailable.value = true;
+    workspaceStorageError.value = '';
+    if (workspaceReady.value) {
+      saveDraftNow();
+    } else {
+      saveDraftWhenReady = true;
+    }
   } catch {
     // Keep the last valid in-memory archive. The other tab may be midway
     // through recovery; a later valid storage event will refresh this list.

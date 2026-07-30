@@ -114,7 +114,8 @@ export {
   BATTLE_FORMAT_LIST,
   DEFAULT_BATTLE_FORMAT,
   combinationsOf,
-  getBattleFormat
+  getBattleFormat,
+  isBattleFormatId
 } from './lib/battleFormats'
 export type { BattleFormat, BattleFormatId } from './lib/battleFormats'
 export {

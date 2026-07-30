@@ -289,6 +289,16 @@ describe('useTeamBuilder', () => {
     expect(builder.currentLineIndex.value).toBe(1);
   });
 
+  it('ignores non-integer steps from public callers', () => {
+    fillRoster(addPokemon, 6);
+    const originalBring = [...builder.bringIndices.value];
+
+    expect(() => builder.cycleBringLine(0.5)).not.toThrow();
+    expect(() => builder.cycleBringLine(Number.NaN)).not.toThrow();
+    expect(builder.bringIndices.value).toEqual(originalBring);
+    expect(builder.currentLineIndex.value).toBe(0);
+  });
+
   it('has nothing to cycle before a bring can be fielded', () => {
     fillRoster(addPokemon, 3);
 

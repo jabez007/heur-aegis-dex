@@ -7,6 +7,7 @@ import {
   getResistantTypes,
   hpAdjustedBulk
 } from './pokedex';
+import { isResistantTypeResultList } from './pokedexTypes';
 
 const mockState = vi.hoisted(() => ({
   duplicateCharmanderAcrossTypes: false,
@@ -14,6 +15,7 @@ const mockState = vi.hoisted(() => ({
   failPokemon4Once: false,
   /** Report species names that appear on the Regulation M-B roster. */
   useRegulationLegalSpecies: false,
+  regulationSpeciesName: null as string | null,
   /** Report every species as legendary, exercising the breedable-only filter. */
   treatSpeciesAsLegendary: false,
   /** Name the fire-type entry after a Pokemon present in the coverage-move table. */
@@ -256,7 +258,7 @@ vi.mock('pokedex-promise-v2', () => {
           return {
           name: mockState.usePalafin
             ? 'palafin'
-            : (mockState.useRegulationLegalSpecies ? 'charizard' : 'charmander'),
+            : (mockState.regulationSpeciesName ?? (mockState.useRegulationLegalSpecies ? 'charizard' : 'charmander')),
           is_legendary: mockState.treatSpeciesAsLegendary,
           is_mythical: false,
           egg_groups: [{ name: 'monster' }],
@@ -325,7 +327,9 @@ vi.mock('pokedex-promise-v2', () => {
               { base_stat: 70, stat: { name: 'speed' } }
             ],
             abilities: [{ ability: { name: 'blaze' }, is_hidden: false }],
-            species: { url: `https://pokeapi.co/api/v2/pokemon-species/${id}/` }
+            species: {
+              url: `https://pokeapi.co/api/v2/pokemon-species/${id >= 10001 && id <= 10003 ? 4 : id}/`
+            }
           };
         }
 
@@ -353,6 +357,7 @@ beforeEach(() => {
   mockState.expandFireRoster = false;
   mockState.failPokemon4Once = false;
   mockState.useRegulationLegalSpecies = false;
+  mockState.regulationSpeciesName = null;
   mockState.treatSpeciesAsLegendary = false;
   mockState.useCoverageTableName = false;
   mockState.includeAlternateForms = false;
@@ -409,6 +414,7 @@ describe('pokedex.js API integration logic', () => {
     });
 
     expect(Array.isArray(resistant)).toBe(true);
+    expect(isResistantTypeResultList(resistant)).toBe(true);
 
     const fireType = resistant.find(t => t.name === 'fire');
     expect(fireType).toBeDefined();
@@ -543,12 +549,12 @@ describe('pokedex.js API integration logic', () => {
     expect(resistant.find(t => t.name === 'fire')!.pokemon[0].effective_move_coverages).toEqual([]);
   });
 
-  const scanWithAlternateForms = (allowMegas: boolean) => {
+  const scanWithAlternateForms = (allowMegas: boolean, regulation?: string) => {
     mockState.includeAlternateForms = true;
     return getResistantTypes({
       baseScore: 18,
       typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
-      pokemonFilters: { inPokedex: 'national', allowMegas, includeAbilityImmunities: true },
+      pokemonFilters: { inPokedex: 'national', allowMegas, includeAbilityImmunities: true, regulation },
       statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
     });
   };
@@ -606,6 +612,45 @@ describe('pokedex.js API integration logic', () => {
     // Megas are battle-only by the same flag, but they are a pre-battle choice.
     expect(names).toContain('charmander-mega');
     expect(names).not.toContain('charmander-gmax');
+  });
+
+  it('getResistantTypes should enforce a regulation verified Mega roster', async () => {
+    mockState.includeAlternateForms = true;
+    mockState.regulationSpeciesName = 'arcanine';
+
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: {
+        inPokedex: 'national',
+        allowMegas: true,
+        includeAbilityImmunities: true,
+        regulation: 'M-B'
+      },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+    expect(names).toContain('charmander');
+    expect(names).not.toContain('charmander-mega');
+  });
+
+  it('getResistantTypes should keep Megas present in a verified regulation roster', async () => {
+    mockState.useRegulationLegalSpecies = true;
+
+    const resistant = await scanWithAlternateForms(true, 'M-B');
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+
+    expect(names).toContain('charmander-mega');
+  });
+
+  it('getResistantTypes should not treat an incomplete Mega roster as empty', async () => {
+    mockState.useRegulationLegalSpecies = true;
+
+    const resistant = await scanWithAlternateForms(true, 'M-A');
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+
+    expect(names).toContain('charmander-mega');
   });
 
   it('getResistantTypes should not request a form for default varieties', async () => {

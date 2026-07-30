@@ -213,7 +213,7 @@ export function useTeamBuilder() {
    */
   const cycleBringLine = (step: number) => {
     const lines = bringLines.value;
-    if (lines.length === 0 || !Number.isFinite(step)) return;
+    if (lines.length === 0 || !Number.isInteger(step)) return;
 
     const from = currentLineIndex.value;
     if (from === -1 && step === 0) return;

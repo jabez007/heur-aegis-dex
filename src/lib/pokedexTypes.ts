@@ -137,3 +137,64 @@ export interface PokemonListEntry {
 export interface ResistantTypeResult extends TeamTypeData {
   include_ability_immunities: boolean;
 }
+
+type UnknownRecord = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const hasStringArrays = (value: UnknownRecord, fields: string[]): boolean =>
+  fields.every((field) =>
+    Array.isArray(value[field]) && value[field].every((entry: unknown) => typeof entry === 'string')
+  );
+
+const isPokemonStats = (value: unknown): value is PokemonStats => {
+  if (!isRecord(value)) return false;
+  return ['hp', 'attack', 'defense', 'special-attack', 'special-defense', 'speed']
+    .every((field) => typeof value[field] === 'number' && Number.isFinite(value[field]));
+};
+
+const isCachedAbilityProfile = (value: unknown): boolean =>
+  isRecord(value) &&
+  isPokemonStats(value.stats) &&
+  hasStringArrays(value, [
+    'weaknesses', 'quadruple_weaknesses', 'resistances', 'immunities',
+    'ineffectives', 'coverages', 'move_coverages'
+  ]);
+
+const isCachedPokemon = (value: unknown): boolean => {
+  if (!isRecord(value) || !isRecord(value.pokemon) || typeof value.pokemon.name !== 'string') return false;
+  if (!isPokemonStats(value.stats) || !isPokemonStats(value.base_stats)) return false;
+  if (!Array.isArray(value.types) || !value.types.every((slot) =>
+    isRecord(slot) && isRecord(slot.type) && typeof slot.type.name === 'string'
+  )) return false;
+  if (!Array.isArray(value.abilities) || !value.abilities.every((ability) =>
+    isRecord(ability) && typeof ability.name === 'string' && typeof ability.is_hidden === 'boolean'
+  )) return false;
+  if (!isRecord(value.ability_profiles) || !Object.values(value.ability_profiles).every(isCachedAbilityProfile)) {
+    return false;
+  }
+  return hasStringArrays(value, [
+    'effective_weaknesses', 'effective_quadruple_weaknesses',
+    'effective_resistances', 'effective_immunities', 'effective_move_coverages',
+    'effective_ineffectives', 'effective_coverages'
+  ]);
+};
+
+/**
+ * Validates data read from the browser scan cache before UI code consumes it.
+ * The check is intentionally strict: stale cache shapes should trigger a fresh
+ * scan rather than being repaired or partially displayed.
+ */
+export function isResistantTypeResultList(value: unknown): value is ResistantTypeResult[] {
+  return Array.isArray(value) && value.every((entry) =>
+    isRecord(entry) &&
+    typeof entry.name === 'string' &&
+    typeof entry.include_ability_immunities === 'boolean' &&
+    hasStringArrays(entry, [
+      'weaknesses', 'quadruple_weaknesses', 'resistances', 'immunities',
+      'ineffectives', 'coverages'
+    ]) &&
+    Array.isArray(entry.pokemon) && entry.pokemon.every(isCachedPokemon)
+  );
+}

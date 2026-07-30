@@ -76,5 +76,26 @@ bounds only widen.
 
 ## Follow-up Signal
 
-Hard floors still exclude support specialists before role scoring. Measure
-exclusions by role before changing either threshold.
+Hard floors still exclude support specialists before role scoring. Run
+`npm run measure:support-eligibility -- M-B` to compare the current pool with a
+floorless scan and list each rejected ability profile, its failed floors, and any
+support role the engine can currently measure. The report deliberately does not
+change scoring or maintain a hand-written exception list.
+
+The command covers registerable, breedable varieties belonging to legal species.
+Regulation legality is species-level, and the result remains dependent on live
+PokeAPI data until the project has a versioned offline catalog.
+
+Measured on 2026-07-30 against Regulation M-B:
+
+- 236 scan-visible varieties before stat floors.
+- 184 varieties clearing both floors.
+- 52 rejected varieties.
+- 11 rejected varieties carrying a currently modeled support ability: four with
+  Intimidate, four with redirection, and three with ally protection.
+
+The report also confirms the limit of ability-only role measurement. Whimsicott,
+Sableye, and Liepard are rejected, but Prankster has no role here because its
+value depends on which status moves the Pokemon can actually learn. Any
+role-aware eligibility policy therefore needs move capabilities before it can
+claim to cover support specialists generally.

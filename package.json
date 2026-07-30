@@ -45,8 +45,9 @@
     "deploy": "push-dir --dir=dist --branch=main --cleanup",
     "check:browser": "bash scripts/check-browser-bundle.sh",
     "gen:coverage-moves": "node scripts/gen-coverage-moves.mjs",
-    "gen:scoring-fixture": "npx tsx scripts/gen-scoring-fixture.mjs",
-    "measure:composite-bounds": "npx tsx scripts/measure-composite-bounds.mjs"
+    "gen:scoring-fixture": "tsx scripts/gen-scoring-fixture.mjs",
+    "measure:composite-bounds": "tsx scripts/measure-composite-bounds.mjs",
+    "measure:support-eligibility": "tsx scripts/measure-support-eligibility.mjs"
   },
   "dependencies": {
     "events": "^3.3.0",
@@ -63,8 +64,10 @@
     "eslint": "^10.4.0",
     "eslint-plugin-vue": "^10.9.1",
     "globals": "^17.6.0",
+    "jsdom": "^27.4.0",
     "push-dir": "^0.4.1",
     "sass": "^1.99.0",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.3",
     "vite": "^8.0.12",

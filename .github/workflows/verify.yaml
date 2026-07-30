@@ -68,3 +68,8 @@ jobs:
         # a wide enough surface to trip on it. A broken rollup is a broken
         # package, so it should fail on the pull request, not on the release tag.
         run: npm run build:all
+
+      - name: Verify browser dependencies
+        # The unit suite runs in Node and cannot detect Vite externalizing the
+        # EventEmitter implementation used by pokedex-promise-v2 in browsers.
+        run: npm run check:browser

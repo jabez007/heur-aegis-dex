@@ -1,6 +1,6 @@
 import Pokedex from 'pokedex-promise-v2';
 import { applyAbilityModifiers, createRawAbilityProfile } from './pokedexAbilities';
-import { getRegulation, isSpeciesLegal } from './regulations';
+import { canMegaEvolve, getRegulation, hasCompleteData, isSpeciesLegal } from './regulations';
 import { buildOffensiveTypeChart, getMoveCoverage } from './coverageMoves';
 import { getMergedBattleForm, sharesTyping } from './battleForms';
 import { isVarietyBreedable } from './unbreedableForms';
@@ -21,6 +21,7 @@ import {
   normalizeDamageToScore
 } from './pokedexScoring';
 import type { OffensiveTypeChart } from './coverageMoves';
+import type { Regulation } from './regulations';
 import type {
   AbilityProfile,
   DamageRelations,
@@ -202,16 +203,29 @@ function fetchPokemonFormResource(id: number) {
  *
  * @param poke Fetched `/pokemon` resource.
  * @param allowMegas Whether Mega Evolutions are permitted by the current scan.
+ * @param regulation Regulation whose verified Mega roster should be enforced.
+ * @param speciesName PokeAPI species name for regulation lookup.
  * @returns Whether the variety may appear as its own Pokemon.
  */
-async function isRegisterableForm(poke: any, allowMegas: boolean): Promise<boolean> {
+async function isRegisterableForm(
+  poke: any,
+  allowMegas: boolean,
+  regulation?: Regulation,
+  speciesName?: string
+): Promise<boolean> {
   if (poke.is_default) return true;
 
   const formUrl = poke.forms?.[0]?.url;
   if (!formUrl) return true;
 
   const form = await fetchPokemonFormResource(getPokemonIdFromUrl(formUrl));
-  if (form.is_mega) return allowMegas;
+  if (form.is_mega) {
+    if (!allowMegas) return false;
+    if (regulation && speciesName && hasCompleteData(regulation, 'megaCapableSpecies')) {
+      return canMegaEvolve(regulation, speciesName);
+    }
+    return true;
+  }
   return !form.is_battle_only;
 }
 
@@ -551,11 +565,12 @@ export async function getResistantTypes(options: {
         const id = getPokemonIdFromUrl(p.pokemon.url);
         const poke = await fetchPokemonResource(id);
 
-        // Battle-only forms are not team slots, and Megas are gated separately.
-        if (!await isRegisterableForm(poke, _pokemonFilters.allowMegas)) return null;
-
         const speciesId = getPokemonIdFromUrl(poke.species.url);
         const species = await fetchPokemonSpeciesResource(speciesId);
+
+        // Battle-only forms are not team slots. Megas additionally have to be
+        // present in a regulation's roster when that roster is complete.
+        if (!await isRegisterableForm(poke, _pokemonFilters.allowMegas, regulation, species.name)) return null;
 
         // Two independent filters. Legality is what the format permits;
         // breedability is a play-style preference. Neither implies the other,

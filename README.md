@@ -13,7 +13,7 @@ An advanced Pokémon meta-analysis and team building engine designed with a retr
 - **Team Workbench:** Register a roster of up to six, then bring three (singles) or four (doubles). The workbench suggests the strongest bring and analyses the team that actually takes the field.
 - **Local Workspaces:** Automatically recover the current draft or save named workspace snapshots containing scan settings, filters, roster choices, abilities, and generation exclusions.
 - **Retro Aesthetic:** Fully themed GBA-style UI with pixel-perfect sprites and custom components.
-- **High Performance:** Client-side caching and optimized recursive team generation algorithms.
+- **High Performance:** Client-side caching and pruned beam-search roster generation.
 
 ### Regulations
 
@@ -115,17 +115,18 @@ import '@jabez007/heur-aegis-dex/style.css'
 
 ### State Scoping
 
-Party, filter and notification state is provided per Vue app. Registering the plugin with `app.use(HeurAegisDex)` scopes that state automatically, so two mounted instances never share a party and server-side rendering does not carry state between requests.
+Workspace, party, filter and notification state is provided per Vue app. Registering the plugin with `app.use(HeurAegisDex)` scopes that reactive state automatically, so mounted instances do not share in-memory party or filter state and server-side rendering does not carry it between requests. Saved workspaces still use browser storage shared by the current origin.
 
 If you import individual components without the plugin, they fall back to a shared module-level store. Call the provider functions during app setup to opt into isolation:
 
 ```typescript
-import { provideTeamBuilder, provideMetaFilters, provideNotifications } from '@jabez007/heur-aegis-dex'
+import { provideTeamBuilder, provideMetaFilters, provideNotifications, provideWorkspaceState } from '@jabez007/heur-aegis-dex'
 
 const app = createApp(App)
 provideTeamBuilder(app)
 provideMetaFilters(app)
 provideNotifications(app)
+provideWorkspaceState(app)
 ```
 
 ## 🚀 Development

@@ -4,6 +4,16 @@
 
 ### Added
 
+- **Critical browser orchestration now has component coverage.** App-level tests
+  exercise malformed scan caches and recovery after another tab repairs workspace
+  storage. The real browser dependency check also runs in CI instead of remaining
+  a manual command.
+
+- **Support exclusions can be measured before changing the model.**
+  `npm run measure:support-eligibility -- M-B` compares the strict and floorless
+  pools and reports every rejected ability profile with its failed floors and any
+  support role the engine can currently measure.
+
 - **The Pokemon Browser can be searched by species or form.** Results filter as
   the user types without changing their candidate-quality order. Search is
   case-insensitive, accepts space-separated form names, resets pagination, and
@@ -333,6 +343,20 @@
   `DEFAULT_STATS_FILTERS` is exported, and `getResistantTypes` now derives its defaults from it. Previously an omitted `statsFilters` produced `500 / 90 / 80` from one default while a partial object was merged against a different `480 / 80 / 80` — two disagreeing sources for the same setting.
 
 ### Fixed
+
+- **Malformed scan caches are treated as misses instead of application data.** A
+  corrupt `lscache` value can no longer reach `flattenToPokemon` and crash startup.
+
+- **Workspace persistence recovers after cross-tab repair.** A valid storage
+  event now clears the prior read error and re-enables draft and named saves.
+
+- **Regulations with complete Mega data enforce it.** Enabling Megas no longer
+  admits a Mega form absent from the selected regulation's verified roster;
+  regulations that explicitly mark the roster incomplete retain the permissive
+  behavior rather than treating unknown data as an empty roster.
+
+- **`cycleBringLine` rejects fractional steps.** The published composable now
+  remains total for the integer input contract documented by the function.
 
 - **The workbench scores the quadruple weaknesses it was blind to.** `PartyMember` never carried `quadrupleWeaknesses`, so `toRosterMember` emitted no `quadruple_weaknesses` and every member reached `analyzeTeamCoverage` with none. All three penalty terms that key on it — `quadrupleWeakness`, `sharedQuadrupleWeakness` and `uncoveredQuadrupleWeakness` — read zero for any roster built or displayed in the workbench.
 
