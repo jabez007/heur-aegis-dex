@@ -16,9 +16,11 @@
           System Online // Waiting for Scan...
         </p>
         <p class="status-regulation">
-          {{ selectedRegulation
-            ? `${selectedRegulation.label} // ${selectedRegulation.legalSpecies.size} legal species`
-            : 'No regulation filter // all breedable species' }}
+          {{ regulationSelectionRequired
+            ? 'Regulation selection required // scan blocked'
+            : selectedRegulation
+              ? `${selectedRegulation.label} // ${selectedRegulation.legalSpecies.size} legal species`
+              : 'Explicit unrestricted scan // all breedable species' }}
         </p>
         <p
           v-if="fetchError"
@@ -58,11 +60,18 @@
             <label class="gba-label">
               Regulation:
               <select
-                v-model="regulation"
+                v-model="regulationChoice"
                 class="gba-select regulation-select"
                 @change="fetchTypesImmediate"
               >
-                <option value="">Any (no legality filter)</option>
+                <option
+                  v-if="regulationSelectionRequired"
+                  :value="REGULATION_SELECTION_REQUIRED"
+                  disabled
+                >
+                  No active regulation // choose explicitly
+                </option>
+                <option :value="UNRESTRICTED_REGULATION">Any (no legality filter)</option>
                 <option
                   v-for="reg in REGULATIONS"
                   :key="reg.id"
@@ -149,6 +158,16 @@
           v-if="types.length > 0"
           :all-data-types="types"
         />
+        <section
+          v-else-if="regulationSelectionRequired"
+          class="gba-container state-panel"
+          aria-labelledby="regulation-required-title"
+        >
+          <h2 id="regulation-required-title">
+            Regulation Selection Required
+          </h2>
+          <p>Select a known regulation or explicitly choose Any before scanning.</p>
+        </section>
         <section
           v-else-if="fetchError"
           class="gba-container state-panel"
@@ -246,9 +265,12 @@ const {
   includeAbilityImmunities,
   includeMoveCoverage,
   selectedAbilityNames,
+  regulationSelectionRequired,
   snapshotScan,
   restoreScan,
-  restoreAbilityOverrides
+  restoreAbilityOverrides,
+  confirmRegulationSelection,
+  requireRegulationSelection
 } = workspace;
 const metaFilters = useMetaFilters();
 const teamBuilder = useTeamBuilder();
@@ -257,6 +279,17 @@ const { notify } = useNotifications();
 // the format being played without the user having to know which one that is.
 const activeRegulationId = getActiveRegulation()?.id ?? '';
 const selectedRegulation = computed(() => REGULATIONS.find(reg => reg.id === regulation.value));
+const REGULATION_SELECTION_REQUIRED = '__selection_required__';
+const UNRESTRICTED_REGULATION = '__unrestricted__';
+const regulationChoice = computed({
+  get: () => regulationSelectionRequired.value
+    ? REGULATION_SELECTION_REQUIRED
+    : (regulation.value || UNRESTRICTED_REGULATION),
+  set: (choice: string) => {
+    regulation.value = choice === UNRESTRICTED_REGULATION ? '' : choice;
+    confirmRegulationSelection();
+  }
+});
 let fetchTypesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let retainedUnresolvedTeam: {
@@ -282,6 +315,7 @@ const applyWorkspaceSettings = (snapshot: WorkspaceSnapshotV1) => {
     ...snapshot.scan,
     regulation: regulationExists ? snapshot.scan.regulation : null
   });
+  if (!regulationExists) requireRegulationSelection();
   metaFilters.restoreMetaFilters(snapshot.meta);
   restoreAbilityOverrides(snapshot.abilityOverrides);
   return regulationExists ? [] : [`Regulation ${snapshot.scan.regulation} is no longer available.`];
@@ -315,6 +349,13 @@ const fetchTypes = async (): Promise<boolean> => {
 
   loading.value = true;
   fetchError.value = '';
+
+  if (regulationSelectionRequired.value) {
+    types.value = [];
+    loading.value = false;
+    fetchError.value = 'No active regulation is recorded. Select a known regulation or explicitly choose Any.';
+    return false;
+  }
 
   const filters = {
     maxDamageFromScore: true,

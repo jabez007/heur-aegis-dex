@@ -44,6 +44,8 @@
     "predeploy": "npm run build",
     "deploy": "push-dir --dir=dist --branch=main --cleanup",
     "check:browser": "bash scripts/check-browser-bundle.sh",
+    "check:regulations": "tsx scripts/check-regulation-freshness.mjs",
+    "gen:pokemon-catalog": "tsx scripts/generate-pokemon-catalog.ts",
     "gen:coverage-moves": "node scripts/gen-coverage-moves.mjs",
     "gen:scoring-fixture": "tsx scripts/gen-scoring-fixture.mjs",
     "measure:composite-bounds": "tsx scripts/measure-composite-bounds.mjs",

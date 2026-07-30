@@ -159,6 +159,9 @@ const REGULATION_LIST: readonly Regulation[] = [
 
 export const REGULATIONS = REGULATION_LIST;
 
+/** Lead time for replacing an expiring regulation before CI starts failing. */
+export const REGULATION_FRESHNESS_HORIZON_DAYS = 21;
+
 /**
  * Looks up a regulation by id.
  *
@@ -181,6 +184,31 @@ export function getActiveRegulation(at: Date = new Date()): Regulation | undefin
   return REGULATION_LIST.find((regulation) =>
     timestamp >= Date.parse(regulation.activeFrom) && timestamp < Date.parse(regulation.activeTo)
   );
+}
+
+/**
+ * Finds the first instant not covered by a known regulation in a time window.
+ *
+ * @param from Inclusive start of the window.
+ * @param to Exclusive end of the window.
+ * @returns The first uncovered instant, or undefined when the full window is covered.
+ */
+export function getRegulationCoverageGap(from: Date, to: Date): Date | undefined {
+  let coveredUntil = from.getTime();
+  const end = to.getTime();
+
+  for (const regulation of [...REGULATION_LIST].sort((a, b) =>
+    Date.parse(a.activeFrom) - Date.parse(b.activeFrom)
+  )) {
+    const activeFrom = Date.parse(regulation.activeFrom);
+    const activeTo = Date.parse(regulation.activeTo);
+    if (activeTo <= coveredUntil) continue;
+    if (activeFrom > coveredUntil) return new Date(coveredUntil);
+    coveredUntil = Math.max(coveredUntil, activeTo);
+    if (coveredUntil >= end) return undefined;
+  }
+
+  return coveredUntil < end ? new Date(coveredUntil) : undefined;
 }
 
 /**

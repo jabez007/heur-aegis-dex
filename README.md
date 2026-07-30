@@ -23,6 +23,23 @@ Legality is kept **independent** of the breedable-only rule the scan also applie
 
 To add a regulation, append an entry to `REGULATION_LIST` with its roster, dates and sources. Anything not recovered from a published source belongs in `incompleteFields` so an empty set reads as "not recorded" rather than "none".
 
+`npm run check:regulations` fails when no regulation is active or when the known
+schedule ends within 21 days. The same check runs weekly in CI so an expiring
+roster cannot silently turn the default scan into unrestricted play.
+
+### Pokemon Catalog
+
+`npm run gen:pokemon-catalog` rebuilds `data/pokemon-catalog.v1.json` from the
+pinned `PokeAPI/api-data` revision recorded by the generator. The artifact stores
+normalized external facts, not scores or final scan results, and is validated
+against its manifest, regulation digest, forms, and variety joins. Generation is
+atomic: an incomplete or malformed source walk leaves the previous artifact
+untouched.
+
+The runtime still uses live PokeAPI acquisition while catalog parity work is in
+progress. See `docs/adr/0002-versioned-pokemon-catalog.md` for the migration
+decision and constraints.
+
 ### Domain Model
 
 Pokémon are the primary entity. `src/lib/pokemonEntry.ts` flattens the scan — which is organised around 171 type combinations — into flat Pokémon records carrying their own typing, stats, abilities and coverage. `groupByTypeName` is the inverse for views that browse by typing.

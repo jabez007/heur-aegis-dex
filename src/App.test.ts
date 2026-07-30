@@ -29,6 +29,7 @@ import { provideWorkspaceState } from './composables/useWorkspaceState';
 import type { ResistantTypeResult } from './lib/pokedexTypes';
 import {
   WORKSPACE_STORAGE_KEY,
+  WORKSPACE_VERSION,
   emptyWorkspaceArchive
 } from './lib/workspacePersistence';
 
@@ -66,6 +67,12 @@ let mounted: { app: VueApplication; element: HTMLElement } | undefined;
 
 beforeEach(() => {
   localStorage.clear();
+  if (!HTMLDialogElement.prototype.close) {
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+      configurable: true,
+      value: vi.fn()
+    });
+  }
   mocks.cacheGet.mockReset();
   mocks.cacheSet.mockReset();
   mocks.getResistantTypes.mockReset();
@@ -75,9 +82,103 @@ afterEach(() => {
   mounted?.app.unmount();
   mounted?.element.remove();
   mounted = undefined;
+  vi.useRealTimers();
 });
 
 describe('App scan and storage orchestration', () => {
+  it('requires an explicit regulation choice when the schedule has expired', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
+    mocks.cacheGet.mockReturnValue(null);
+    mocks.getResistantTypes.mockResolvedValue(scanResult);
+
+    mounted = mountApp();
+    await nextTick();
+    await Promise.resolve();
+
+    expect(mocks.getResistantTypes).not.toHaveBeenCalled();
+    expect(mounted.element.textContent).toContain('No active regulation is recorded');
+
+    const select = mounted.element.querySelector<HTMLSelectElement>('.regulation-select')!;
+    select.value = '__unrestricted__';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await Promise.resolve();
+
+    expect(mocks.getResistantTypes).toHaveBeenCalledOnce();
+  });
+
+  it('does not turn a removed workspace regulation into unrestricted play', async () => {
+    const archive = emptyWorkspaceArchive();
+    archive.draft = {
+      version: WORKSPACE_VERSION,
+      scan: {
+        inPokedex: 'national',
+        regulation: 'M-Z',
+        minimumAttacks: 80,
+        minimumBulk: 70,
+        allowMegas: false,
+        includeAbilityImmunities: true,
+        includeMoveCoverage: true
+      },
+      meta: { selectedTypes: [], requireAllTypes: false },
+      abilityOverrides: {},
+      team: { format: 'doubles', roster: [], bring: null, excluded: [] }
+    };
+    archive.draftUpdatedAt = '2026-07-30T00:00:00Z';
+    localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(archive));
+    mocks.cacheGet.mockReturnValue(null);
+    mocks.getResistantTypes.mockResolvedValue(scanResult);
+
+    mounted = mountApp();
+    await nextTick();
+    await Promise.resolve();
+
+    expect(mocks.getResistantTypes).not.toHaveBeenCalled();
+    expect(mounted.element.textContent).toContain('Regulation selection required // scan blocked');
+    expect(mounted.element.textContent).toContain('Regulation Selection Required');
+  });
+
+  it('clears previous scan results when a loaded workspace regulation was removed', async () => {
+    const archive = emptyWorkspaceArchive();
+    archive.saves = [{
+      id: 'stale-save',
+      name: 'Stale Regulation',
+      updatedAt: '2026-07-30T00:00:00Z',
+      snapshot: {
+        version: WORKSPACE_VERSION,
+        scan: {
+          inPokedex: 'national',
+          regulation: 'M-Z',
+          minimumAttacks: 80,
+          minimumBulk: 70,
+          allowMegas: false,
+          includeAbilityImmunities: true,
+          includeMoveCoverage: true
+        },
+        meta: { selectedTypes: [], requireAllTypes: false },
+        abilityOverrides: {},
+        team: { format: 'doubles', roster: [], bring: null, excluded: [] }
+      }
+    }];
+    localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(archive));
+    mocks.cacheGet.mockReturnValue(scanResult);
+
+    mounted = mountApp();
+    await vi.waitFor(() => expect(mounted!.element.textContent).toContain('Pokedex Database Ready'));
+
+    mounted.element.querySelector<HTMLButtonElement>('[data-workspace-action="load"]')!.click();
+    await nextTick();
+    const confirmLoad = [...mounted.element.querySelectorAll<HTMLButtonElement>('.confirm-row button')]
+      .find((button) => button.textContent?.trim() === 'Load')!;
+    confirmLoad.click();
+    await nextTick();
+    await Promise.resolve();
+
+    expect(mounted.element.textContent).not.toContain('Pokedex Database Ready');
+    expect(mounted.element.textContent).toContain('Regulation selection required // scan blocked');
+    expect(mocks.getResistantTypes).not.toHaveBeenCalled();
+  });
+
   it('treats malformed cached scans as misses', async () => {
     mocks.cacheGet.mockReturnValue('{broken-json');
     mocks.getResistantTypes.mockResolvedValue(scanResult);

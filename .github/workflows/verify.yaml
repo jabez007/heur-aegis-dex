@@ -52,6 +52,9 @@ jobs:
       - name: Type check
         run: npm run type-check
 
+      - name: Check regulation freshness
+        run: npm run check:regulations
+
       - name: Test
         # `npm test` is `vitest`, which is watch mode. Vitest does detect CI and
         # run once, but a gate whose termination depends on env detection is not

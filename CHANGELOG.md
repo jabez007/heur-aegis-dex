@@ -4,6 +4,16 @@
 
 ### Added
 
+- **A deterministic Pokemon catalog foundation.** A pinned-source generator now
+  emits a content-addressed catalog containing 18 types, 1,025 species and 1,351
+  varieties. The generator verifies the authoritative source indexes; semantic
+  tests verify joins, regulation coverage, curated forms and hashes. Runtime
+  scanning is deliberately unchanged until catalog/live parity is established.
+
+- **Regulation expiry fails closed.** Fresh sessions with no active regulation
+  must explicitly choose a known regulation or unrestricted play before scanning.
+  A 21-day freshness check runs during verification and on a weekly schedule.
+
 - **Critical browser orchestration now has component coverage.** App-level tests
   exercise malformed scan caches and recovery after another tab repairs workspace
   storage. The real browser dependency check also runs in CI instead of remaining

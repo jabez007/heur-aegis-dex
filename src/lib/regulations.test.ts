@@ -3,6 +3,7 @@ import {
   REGULATIONS,
   canMegaEvolve,
   getActiveRegulation,
+  getRegulationCoverageGap,
   getRegulation,
   hasCompleteData,
   isSpeciesLegal
@@ -83,6 +84,17 @@ describe('regulation lookup', () => {
   it('returns undefined outside every known regulation window', () => {
     expect(getActiveRegulation(new Date('2026-01-01T00:00:00Z'))).toBeUndefined();
     expect(getActiveRegulation(new Date('2027-01-01T00:00:00Z'))).toBeUndefined();
+  });
+
+  it('reports schedule gaps instead of treating unrestricted play as a regulation', () => {
+    expect(getRegulationCoverageGap(
+      new Date('2026-05-01T00:00:00Z'),
+      new Date('2026-08-01T00:00:00Z')
+    )).toBeUndefined();
+    expect(getRegulationCoverageGap(
+      new Date('2026-08-01T00:00:00Z'),
+      new Date('2026-10-01T00:00:00Z')
+    )?.toISOString()).toBe('2026-09-02T05:59:00.000Z');
   });
 });
 

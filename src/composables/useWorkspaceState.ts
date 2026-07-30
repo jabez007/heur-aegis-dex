@@ -4,16 +4,28 @@ import { getActiveRegulation } from '../lib/regulations';
 import type { WorkspaceSnapshotV1 } from '../lib/workspacePersistence';
 import { createInjectableState } from './injectableState';
 
-const workspaceState = createInjectableState('heur-aegis-dex:workspace', () => ({
-  inPokedex: ref<WorkspaceSnapshotV1['scan']['inPokedex']>('national'),
-  regulation: ref<string>(getActiveRegulation()?.id ?? ''),
-  minAttacks: ref<number>(DEFAULT_STATS_FILTERS.minimumAttacks),
-  minBulk: ref<number>(DEFAULT_STATS_FILTERS.minimumBulk),
-  allowMegas: ref(false),
-  includeAbilityImmunities: ref(true),
-  includeMoveCoverage: ref(true),
-  selectedAbilityNames: ref<Record<string, string>>({})
-}));
+export function getInitialRegulationSelection(at: Date = new Date()) {
+  const active = getActiveRegulation(at);
+  return {
+    regulationId: active?.id ?? '',
+    selectionRequired: !active
+  };
+}
+
+const workspaceState = createInjectableState('heur-aegis-dex:workspace', () => {
+  const initialRegulation = getInitialRegulationSelection();
+  return {
+    inPokedex: ref<WorkspaceSnapshotV1['scan']['inPokedex']>('national'),
+    regulation: ref<string>(initialRegulation.regulationId),
+    regulationSelectionRequired: ref(initialRegulation.selectionRequired),
+    minAttacks: ref<number>(DEFAULT_STATS_FILTERS.minimumAttacks),
+    minBulk: ref<number>(DEFAULT_STATS_FILTERS.minimumBulk),
+    allowMegas: ref(false),
+    includeAbilityImmunities: ref(true),
+    includeMoveCoverage: ref(true),
+    selectedAbilityNames: ref<Record<string, string>>({})
+  };
+});
 
 export const provideWorkspaceState = workspaceState.provideState;
 export const __resetWorkspaceState = workspaceState.resetFallbackState;
@@ -34,6 +46,7 @@ export function useWorkspaceState() {
   const restoreScan = (scan: WorkspaceSnapshotV1['scan']) => {
     state.inPokedex.value = scan.inPokedex;
     state.regulation.value = scan.regulation ?? '';
+    state.regulationSelectionRequired.value = false;
     state.minAttacks.value = scan.minimumAttacks;
     // The old defense average is not numerically equivalent to HP-adjusted
     // bulk, so legacy workspaces move to the calibrated default rather than
@@ -42,6 +55,14 @@ export function useWorkspaceState() {
     state.allowMegas.value = scan.allowMegas;
     state.includeAbilityImmunities.value = scan.includeAbilityImmunities;
     state.includeMoveCoverage.value = scan.includeMoveCoverage;
+  };
+
+  const confirmRegulationSelection = () => {
+    state.regulationSelectionRequired.value = false;
+  };
+
+  const requireRegulationSelection = () => {
+    state.regulationSelectionRequired.value = true;
   };
 
   const setSelectedAbilityName = (pokemonName: string, abilityName: string) => {
@@ -59,6 +80,8 @@ export function useWorkspaceState() {
     ...state,
     snapshotScan,
     restoreScan,
+    confirmRegulationSelection,
+    requireRegulationSelection,
     setSelectedAbilityName,
     restoreAbilityOverrides
   };

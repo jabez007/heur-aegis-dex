@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useWorkspaceState } from './useWorkspaceState';
+import { getInitialRegulationSelection, useWorkspaceState } from './useWorkspaceState';
 
 describe('useWorkspaceState', () => {
   const workspace = useWorkspaceState();
@@ -36,6 +36,14 @@ describe('useWorkspaceState', () => {
       allowMegas: true,
       includeAbilityImmunities: false,
       includeMoveCoverage: false
+    });
+    expect(workspace.regulationSelectionRequired.value).toBe(false);
+  });
+
+  it('requires an explicit choice when no regulation is active', () => {
+    expect(getInitialRegulationSelection(new Date('2027-01-01T00:00:00Z'))).toEqual({
+      regulationId: '',
+      selectionRequired: true
     });
   });
 
