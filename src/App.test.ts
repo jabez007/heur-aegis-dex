@@ -86,6 +86,28 @@ afterEach(() => {
 });
 
 describe('App scan and storage orchestration', () => {
+  it('keeps Advanced Lab as default and destroys Guided Build when leaving it', async () => {
+    mocks.cacheGet.mockReturnValue(null);
+    mocks.getResistantTypes.mockResolvedValue(scanResult);
+
+    mounted = mountApp();
+    const regulationSelect = mounted.element.querySelector<HTMLSelectElement>('.regulation-select')!;
+    regulationSelect.value = '__unrestricted__';
+    regulationSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(mounted!.element.querySelector('.workspace-mode-options')).not.toBeNull());
+
+    expect(mounted.element.querySelector('#guided-title')).toBeNull();
+    const [guidedButton, advancedButton] = mounted.element
+      .querySelectorAll<HTMLButtonElement>('.workspace-mode-options button');
+    guidedButton.click();
+    await nextTick();
+    expect(mounted.element.querySelector('#guided-title')).not.toBeNull();
+
+    advancedButton.click();
+    await nextTick();
+    expect(mounted.element.querySelector('#guided-title')).toBeNull();
+  });
+
   it('requires an explicit regulation choice when the schedule has expired', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));

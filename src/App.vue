@@ -154,8 +154,41 @@
           </div>
         </section>
 
-        <CustomCupBuilder
+        <nav
           v-if="types.length > 0"
+          class="workspace-mode gba-container"
+          aria-label="Builder mode"
+        >
+          <div>
+            <p>BUILD MODE</p>
+            <span>Guided help or the full analysis workspace.</span>
+          </div>
+          <div class="workspace-mode-options">
+            <button
+              type="button"
+              :class="{ active: builderMode === 'guided' }"
+              :aria-pressed="builderMode === 'guided'"
+              @click="builderMode = 'guided'"
+            >
+              Guided Build
+            </button>
+            <button
+              type="button"
+              :class="{ active: builderMode === 'advanced' }"
+              :aria-pressed="builderMode === 'advanced'"
+              @click="builderMode = 'advanced'"
+            >
+              Advanced Lab
+            </button>
+          </div>
+        </nav>
+
+        <GuidedPartnerBuilder
+          v-if="types.length > 0 && builderMode === 'guided'"
+          :all-data-types="types"
+        />
+        <CustomCupBuilder
+          v-else-if="types.length > 0"
           :all-data-types="types"
         />
         <section
@@ -229,6 +262,7 @@ import { computed, nextTick, ref, watch, onBeforeUnmount, onMounted } from 'vue'
 import lscache from 'lscache';
 import { REGULATIONS, getActiveRegulation, getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
+import GuidedPartnerBuilder from './components/GuidedPartnerBuilder.vue';
 import GbaNotification from './components/GbaNotification.vue';
 import WorkspaceSavesDialog from './components/WorkspaceSavesDialog.vue';
 import { useMetaFilters } from './composables/useMetaFilters';
@@ -255,6 +289,7 @@ import { POKEMON_SCAN_CACHE_REVISION } from './lib/pokemonCatalog';
 
 const loading = ref(false);
 const types = ref<ResistantTypeResult[]>([]);
+const builderMode = ref<'guided' | 'advanced'>('advanced');
 const fetchError = ref('');
 const scanRequiresReload = ref(false);
 const workspace = useWorkspaceState();
@@ -683,6 +718,7 @@ onBeforeUnmount(() => {
   text-align: center;
   width: 100%;
   max-width: 1200px;
+  box-sizing: border-box;
   
   h1 {
     font-size: 3rem;
@@ -711,6 +747,48 @@ onBeforeUnmount(() => {
 
 .state-panel {
   text-align: center;
+}
+
+.workspace-mode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.workspace-mode p,
+.workspace-mode span {
+  margin: 0;
+}
+
+.workspace-mode p {
+  font-family: var(--gba-font-heading);
+  font-size: 1.15rem;
+}
+
+.workspace-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  border: 2px solid var(--gba-text-dark);
+}
+
+.workspace-mode-options button {
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--gba-text-dark);
+  cursor: pointer;
+  font-family: var(--gba-font-heading);
+  text-transform: uppercase;
+}
+
+.workspace-mode-options button + button {
+  border-left: 2px solid var(--gba-text-dark);
+}
+
+.workspace-mode-options button.active {
+  background: var(--gba-accent-yellow);
+  box-shadow: inset 0 -4px 0 var(--gba-accent-magenta);
 }
 
 .action-btn {
@@ -771,6 +849,31 @@ onBeforeUnmount(() => {
 @media (max-width: 600px) {
   .stat-controls {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-mode {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .controls {
+    align-items: stretch;
+  }
+
+  .controls .gba-label {
+    align-items: flex-start;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .controls .gba-select,
+  .regulation-select {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .stat-controls .checkbox-label {
+    white-space: normal;
   }
 }
 
