@@ -3,6 +3,7 @@ import {
   createGuidedPlan,
   getGuidedPathLabel,
   getGuidedRoster,
+  isGuidedPlanState,
   transitionGuidedPlan,
   type GuidedPlanAction,
   type GuidedPlanState,
@@ -214,6 +215,7 @@ const assertPlanInvariants = (state: GuidedPlanState, originalFavorites: readonl
   const invariant = (holds: boolean, message: string) => {
     if (!holds) throw new Error(message);
   };
+  invariant(isGuidedPlanState(state), 'state validator rejected a reachable state');
   invariant(JSON.stringify(state.lockedFavorites) === JSON.stringify(originalFavorites), 'favorites changed');
   invariant(state.lockedFavorites.length >= 1 && state.lockedFavorites.length <= 3, 'favorite count invalid');
   invariant(

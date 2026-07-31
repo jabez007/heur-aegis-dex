@@ -115,6 +115,81 @@ const cloneMember = (member: GuidedMemberChoice): GuidedMemberChoice => ({ ...me
 const codePointCompare = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const hasExactKeys = (value: Record<string, unknown>, keys: readonly string[]): boolean => {
+  const actual = Object.keys(value).sort(codePointCompare);
+  const expected = [...keys].sort(codePointCompare);
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+};
+
+function isGuidedPath(
+  value: unknown,
+  id: GuidedPathId,
+  favorites: readonly GuidedMemberChoice[]
+): value is GuidedPath {
+  if (!isObject(value) || !hasExactKeys(value, ['id', 'status', 'additions']) ||
+    value.id !== id || !Array.isArray(value.additions) ||
+    !value.additions.every((member) =>
+      isObject(member) && hasExactKeys(member, ['varietyName', 'speciesName', 'abilityName']) && validMember(member)
+    )) return false;
+  const additions = value.additions as GuidedMemberChoice[];
+  const validStatus =
+    (value.status === 'active' && additions.length <= 2) ||
+    (value.status === 'paused-after-two' && additions.length === 2) ||
+    (value.status === 'limit-reached' && additions.length === 3);
+  if (!validStatus || favorites.length + additions.length > GUIDED_MAX_ROSTER_SIZE) return false;
+  const roster = [...favorites, ...additions];
+  return new Set(roster.map(({ speciesName }) => speciesName)).size === roster.length &&
+    new Set(roster.map(({ varietyName }) => varietyName)).size === roster.length;
+}
+
+/** Validates an untrusted persisted state against every reachable reducer invariant. */
+export function isGuidedPlanState(value: unknown): value is GuidedPlanState {
+  if (!isObject(value) || !hasExactKeys(value, ['lockedFavorites', 'format', 'excludedSpecies', 'branch']) ||
+    !Array.isArray(value.lockedFavorites) ||
+    value.lockedFavorites.length < 1 || value.lockedFavorites.length > 3 ||
+    !value.lockedFavorites.every((member) =>
+      isObject(member) && hasExactKeys(member, ['varietyName', 'speciesName', 'abilityName']) && validMember(member)
+    ) || !isObject(value.format) || !hasExactKeys(value.format, ['id', 'status']) ||
+    typeof value.format.id !== 'string' || !isBattleFormatId(value.format.id) ||
+    (value.format.status !== 'editable' && value.format.status !== 'locked') ||
+    !Array.isArray(value.excludedSpecies) ||
+    !value.excludedSpecies.every((entry) => typeof entry === 'string' && entry.trim().length > 0) ||
+    !isObject(value.branch) || !isObject(value.branch.paths)) return false;
+
+  const favorites = value.lockedFavorites as GuidedMemberChoice[];
+  if (new Set(favorites.map(({ speciesName }) => speciesName)).size !== favorites.length) return false;
+  const exclusions = value.excludedSpecies as string[];
+  if (new Set(exclusions).size !== exclusions.length ||
+    exclusions.some((species) => favorites.some((favorite) => favorite.speciesName === species)) ||
+    exclusions.some((species, index) => index > 0 && codePointCompare(exclusions[index - 1], species) >= 0)) {
+    return false;
+  }
+
+  const pathA = value.branch.paths.A;
+  if (!isGuidedPath(pathA, 'A', favorites)) return false;
+  if (value.branch.kind === 'single-path') {
+    return hasExactKeys(value.branch, ['kind', 'activePathId', 'paths']) &&
+      hasExactKeys(value.branch.paths, ['A']) && value.branch.activePathId === 'A' &&
+      (value.format.status === 'locked' || pathA.additions.length === 0);
+  }
+  if (value.branch.kind !== 'forked' || !hasExactKeys(value.branch, [
+    'kind', 'activePathId', 'forkPointAdditionCount', 'paths'
+  ]) || !hasExactKeys(value.branch.paths, ['A', 'B']) ||
+    (value.branch.activePathId !== 'A' && value.branch.activePathId !== 'B') ||
+    !Number.isInteger(value.branch.forkPointAdditionCount) ||
+    (value.branch.forkPointAdditionCount as number) < 0 ||
+    (value.branch.forkPointAdditionCount as number) > 2 ||
+    value.format.status !== 'locked') return false;
+  const pathB = value.branch.paths.B;
+  if (!isGuidedPath(pathB, 'B', favorites)) return false;
+  const forkPoint = value.branch.forkPointAdditionCount as number;
+  return pathA.additions.length >= forkPoint && pathB.additions.length >= forkPoint &&
+    JSON.stringify(pathA.additions.slice(0, forkPoint)) === JSON.stringify(pathB.additions.slice(0, forkPoint));
+}
+
 export function createGuidedPlan(input: CreateGuidedPlanInput): CreateGuidedPlanResult {
   if (!isBattleFormatId(input.format)) {
     return { ok: false, error: { code: 'INVALID_FORMAT', actionType: 'create-plan' } };
