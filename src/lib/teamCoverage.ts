@@ -47,6 +47,8 @@ export interface TeamCoverageAnalysis {
   weaknessCounts: Record<string, number>;
   quadrupleWeaknessCounts: Record<string, number>;
   resistanceCounts: Record<string, number>;
+  /** Tally of strict 0x type matchups, kept separate from ordinary resistances. */
+  immunityCounts?: Record<string, number>;
   coverageCounts: Record<string, number>;
   /** Tally of types reachable through learnable moves. */
   moveCoverageCounts: Record<string, number>;
@@ -148,7 +150,10 @@ const namesWhere = (
 export function analyzeTeamCoverage(members: TeamCoverageProfile[]): TeamCoverageAnalysis {
   const weaknessCounts = countOccurrences(members, (member) => member.weaknesses);
   const quadrupleWeaknessCounts = countOccurrences(members, (member) => member.quadruple_weaknesses);
-  const resistanceCounts = countOccurrences(members, (member) => member.resistances);
+  const resistanceCounts = countOccurrences(members, (member) => [
+    ...new Set([...(member.resistances || []), ...(member.immunities || [])])
+  ]);
+  const immunityCounts = countOccurrences(members, (member) => member.immunities);
   const coverageCounts = countOccurrences(members, (member) => member.coverages);
   const moveCoverageCounts = countOccurrences(members, (member) => member.moveCoverages);
 
@@ -163,6 +168,7 @@ export function analyzeTeamCoverage(members: TeamCoverageProfile[]): TeamCoverag
     weaknessCounts,
     quadrupleWeaknessCounts,
     resistanceCounts,
+    immunityCounts,
     coverageCounts,
     moveCoverageCounts,
     defensivelyUncoveredWeaknesses: namesWhere(weaknessCounts, (typeName) => !hasDefensiveAnswer(typeName)),

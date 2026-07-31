@@ -15,7 +15,7 @@
 import type { PokemonStats } from './pokedexTypes';
 import { hpAdjustedBulk } from './statMetrics';
 import type { TeamCoverageAnalysis } from './teamCoverage';
-import { getApplicableRoles, type TeamRoleAnalysis } from './abilityRoles';
+import { getApplicableRoles, type AbilityRole, type TeamRoleAnalysis } from './abilityRoles';
 import { getQualityMultipliers } from './abilityEffects';
 import { BATTLE_FORMATS, DEFAULT_BATTLE_FORMAT, type BattleFormat } from './battleFormats';
 
@@ -469,6 +469,191 @@ export interface SynergyInput {
   typeCount: number;
 }
 
+export type SynergyBonusTermId =
+  | 'coverageBreadth'
+  | 'resistanceBreadth'
+  | 'typeDiversity'
+  | 'enabledSpread'
+  | 'supportRoles';
+
+export type SynergyPenaltyTermId =
+  | 'uncoveredWeakness'
+  | 'uncoveredQuadrupleWeakness'
+  | 'sharedWeakness'
+  | 'quadrupleWeakness'
+  | 'sharedQuadrupleWeakness'
+  | 'spreadConflict'
+  | 'fieldConflict';
+
+export interface SynergyContribution<Id extends string = string> {
+  readonly id: Id;
+  readonly direction: 'bonus' | 'penalty';
+  readonly weight: number;
+  readonly numerator: number;
+  readonly denominator: number;
+  readonly normalizedValue: number;
+  readonly contribution: number;
+  readonly facts: readonly string[];
+}
+
+export interface TeamSynergyBreakdown {
+  readonly status: 'scored' | 'degenerate';
+  readonly formatId: BattleFormat['id'];
+  readonly maxDistinctTypes: number;
+  readonly applicableRoleCount: number;
+  readonly bonusTerms: readonly SynergyContribution<SynergyBonusTermId>[];
+  readonly penaltyTerms: readonly SynergyContribution<SynergyPenaltyTermId>[];
+  readonly bonus: number;
+  readonly penalty: number;
+  readonly unclampedScore: number;
+  readonly score: number;
+}
+
+const sortedKeys = (counts: Record<string, number>): string[] => Object.keys(counts).sort();
+
+function evaluateTeamSynergy(
+  input: SynergyInput,
+  collect?: (breakdown: TeamSynergyBreakdown) => void
+): number {
+  const { coverage, roles, typesTotal, teamSize, typeCount } = input;
+  const format = input.format ?? BATTLE_FORMATS[DEFAULT_BATTLE_FORMAT];
+  const applicableRoleCount = getApplicableRoles(format.hasAlly).length;
+  if (typeCount <= 0 || teamSize <= 0) {
+    collect?.({
+      status: 'degenerate',
+      formatId: format.id,
+      maxDistinctTypes: 0,
+      applicableRoleCount,
+      bonusTerms: [],
+      penaltyTerms: [],
+      bonus: 0,
+      penalty: 0,
+      unclampedScore: 0,
+      score: 0
+    });
+    return 0;
+  }
+
+  const bonusWeights = SYNERGY_BONUS_WEIGHTS_BY_FORMAT[format.id];
+  const spreadConflictWeight = format.hasAlly ? SYNERGY_PENALTY_WEIGHTS.spreadConflict : 0;
+  const sumBeyondFirst = (counts: Record<string, number>, names: string[]): number =>
+    names.reduce((total, name) => total + (counts[name] - 1), 0);
+  const sumAll = (counts: Record<string, number>): number =>
+    Object.values(counts).reduce((total, count) => total + count, 0);
+  const maxDistinctTypes = Math.min(teamSize * 2, typeCount);
+
+  const coverageBreadthValue = clamp01(coverage.uniqueCoverages / typeCount);
+  const resistanceBreadthValue = clamp01(coverage.uniqueResistances / typeCount);
+  const typeDiversityValue = clamp01(typesTotal / maxDistinctTypes);
+  const enabledSpreadValue = clamp01(coverage.enabledSpreadTypes.length / maxDistinctTypes);
+  const supportRolesValue = clamp01((roles?.roles.length ?? 0) / applicableRoleCount);
+  const coverageBreadth = bonusWeights.coverageBreadth * coverageBreadthValue;
+  const resistanceBreadth = bonusWeights.resistanceBreadth * resistanceBreadthValue;
+  const typeDiversity = bonusWeights.typeDiversity * typeDiversityValue;
+  const enabledSpread = bonusWeights.enabledSpread * enabledSpreadValue;
+  const supportRoles = bonusWeights.supportRoles * supportRolesValue;
+  const bonus = coverageBreadth + resistanceBreadth + typeDiversity + enabledSpread + supportRoles;
+
+  const sharedWeaknessNumerator = sumBeyondFirst(coverage.weaknessCounts, coverage.sharedWeaknesses);
+  const quadrupleWeaknessNumerator = sumAll(coverage.quadrupleWeaknessCounts);
+  const sharedQuadrupleNumerator = sumBeyondFirst(
+    coverage.quadrupleWeaknessCounts,
+    coverage.sharedQuadrupleWeaknesses
+  );
+  const uncoveredWeaknessValue = coverage.uncoveredWeaknesses.length / typeCount;
+  const uncoveredQuadrupleValue = coverage.uncoveredQuadrupleWeaknesses.length / typeCount;
+  const sharedWeaknessValue = sharedWeaknessNumerator / (teamSize * 2);
+  const quadrupleWeaknessValue = quadrupleWeaknessNumerator / teamSize;
+  const sharedQuadrupleValue = sharedQuadrupleNumerator / teamSize;
+  const spreadConflictValue = clamp01(coverage.spreadConflicts.length / maxDistinctTypes);
+  const fieldConflictValue = clamp01((roles?.fieldConflicts.length ?? 0) / applicableRoleCount);
+  const uncoveredWeakness = SYNERGY_PENALTY_WEIGHTS.uncoveredWeakness * uncoveredWeaknessValue;
+  const uncoveredQuadrupleWeakness =
+    SYNERGY_PENALTY_WEIGHTS.uncoveredQuadrupleWeakness * uncoveredQuadrupleValue;
+  const sharedWeakness = SYNERGY_PENALTY_WEIGHTS.sharedWeakness * sharedWeaknessValue;
+  const quadrupleWeakness = SYNERGY_PENALTY_WEIGHTS.quadrupleWeakness * quadrupleWeaknessValue;
+  const sharedQuadrupleWeakness =
+    SYNERGY_PENALTY_WEIGHTS.sharedQuadrupleWeakness * sharedQuadrupleValue;
+  const spreadConflict = spreadConflictWeight * spreadConflictValue;
+  const fieldConflict = SYNERGY_PENALTY_WEIGHTS.fieldConflict * fieldConflictValue;
+  const penalty = uncoveredWeakness + uncoveredQuadrupleWeakness + sharedWeakness +
+    quadrupleWeakness + sharedQuadrupleWeakness + spreadConflict + fieldConflict;
+  const unclampedScore = bonus - penalty;
+  const score = Math.min(1, Math.max(-1, unclampedScore));
+
+  if (collect) {
+    const bonusTerm = (
+      id: SynergyBonusTermId,
+      weight: number,
+      numerator: number,
+      denominator: number,
+      normalizedValue: number,
+      contribution: number,
+      facts: readonly string[]
+    ): SynergyContribution<SynergyBonusTermId> => ({
+      id, direction: 'bonus', weight, numerator, denominator, normalizedValue, contribution, facts
+    });
+    const penaltyTerm = (
+      id: SynergyPenaltyTermId,
+      weight: number,
+      numerator: number,
+      denominator: number,
+      normalizedValue: number,
+      contribution: number,
+      facts: readonly string[]
+    ): SynergyContribution<SynergyPenaltyTermId> => ({
+      id, direction: 'penalty', weight, numerator, denominator, normalizedValue, contribution, facts
+    });
+
+    collect({
+      status: 'scored',
+      formatId: format.id,
+      maxDistinctTypes,
+      applicableRoleCount,
+      bonusTerms: [
+        bonusTerm('coverageBreadth', bonusWeights.coverageBreadth, coverage.uniqueCoverages, typeCount,
+          coverageBreadthValue, coverageBreadth, sortedKeys(coverage.coverageCounts)),
+        bonusTerm('resistanceBreadth', bonusWeights.resistanceBreadth, coverage.uniqueResistances, typeCount,
+          resistanceBreadthValue, resistanceBreadth, sortedKeys(coverage.resistanceCounts)),
+        bonusTerm('typeDiversity', bonusWeights.typeDiversity, typesTotal, maxDistinctTypes,
+          typeDiversityValue, typeDiversity, []),
+        bonusTerm('enabledSpread', bonusWeights.enabledSpread, coverage.enabledSpreadTypes.length,
+          maxDistinctTypes, enabledSpreadValue, enabledSpread, [...coverage.enabledSpreadTypes].sort()),
+        bonusTerm('supportRoles', bonusWeights.supportRoles, roles?.roles.length ?? 0,
+          applicableRoleCount, supportRolesValue, supportRoles,
+          [...(roles?.roles ?? [])].sort() as AbilityRole[])
+      ],
+      penaltyTerms: [
+        penaltyTerm('uncoveredWeakness', SYNERGY_PENALTY_WEIGHTS.uncoveredWeakness,
+          coverage.uncoveredWeaknesses.length, typeCount, uncoveredWeaknessValue, uncoveredWeakness,
+          [...coverage.uncoveredWeaknesses].sort()),
+        penaltyTerm('uncoveredQuadrupleWeakness', SYNERGY_PENALTY_WEIGHTS.uncoveredQuadrupleWeakness,
+          coverage.uncoveredQuadrupleWeaknesses.length, typeCount, uncoveredQuadrupleValue,
+          uncoveredQuadrupleWeakness, [...coverage.uncoveredQuadrupleWeaknesses].sort()),
+        penaltyTerm('sharedWeakness', SYNERGY_PENALTY_WEIGHTS.sharedWeakness, sharedWeaknessNumerator,
+          teamSize * 2, sharedWeaknessValue, sharedWeakness, [...coverage.sharedWeaknesses].sort()),
+        penaltyTerm('quadrupleWeakness', SYNERGY_PENALTY_WEIGHTS.quadrupleWeakness,
+          quadrupleWeaknessNumerator, teamSize, quadrupleWeaknessValue, quadrupleWeakness,
+          sortedKeys(coverage.quadrupleWeaknessCounts)),
+        penaltyTerm('sharedQuadrupleWeakness', SYNERGY_PENALTY_WEIGHTS.sharedQuadrupleWeakness,
+          sharedQuadrupleNumerator, teamSize, sharedQuadrupleValue, sharedQuadrupleWeakness,
+          [...coverage.sharedQuadrupleWeaknesses].sort()),
+        penaltyTerm('spreadConflict', spreadConflictWeight, coverage.spreadConflicts.length,
+          maxDistinctTypes, spreadConflictValue, spreadConflict, [...coverage.spreadConflicts].sort()),
+        penaltyTerm('fieldConflict', SYNERGY_PENALTY_WEIGHTS.fieldConflict,
+          roles?.fieldConflicts.length ?? 0, applicableRoleCount, fieldConflictValue, fieldConflict,
+          [...(roles?.fieldConflicts ?? [])].sort())
+      ],
+      bonus,
+      penalty,
+      unclampedScore,
+      score
+    });
+  }
+
+  return score;
+}
+
 /**
  * Scores how well a team's members complement each other.
  *
@@ -476,43 +661,16 @@ export interface SynergyInput {
  * @returns A value in -1..1, where negative means the gaps outweigh the synergy.
  */
 export function scoreTeamSynergy(input: SynergyInput): number {
-  const { coverage, roles, typesTotal, teamSize, typeCount } = input;
-  if (typeCount <= 0 || teamSize <= 0) return 0;
+  return evaluateTeamSynergy(input);
+}
 
-  const format = input.format ?? BATTLE_FORMATS[DEFAULT_BATTLE_FORMAT];
-  const bonusWeights = SYNERGY_BONUS_WEIGHTS_BY_FORMAT[format.id];
-  // With no ally on the field, neither half of the spread model can occur.
-  const spreadConflictWeight = format.hasAlly ? SYNERGY_PENALTY_WEIGHTS.spreadConflict : 0;
-  // Normalizing by the roles the format can actually use keeps full breadth
-  // reachable in singles, where two of the five roles are inert.
-  const applicableRoleCount = getApplicableRoles(format.hasAlly).length;
-
-  const sumBeyondFirst = (counts: Record<string, number>, names: string[]): number =>
-    names.reduce((total, name) => total + (counts[name] - 1), 0);
-  const sumAll = (counts: Record<string, number>): number =>
-    Object.values(counts).reduce((total, count) => total + count, 0);
-
-  // A team of N distinct dual types can show at most 2N elemental types, but
-  // never more than the number of types in play.
-  const maxDistinctTypes = Math.min(teamSize * 2, typeCount);
-
-  const bonus =
-    (bonusWeights.coverageBreadth * clamp01(coverage.uniqueCoverages / typeCount)) +
-    (bonusWeights.resistanceBreadth * clamp01(coverage.uniqueResistances / typeCount)) +
-    (bonusWeights.typeDiversity * clamp01(typesTotal / maxDistinctTypes)) +
-    (bonusWeights.enabledSpread * clamp01(coverage.enabledSpreadTypes.length / maxDistinctTypes)) +
-    (bonusWeights.supportRoles * clamp01((roles?.roles.length ?? 0) / applicableRoleCount));
-
-  const penalty =
-    (SYNERGY_PENALTY_WEIGHTS.uncoveredWeakness * (coverage.uncoveredWeaknesses.length / typeCount)) +
-    (SYNERGY_PENALTY_WEIGHTS.uncoveredQuadrupleWeakness * (coverage.uncoveredQuadrupleWeaknesses.length / typeCount)) +
-    (SYNERGY_PENALTY_WEIGHTS.sharedWeakness * (sumBeyondFirst(coverage.weaknessCounts, coverage.sharedWeaknesses) / (teamSize * 2))) +
-    (SYNERGY_PENALTY_WEIGHTS.quadrupleWeakness * (sumAll(coverage.quadrupleWeaknessCounts) / teamSize)) +
-    (SYNERGY_PENALTY_WEIGHTS.sharedQuadrupleWeakness * (sumBeyondFirst(coverage.quadrupleWeaknessCounts, coverage.sharedQuadrupleWeaknesses) / teamSize)) +
-    (spreadConflictWeight * clamp01(coverage.spreadConflicts.length / maxDistinctTypes)) +
-    (SYNERGY_PENALTY_WEIGHTS.fieldConflict * clamp01((roles?.fieldConflicts.length ?? 0) / applicableRoleCount));
-
-  return Math.min(1, Math.max(-1, bonus - penalty));
+/** Returns the exact weighted terms used by `scoreTeamSynergy`. */
+export function getTeamSynergyBreakdown(input: SynergyInput): TeamSynergyBreakdown {
+  let breakdown: TeamSynergyBreakdown | undefined;
+  evaluateTeamSynergy(input, (value) => {
+    breakdown = value;
+  });
+  return breakdown!;
 }
 
 /**

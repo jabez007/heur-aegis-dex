@@ -7,6 +7,7 @@ import {
   MEMBER_WEIGHTS,
   SYNERGY_BONUS_WEIGHTS_BY_FORMAT,
   composeTeamScore,
+  getTeamSynergyBreakdown,
   scoreMemberQuality,
   scoreTeamSynergy
 } from './teamScoring';
@@ -202,6 +203,58 @@ describe('scoreTeamSynergy', () => {
 
   it('returns a neutral score when the team shape is degenerate', () => {
     expect(scoreTeamSynergy({ coverage: analyzeTeamCoverage([]), typesTotal: 0, teamSize: 0, typeCount: 18 })).toBe(0);
+  });
+
+  it('exposes the canonical contribution terms without changing the score', () => {
+    const members = [
+      {
+        types: ['ground'],
+        weaknesses: ['water', 'ice'],
+        quadruple_weaknesses: ['ice'],
+        resistances: ['rock'],
+        immunities: [],
+        coverages: ['fire']
+      },
+      {
+        types: ['flying'],
+        weaknesses: ['ice'],
+        quadruple_weaknesses: [],
+        resistances: ['ground'],
+        immunities: ['ground'],
+        coverages: ['grass']
+      }
+    ];
+    const input = {
+      coverage: analyzeTeamCoverage(members),
+      roles: analyzeTeamRoles([{ abilityName: 'intimidate' }, { abilityName: 'drought' }]),
+      format: BATTLE_FORMATS.doubles,
+      typesTotal: 2,
+      teamSize: 2,
+      typeCount: 18
+    };
+    const breakdown = getTeamSynergyBreakdown(input);
+
+    expect(Object.is(breakdown.score, scoreTeamSynergy(input))).toBe(true);
+    expect(Object.is(breakdown.score, -0.33616666666666667)).toBe(true);
+    expect(breakdown.bonusTerms.map((term) => term.id)).toEqual([
+      'coverageBreadth',
+      'resistanceBreadth',
+      'typeDiversity',
+      'enabledSpread',
+      'supportRoles'
+    ]);
+    expect(breakdown.penaltyTerms.map((term) => term.id)).toEqual([
+      'uncoveredWeakness',
+      'uncoveredQuadrupleWeakness',
+      'sharedWeakness',
+      'quadrupleWeakness',
+      'sharedQuadrupleWeakness',
+      'spreadConflict',
+      'fieldConflict'
+    ]);
+    expect(breakdown.unclampedScore).toBe(breakdown.bonus - breakdown.penalty);
+    expect(breakdown.bonusTerms.find((term) => term.id === 'supportRoles')?.facts)
+      .toEqual(['intimidate', 'weather-setter']);
   });
 });
 

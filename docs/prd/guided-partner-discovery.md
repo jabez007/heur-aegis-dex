@@ -402,6 +402,14 @@ convention directly.
 - Candidate improvement is `baselineContribution - candidateContribution` for
   the primary need, aggregated across the candidate's favorite-containing legal
   lines by the approved Phase 0 rule. It must be greater than zero.
+- Guided line breakdowns use `format.broughtToBattle` as the denominator for
+  team-size-normalized terms, including partial lines. Adding a neutral member
+  must not create improvement through denominator dilution.
+- A shared weakness or shared quadruple weakness keeps its canonical raw
+  penalty when a resistant partner is added. Its guided contribution also
+  includes the same-type opportunity from the canonical resistance-breadth
+  term, which the resistant partner can close. The interface must not claim the
+  original weakness was removed.
 - A newly introduced risk is any canonical penalty contribution with a positive
   `delta`. The largest weighted delta is the primary tradeoff; ties sort
   by `GuidedRuleId` code-point order.
@@ -414,6 +422,9 @@ convention directly.
   inputs.
 - If no candidate improves a need, the UI explains the limitation and offers
   the advanced browser. It must not relabel a neutral candidate as a solution.
+- `balanced-improvement` is selected only when no other modeled need has positive
+  severity. It returns no recommendations and is not an alternate aggregate
+  scoring model or a fallback for an unfixable primary need.
 - Candidate and evidence ordering must be stable.
 
 ### Persistence
