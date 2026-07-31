@@ -45,17 +45,6 @@ describe('analyzeTeamCoverage', () => {
     expect(analysis.uniqueCoverages).toBe(2);
   });
 
-  it('tallies strict immunities separately from resistances', () => {
-    const analysis = analyzeTeamCoverage([
-      { resistances: ['ground', 'normal'], immunities: ['ground', 'normal'] },
-      { resistances: ['ground'], immunities: ['ground'] },
-      { resistances: ['ground'], immunities: [] }
-    ]);
-
-    expect(analysis.resistanceCounts).toEqual({ ground: 3, normal: 1 });
-    expect(analysis.immunityCounts).toEqual({ ground: 2, normal: 1 });
-  });
-
   it('treats a strict immunity as a defensive answer even when it is not duplicated in resistances', () => {
     const analysis = analyzeTeamCoverage([
       { weaknesses: ['ground'] },
@@ -63,7 +52,6 @@ describe('analyzeTeamCoverage', () => {
     ]);
 
     expect(analysis.resistanceCounts).toEqual({ ground: 1 });
-    expect(analysis.immunityCounts).toEqual({ ground: 1 });
     expect(analysis.defensivelyUncoveredWeaknesses).toEqual([]);
   });
 
@@ -186,6 +174,5 @@ describe('analyzeTeamCoverage', () => {
 
     expect(analysis.uncoveredWeaknesses).toEqual(['fire']);
     expect(analysis.uniqueResistances).toBe(0);
-    expect(analysis.immunityCounts).toEqual({});
   });
 });

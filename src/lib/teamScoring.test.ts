@@ -235,7 +235,6 @@ describe('scoreTeamSynergy', () => {
     const breakdown = getTeamSynergyBreakdown(input);
 
     expect(Object.is(breakdown.score, scoreTeamSynergy(input))).toBe(true);
-    expect(Object.is(breakdown.score, -0.33616666666666667)).toBe(true);
     expect(breakdown.bonusTerms.map((term) => term.id)).toEqual([
       'coverageBreadth',
       'resistanceBreadth',

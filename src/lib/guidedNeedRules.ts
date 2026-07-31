@@ -1,5 +1,5 @@
-import { analyzeTeamRoles, getApplicableRoles } from './abilityRoles';
-import { combinationsOf, type BattleFormat } from './battleFormats';
+import { analyzeTeamRoles, isImmuneToAllyMoves } from './abilityRoles';
+import type { BattleFormat } from './battleFormats';
 import { analyzeTeamCoverage, type TeamCoverageProfile } from './teamCoverage';
 import {
   getTeamSynergyBreakdown,
@@ -7,19 +7,18 @@ import {
   type SynergyPenaltyTermId,
   type TeamSynergyBreakdown
 } from './teamScoring';
+import { withAbility, type PokemonEntry } from './pokemonEntry';
+import { candidatePriority } from './rosterGeneration';
+
+export const GUIDED_IMPROVEMENT_EPSILON = 1e-12;
 
 export type StructuralNeedId =
   | 'shared-quadruple-weakness'
   | 'unanswered-weakness'
-  | 'shared-weakness'
-  | 'missing-coverage'
-  | 'missing-modeled-role'
-  | 'balanced-improvement';
+  | 'shared-weakness';
 
 export type GuidedRuleId =
-  | 'coverageBreadth'
   | 'resistanceBreadth'
-  | 'supportRoles'
   | 'uncoveredWeakness'
   | 'uncoveredQuadrupleWeakness'
   | 'sharedWeakness'
@@ -29,7 +28,6 @@ export type GuidedRuleId =
   | 'fieldConflict';
 
 export interface GuidedLineMember extends TeamCoverageProfile {
-  /** Canonical variety slug; unique within a guided path. */
   readonly name: string;
   readonly abilityName?: string;
 }
@@ -52,101 +50,61 @@ export interface StructuralNeed {
   readonly evidence: readonly GuidedEvidence[];
 }
 
-export interface GuidedNeedOptions {
-  readonly format: BattleFormat;
-  readonly typeNames: readonly string[];
+export interface GuidedRisk {
+  readonly ruleId: Exclude<GuidedRuleId, 'resistanceBreadth'>;
+  readonly dimension: string;
+  readonly value: number;
+  readonly contribution: number;
+  readonly sourceFacts: readonly string[];
 }
 
 export interface GuidedCandidateNeedEvaluation {
   readonly improvement: number;
   readonly improves: boolean;
-  readonly favoriteDeltas: readonly { favorite: string; delta: number }[];
-  readonly primaryTradeoff: GuidedTradeoff | null;
+  readonly reasons: readonly GuidedEvidence[];
+  readonly primaryTradeoff: GuidedEvidence | null;
 }
 
-export interface GuidedRisk {
-  readonly ruleId: Exclude<GuidedRuleId, 'coverageBreadth' | 'resistanceBreadth' | 'supportRoles'>;
-  readonly dimension: string;
-  readonly severity: number;
-}
-
-export interface GuidedTradeoff extends GuidedRisk {
-  readonly favoriteDeltas: readonly { favorite: string; delta: number }[];
-}
-
-export interface GuidedRankedOption {
-  readonly improvement: number;
-  readonly primaryTradeoffDelta: number;
-  readonly candidatePriority: number;
-  readonly abilityName: string;
-  readonly varietyName: string;
-}
-
-export interface GuidedRecommendationOption extends GuidedRankedOption {
-  readonly speciesName: string;
-  /** Legality, path membership, and plan-global exclusion checks have passed. */
-  readonly eligible: boolean;
-  /** Every locked favorite's primary-need delta is non-negative. */
-  readonly improvesPrimaryNeed: boolean;
+export interface GuidedNeedOptions {
+  readonly format: BattleFormat;
+  readonly typeNames: readonly string[];
 }
 
 interface GuidedLineContext {
   coverage: ReturnType<typeof analyzeTeamCoverage>;
   roles: ReturnType<typeof analyzeTeamRoles>;
   breakdown: TeamSynergyBreakdown;
-  options: GuidedNeedOptions;
 }
+
+interface NeedContribution {
+  ruleId: GuidedRuleId;
+  value: number;
+  contribution: number;
+  sourceFacts: string[];
+}
+
+const NEED_PRIORITY: Readonly<Record<StructuralNeedId, number>> = {
+  'shared-quadruple-weakness': 0,
+  'unanswered-weakness': 1,
+  'shared-weakness': 2
+};
 
 const codePointCompare = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;
 
-function compareRankTerms(left: GuidedRankedOption, right: GuidedRankedOption): number {
-  return right.improvement - left.improvement ||
-    left.primaryTradeoffDelta - right.primaryTradeoffDelta ||
-    right.candidatePriority - left.candidatePriority;
-}
-
-/** Comparator for choosing the best selected ability on one variety. */
-export function compareGuidedAbilityProfiles(left: GuidedRankedOption, right: GuidedRankedOption): number {
-  return compareRankTerms(left, right) || codePointCompare(left.abilityName, right.abilityName);
-}
-
-/** Comparator for species-unique variety selection and the final shortlist. */
-export function compareGuidedCandidates(left: GuidedRankedOption, right: GuidedRankedOption): number {
-  return compareRankTerms(left, right) || codePointCompare(left.varietyName, right.varietyName);
-}
-
-/** Reduces evaluated ability profiles to a stable, species-unique shortlist. */
-export function rankGuidedRecommendations(
-  options: readonly GuidedRecommendationOption[],
-  limit = 5
-): GuidedRecommendationOption[] {
-  if (limit <= 0) return [];
-  const byVariety = new Map<string, GuidedRecommendationOption[]>();
-  options.filter((option) =>
-    option.eligible && option.improvesPrimaryNeed && option.improvement > 0
-  ).forEach((option) => {
-    const profiles = byVariety.get(option.varietyName) ?? [];
-    profiles.push(option);
-    byVariety.set(option.varietyName, profiles);
-  });
-
-  const bestBySpecies = new Map<string, GuidedRecommendationOption>();
-  [...byVariety.values()]
-    .map((profiles) => profiles.sort(compareGuidedAbilityProfiles)[0])
-    .sort(compareGuidedCandidates)
-    .forEach((option) => {
-      const incumbent = bestBySpecies.get(option.speciesName);
-      if (!incumbent || compareGuidedCandidates(option, incumbent) < 0) {
-        bestBySpecies.set(option.speciesName, option);
-      }
-    });
-
-  return [...bestBySpecies.values()].sort(compareGuidedCandidates).slice(0, limit);
+function validateOptions(options: GuidedNeedOptions): void {
+  if (options.format.broughtToBattle <= 0 || options.typeNames.length === 0 ||
+    new Set(options.typeNames).size !== options.typeNames.length) {
+    throw new Error('Guided need options are invalid.');
+  }
 }
 
 function analyzeLine(members: readonly GuidedLineMember[], options: GuidedNeedOptions): GuidedLineContext {
-  const coverage = analyzeTeamCoverage([...members]);
+  const profiles = members.map((member) => ({
+    ...member,
+    immuneToAllyMoves: options.format.hasAlly && isImmuneToAllyMoves(member.abilityName)
+  }));
+  const coverage = analyzeTeamCoverage(profiles);
   const roles = analyzeTeamRoles(
     members.map(({ abilityName }) => ({ abilityName })),
     { hasAlly: options.format.hasAlly }
@@ -160,21 +118,7 @@ function analyzeLine(members: readonly GuidedLineMember[], options: GuidedNeedOp
     teamSize: options.format.broughtToBattle,
     typeCount: options.typeNames.length
   });
-  return { coverage, roles, breakdown, options };
-}
-
-function validateOptions(options: GuidedNeedOptions): void {
-  if (options.format.broughtToBattle <= 0) throw new Error('Guided format must bring at least one Pokemon');
-  if (options.typeNames.length === 0) throw new Error('Guided analysis requires an elemental type universe');
-  if (new Set(options.typeNames).size !== options.typeNames.length) {
-    throw new Error('Guided elemental type names must be unique');
-  }
-}
-
-function canonicalFavorites(lockedFavorites: readonly string[]): string[] {
-  const favorites = [...lockedFavorites].sort(codePointCompare);
-  if (new Set(favorites).size !== favorites.length) throw new Error('Locked favorites must be unique');
-  return favorites;
+  return { coverage, roles, breakdown };
 }
 
 function bonusTerm(context: GuidedLineContext, id: SynergyBonusTermId) {
@@ -185,101 +129,102 @@ function penaltyTerm(context: GuidedLineContext, id: SynergyPenaltyTermId) {
   return context.breakdown.penaltyTerms.find((term) => term.id === id)!;
 }
 
-function evidenceFor(
+function contributionsFor(
   context: GuidedLineContext,
   id: StructuralNeedId,
   dimension: string
-): GuidedEvidence[] {
-  const { coverage, roles, options } = context;
+): NeedContribution[] {
+  const { coverage } = context;
   const weaknessCount = coverage.weaknessCounts[dimension] ?? 0;
   const quadrupleCount = coverage.quadrupleWeaknessCounts[dimension] ?? 0;
   const resistanceCount = coverage.resistanceCounts[dimension] ?? 0;
-  const evidence: GuidedEvidence[] = [];
+  const contributions: NeedContribution[] = [];
   const add = (ruleId: GuidedRuleId, value: number, weight: number, ...sourceFacts: string[]) => {
     const contribution = weight * value;
-    if (contribution > 0) evidence.push({
-      ruleId,
-      dimension,
-      sourceFacts,
-      baselineValue: value,
-      candidateValue: value,
-      baselineContribution: contribution,
-      candidateContribution: contribution,
-      delta: 0
-    });
+    if (contribution > 0) contributions.push({ ruleId, value, contribution, sourceFacts });
   };
 
   if (id === 'shared-quadruple-weakness') {
-    const sharedTerm = penaltyTerm(context, 'sharedQuadrupleWeakness');
-    add(
-      'sharedQuadrupleWeakness',
-      Math.max(quadrupleCount - 1, 0) / sharedTerm.denominator,
-      sharedTerm.weight,
-      `quadruple-weakness-count:${quadrupleCount}`
-    );
+    const shared = penaltyTerm(context, 'sharedQuadrupleWeakness');
+    add('sharedQuadrupleWeakness', Math.max(quadrupleCount - 1, 0) / shared.denominator,
+      shared.weight, `quadruple-weakness-count:${quadrupleCount}`);
     if (quadrupleCount >= 2 && resistanceCount === 0) {
-      const resistanceTerm = bonusTerm(context, 'resistanceBreadth');
-      add('resistanceBreadth', 1 / resistanceTerm.denominator, resistanceTerm.weight, 'resistance-count:0');
+      const resistance = bonusTerm(context, 'resistanceBreadth');
+      add('resistanceBreadth', 1 / resistance.denominator, resistance.weight, 'resistance-count:0');
     }
   }
 
   if (id === 'unanswered-weakness' && coverage.uncoveredWeaknesses.includes(dimension)) {
-    const uncoveredTerm = penaltyTerm(context, 'uncoveredWeakness');
-    add('uncoveredWeakness', 1 / uncoveredTerm.denominator, uncoveredTerm.weight,
+    const uncovered = penaltyTerm(context, 'uncoveredWeakness');
+    add('uncoveredWeakness', 1 / uncovered.denominator, uncovered.weight,
       `weakness-count:${weaknessCount}`);
     if (coverage.uncoveredQuadrupleWeaknesses.includes(dimension)) {
-      const quadrupleTerm = penaltyTerm(context, 'uncoveredQuadrupleWeakness');
-      add(
-        'uncoveredQuadrupleWeakness',
-        1 / quadrupleTerm.denominator,
-        quadrupleTerm.weight,
-        `quadruple-weakness-count:${quadrupleCount}`
-      );
+      const quadruple = penaltyTerm(context, 'uncoveredQuadrupleWeakness');
+      add('uncoveredQuadrupleWeakness', 1 / quadruple.denominator, quadruple.weight,
+        `quadruple-weakness-count:${quadrupleCount}`);
     }
   }
 
   if (id === 'shared-weakness') {
-    const sharedTerm = penaltyTerm(context, 'sharedWeakness');
-    add(
-      'sharedWeakness',
-      Math.max(weaknessCount - 1, 0) / sharedTerm.denominator,
-      sharedTerm.weight,
-      `weakness-count:${weaknessCount}`
-    );
+    const shared = penaltyTerm(context, 'sharedWeakness');
+    add('sharedWeakness', Math.max(weaknessCount - 1, 0) / shared.denominator,
+      shared.weight, `weakness-count:${weaknessCount}`);
     if (weaknessCount >= 2 && resistanceCount === 0) {
-      const resistanceTerm = bonusTerm(context, 'resistanceBreadth');
-      add('resistanceBreadth', 1 / resistanceTerm.denominator, resistanceTerm.weight, 'resistance-count:0');
+      const resistance = bonusTerm(context, 'resistanceBreadth');
+      add('resistanceBreadth', 1 / resistance.denominator, resistance.weight, 'resistance-count:0');
     }
   }
 
-  if (id === 'missing-coverage' && !coverage.coverageCounts[dimension]) {
-    const coverageTerm = bonusTerm(context, 'coverageBreadth');
-    add('coverageBreadth', 1 / coverageTerm.denominator, coverageTerm.weight, 'coverage-count:0');
-  }
-
-  if (id === 'missing-modeled-role') {
-    const applicableRoles = getApplicableRoles(options.format.hasAlly);
-    const roleCapacity = Math.min(options.format.broughtToBattle, applicableRoles.length);
-    if (roles.roles.length < roleCapacity &&
-      applicableRoles.includes(dimension as typeof applicableRoles[number]) &&
-      !roles.roles.includes(dimension as typeof roles.roles[number])) {
-      const roleTerm = bonusTerm(context, 'supportRoles');
-      add('supportRoles', 1 / roleTerm.denominator, roleTerm.weight,
-        `covered-role-count:${roles.roles.length}`);
-    }
-  }
-
-  return evidence;
+  return contributions;
 }
 
-function needFor(context: GuidedLineContext, id: StructuralNeedId, dimension: string): StructuralNeed {
-  const evidence = evidenceFor(context, id, dimension);
+function needFor(context: GuidedLineContext, id: StructuralNeedId, dimension: string): StructuralNeed | null {
+  const contributions = contributionsFor(context, id, dimension);
+  if (contributions.length === 0) return null;
   return {
     id,
     dimension,
-    severity: evidence.reduce((total, item) => total + item.baselineContribution, 0),
-    evidence
+    severity: contributions.reduce((total, item) => total + item.contribution, 0),
+    evidence: contributions.map((item) => ({
+      ruleId: item.ruleId,
+      dimension,
+      sourceFacts: item.sourceFacts,
+      baselineValue: item.value,
+      candidateValue: item.value,
+      baselineContribution: item.contribution,
+      candidateContribution: item.contribution,
+      delta: 0
+    }))
   };
+}
+
+/** Returns vulnerability needs in deterministic product priority order. */
+export function getGuidedLineNeeds(
+  members: readonly GuidedLineMember[],
+  options: GuidedNeedOptions
+): StructuralNeed[] {
+  validateOptions(options);
+  const context = analyzeLine(members, options);
+  const ids: StructuralNeedId[] = [
+    'shared-quadruple-weakness',
+    'unanswered-weakness',
+    'shared-weakness'
+  ];
+  return ids.flatMap((id) => options.typeNames
+    .map((type) => needFor(context, id, type))
+    .filter((need): need is StructuralNeed => need !== null)
+  ).sort((left, right) =>
+    NEED_PRIORITY[left.id] - NEED_PRIORITY[right.id] ||
+    right.severity - left.severity ||
+    codePointCompare(left.dimension, right.dimension)
+  );
+}
+
+export function selectPrimaryGuidedNeed(
+  members: readonly GuidedLineMember[],
+  options: GuidedNeedOptions
+): StructuralNeed | null {
+  return getGuidedLineNeeds(members, options)[0] ?? null;
 }
 
 function risksFor(context: GuidedLineContext): GuidedRisk[] {
@@ -287,10 +232,16 @@ function risksFor(context: GuidedLineContext): GuidedRisk[] {
   const risks: GuidedRisk[] = [];
   const add = (ruleId: GuidedRisk['ruleId'], dimension: string, numerator: number) => {
     const term = penaltyTerm(context, ruleId);
-    const severity = term.weight * numerator / term.denominator;
-    if (severity > 0) risks.push({ ruleId, dimension, severity });
+    const value = numerator / term.denominator;
+    const contribution = term.weight * value;
+    if (contribution > 0) risks.push({
+      ruleId,
+      dimension,
+      value,
+      contribution,
+      sourceFacts: [`count:${numerator}`]
+    });
   };
-
   coverage.uncoveredWeaknesses.forEach((type) => add('uncoveredWeakness', type, 1));
   coverage.uncoveredQuadrupleWeaknesses.forEach((type) => add('uncoveredQuadrupleWeakness', type, 1));
   Object.entries(coverage.weaknessCounts).forEach(([type, count]) =>
@@ -301,15 +252,13 @@ function risksFor(context: GuidedLineContext): GuidedRisk[] {
   });
   coverage.spreadConflicts.forEach((type) => add('spreadConflict', type, 1));
   roles.fieldConflicts.forEach((role) => add('fieldConflict', role, 1));
-
   return risks.sort((left, right) =>
-    right.severity - left.severity ||
+    right.contribution - left.contribution ||
     codePointCompare(left.ruleId, right.ruleId) ||
     codePointCompare(left.dimension, right.dimension)
   );
 }
 
-/** Returns canonical penalty dimensions for one line, highest severity first. */
 export function getGuidedLineRisks(
   members: readonly GuidedLineMember[],
   options: GuidedNeedOptions
@@ -318,195 +267,179 @@ export function getGuidedLineRisks(
   return risksFor(analyzeLine(members, options));
 }
 
-/** Returns every positive guided need for one line in deterministic priority order. */
-export function getGuidedLineNeeds(
-  members: readonly GuidedLineMember[],
-  options: GuidedNeedOptions
-): StructuralNeed[] {
-  validateOptions(options);
-  const context = analyzeLine(members, options);
-  const needs = [
-    ...options.typeNames.map((type) => needFor(context, 'shared-quadruple-weakness', type)),
-    ...options.typeNames.map((type) => needFor(context, 'unanswered-weakness', type)),
-    ...options.typeNames.map((type) => needFor(context, 'shared-weakness', type)),
-    ...options.typeNames.map((type) => needFor(context, 'missing-coverage', type)),
-    ...getApplicableRoles(options.format.hasAlly)
-      .map((role) => needFor(context, 'missing-modeled-role', role))
-  ].filter((need) => need.severity > 0);
-
-  if (needs.length === 0) {
-    return [{ id: 'balanced-improvement', dimension: 'none', severity: 0, evidence: [] }];
-  }
-
-  return needs.sort((left, right) =>
-    right.severity - left.severity ||
-    codePointCompare(left.id, right.id) ||
-    codePointCompare(left.dimension, right.dimension)
-  );
-}
-
-function linesContaining(
-  members: readonly GuidedLineMember[],
-  size: number,
-  requiredNames: readonly string[]
-): GuidedLineMember[][] {
-  return combinationsOf([...members], size).filter((line) =>
-    requiredNames.every((name) => line.some((member) => member.name === name))
-  );
-}
-
-function selectBestLine(
-  lines: readonly GuidedLineMember[][],
-  need: Pick<StructuralNeed, 'id' | 'dimension'>,
-  options: GuidedNeedOptions
-): { line: GuidedLineMember[]; need: StructuralNeed; risks: GuidedRisk[]; penalty: number; signature: string } {
-  return lines.map((line) => {
-    const context = analyzeLine(line, options);
-    return {
-      line,
-      need: needFor(context, need.id, need.dimension),
-      risks: risksFor(context),
-      penalty: context.breakdown.penalty,
-      signature: line.map(({ name }) => name).sort(codePointCompare).join('\0')
-    };
-  }).sort((left, right) =>
-    left.need.severity - right.need.severity ||
-    left.penalty - right.penalty ||
-    codePointCompare(left.signature, right.signature)
-  )[0];
-}
-
-/** Selects the highest-severity need across each locked favorite's best legal line. */
-export function selectPrimaryGuidedNeed(
-  path: readonly GuidedLineMember[],
-  lockedFavorites: readonly string[],
-  options: GuidedNeedOptions
-): StructuralNeed {
-  validateOptions(options);
-  if (path.length === 0 || lockedFavorites.length === 0) {
-    return { id: 'balanced-improvement', dimension: 'none', severity: 0, evidence: [] };
-  }
-  const favorites = canonicalFavorites(lockedFavorites);
-  const size = Math.min(path.length, options.format.broughtToBattle);
-  const linesByFavorite = favorites.map((favorite) => {
-    const lines = linesContaining(path, size, [favorite]);
-    if (lines.length === 0) throw new Error(`Locked favorite ${favorite} is not on the guided path`);
-    return { favorite, lines };
-  });
-  const keys = new Map<string, Pick<StructuralNeed, 'id' | 'dimension'>>();
-  linesByFavorite.forEach(({ lines }) => lines.forEach((line) => {
-    getGuidedLineNeeds(line, options).forEach((need) => {
-      if (need.id !== 'balanced-improvement') keys.set(`${need.id}\0${need.dimension}`, need);
-    });
-  }));
-
-  const needs = [...keys.values()].map((need) => {
-    const selected = linesByFavorite.map(({ favorite, lines }) => ({
-      favorite,
-      selected: selectBestLine(lines, need, options)
-    }));
-    const evidenceByRule = new Map<GuidedRuleId, GuidedEvidence>();
-    selected.forEach(({ favorite, selected: line }) => line.need.evidence.forEach((item) => {
-      const current = evidenceByRule.get(item.ruleId);
-      const sourceFacts = [...new Set([
-        ...(current?.sourceFacts ?? []),
-        `favorite:${favorite}`,
-        `line:${line.signature}`,
-        ...item.sourceFacts
-      ])].sort(codePointCompare);
-      evidenceByRule.set(item.ruleId, {
-        ...item,
-        sourceFacts,
-        baselineValue: (current?.baselineValue ?? 0) + item.baselineValue / favorites.length,
-        candidateValue: (current?.candidateValue ?? 0) + item.candidateValue / favorites.length,
-        baselineContribution: (current?.baselineContribution ?? 0) +
-          item.baselineContribution / favorites.length,
-        candidateContribution: (current?.candidateContribution ?? 0) +
-          item.candidateContribution / favorites.length
-      });
-    }));
-    const evidence = [...evidenceByRule.values()].sort((left, right) =>
-      codePointCompare(left.ruleId, right.ruleId)
-    );
-    return {
-      ...need,
-      severity: evidence.reduce((sum, item) => sum + item.baselineContribution, 0),
-      evidence
-    };
-  }).filter((need) => need.severity > 0).sort((left, right) =>
-    right.severity - left.severity ||
-    codePointCompare(left.id, right.id) ||
-    codePointCompare(left.dimension, right.dimension)
-  );
-
-  return needs[0] ?? { id: 'balanced-improvement', dimension: 'none', severity: 0, evidence: [] };
-}
-
-/** Measures a candidate against the same primary need for every locked favorite. */
+/** Returns actual before/after evidence for one candidate and primary need. */
 export function evaluateGuidedCandidateNeed(
-  path: readonly GuidedLineMember[],
+  members: readonly GuidedLineMember[],
   candidate: GuidedLineMember,
-  lockedFavorites: readonly string[],
   need: Pick<StructuralNeed, 'id' | 'dimension'>,
   options: GuidedNeedOptions
 ): GuidedCandidateNeedEvaluation {
   validateOptions(options);
-  if (path.some(({ name }) => name === candidate.name)) {
-    throw new Error(`Candidate ${candidate.name} is already on the guided path`);
+  if (members.some(({ name }) => name === candidate.name)) {
+    throw new Error(`Candidate ${candidate.name} is already on the guided roster`);
   }
-  const favorites = canonicalFavorites(lockedFavorites);
-  const baseSize = Math.min(path.length, options.format.broughtToBattle);
-  const candidateSize = Math.min(path.length + 1, options.format.broughtToBattle);
-  const withCandidate = [...path, candidate];
-  const selectedLines: {
-    favorite: string;
-    base: ReturnType<typeof selectBestLine>;
-    candidate: ReturnType<typeof selectBestLine>;
-  }[] = [];
-  const favoriteDeltas = favorites.map((favorite) => {
-    const baseLines = linesContaining(path, baseSize, [favorite]);
-    const candidateLines = linesContaining(withCandidate, candidateSize, [favorite, candidate.name]);
-    if (baseLines.length === 0 || candidateLines.length === 0) {
-      throw new Error(`Cannot evaluate candidate for locked favorite ${favorite}`);
-    }
-    const base = selectBestLine(baseLines, need, options);
-    const candidateLine = selectBestLine(candidateLines, need, options);
-    selectedLines.push({ favorite, base, candidate: candidateLine });
+  const baseline = analyzeLine(members, options);
+  const after = analyzeLine([...members, candidate], options);
+  const baselineByRule = new Map(contributionsFor(baseline, need.id, need.dimension)
+    .map((item) => [item.ruleId, item]));
+  const candidateByRule = new Map(contributionsFor(after, need.id, need.dimension)
+    .map((item) => [item.ruleId, item]));
+  const factsFor = (context: GuidedLineContext, prefix: 'baseline' | 'candidate') => [
+    `${prefix}:weakness-count:${context.coverage.weaknessCounts[need.dimension] ?? 0}`,
+    `${prefix}:quadruple-weakness-count:${context.coverage.quadrupleWeaknessCounts[need.dimension] ?? 0}`,
+    `${prefix}:resistance-count:${context.coverage.resistanceCounts[need.dimension] ?? 0}`,
+    `${prefix}:stab-answer-count:${context.coverage.coverageCounts[need.dimension] ?? 0}`,
+    `${prefix}:move-answer-count:${context.coverage.moveCoverageCounts[need.dimension] ?? 0}`
+  ];
+  const ruleIds = [...new Set([...baselineByRule.keys(), ...candidateByRule.keys()])].sort(codePointCompare);
+  const reasons = ruleIds.map((ruleId): GuidedEvidence => {
+    const before = baselineByRule.get(ruleId);
+    const next = candidateByRule.get(ruleId);
+    const baselineContribution = before?.contribution ?? 0;
+    const candidateContribution = next?.contribution ?? 0;
     return {
-      favorite,
-      delta: base.need.severity - candidateLine.need.severity
+      ruleId,
+      dimension: need.dimension,
+      sourceFacts: [...factsFor(baseline, 'baseline'), ...factsFor(after, 'candidate')],
+      baselineValue: before?.value ?? 0,
+      candidateValue: next?.value ?? 0,
+      baselineContribution,
+      candidateContribution,
+      delta: candidateContribution - baselineContribution
     };
   });
-  const improvement = favoriteDeltas.length === 0
-    ? 0
-    : favoriteDeltas.reduce((sum, item) => sum + item.delta, 0) / favoriteDeltas.length;
+  const improvement = reasons.reduce((total, evidence) => total - evidence.delta, 0);
 
-  const riskKeys = new Map<string, Pick<GuidedRisk, 'ruleId' | 'dimension'>>();
-  selectedLines.forEach(({ base, candidate: candidateLine }) => {
-    [...base.risks, ...candidateLine.risks]
-      .forEach((risk) => riskKeys.set(`${risk.ruleId}\0${risk.dimension}`, risk));
-  });
-  const tradeoffs = [...riskKeys.values()].map((risk) => {
-    const deltas = selectedLines.map(({ favorite, base, candidate: candidateLine }) => {
-      const severityIn = (risks: GuidedRisk[]) => risks
-        .find((item) => item.ruleId === risk.ruleId && item.dimension === risk.dimension)?.severity ?? 0;
-      return { favorite, delta: severityIn(candidateLine.risks) - severityIn(base.risks) };
-    });
+  const baselineRisks = new Map(risksFor(baseline)
+    .map((risk) => [`${risk.ruleId}\0${risk.dimension}`, risk]));
+  const candidateRisks = new Map(risksFor(after)
+    .map((risk) => [`${risk.ruleId}\0${risk.dimension}`, risk]));
+  const tradeoffs = [...new Set([...baselineRisks.keys(), ...candidateRisks.keys()])].map((key) => {
+    const before = baselineRisks.get(key);
+    const next = candidateRisks.get(key);
+    const baselineContribution = before?.contribution ?? 0;
+    const candidateContribution = next?.contribution ?? 0;
+    const risk = next ?? before!;
     return {
-      ...risk,
-      severity: deltas.reduce((sum, item) => sum + item.delta, 0) / favorites.length,
-      favoriteDeltas: deltas
+      ruleId: risk.ruleId,
+      dimension: risk.dimension,
+      sourceFacts: [
+        ...(before?.sourceFacts ?? []).map((fact) => `baseline:${fact}`),
+        ...(next?.sourceFacts ?? []).map((fact) => `candidate:${fact}`)
+      ],
+      baselineValue: before?.value ?? 0,
+      candidateValue: next?.value ?? 0,
+      baselineContribution,
+      candidateContribution,
+      delta: candidateContribution - baselineContribution
     };
-  }).filter((risk) => risk.severity > 0).sort((left, right) =>
-    right.severity - left.severity ||
+  }).filter((risk) => risk.delta > GUIDED_IMPROVEMENT_EPSILON).sort((left, right) =>
+    right.delta - left.delta ||
     codePointCompare(left.ruleId, right.ruleId) ||
     codePointCompare(left.dimension, right.dimension)
   );
 
   return {
     improvement,
-    improves: improvement > 0 && favoriteDeltas.every(({ delta }) => delta >= 0),
-    favoriteDeltas,
+    improves: improvement > GUIDED_IMPROVEMENT_EPSILON,
+    reasons,
     primaryTradeoff: tradeoffs[0] ?? null
   };
+}
+
+export interface PartnerRecommendation {
+  readonly varietyName: string;
+  readonly speciesName: string;
+  readonly abilityName: string;
+  readonly needId: StructuralNeedId;
+  readonly improvement: number;
+  readonly reasons: readonly GuidedEvidence[];
+  readonly primaryTradeoff: GuidedEvidence | null;
+  readonly pokemon: PokemonEntry;
+}
+
+export interface GuidedRecommendationRequest extends GuidedNeedOptions {
+  readonly currentMembers: readonly PokemonEntry[];
+  readonly candidatePool: readonly PokemonEntry[];
+}
+
+const toGuidedMember = (pokemon: PokemonEntry): GuidedLineMember => ({
+  name: pokemon.name,
+  abilityName: pokemon.abilityName,
+  types: pokemon.types,
+  weaknesses: pokemon.weaknesses,
+  quadruple_weaknesses: pokemon.quadrupleWeaknesses,
+  resistances: pokemon.resistances,
+  immunities: pokemon.immunities,
+  coverages: pokemon.coverages,
+  moveCoverages: pokemon.moveCoverages
+});
+
+interface RankedRecommendation extends PartnerRecommendation {
+  quality: number;
+}
+
+function compareRecommendations(left: RankedRecommendation, right: RankedRecommendation): number {
+  return right.improvement - left.improvement ||
+    (left.primaryTradeoff?.delta ?? 0) - (right.primaryTradeoff?.delta ?? 0) ||
+    right.quality - left.quality ||
+    codePointCompare(left.varietyName, right.varietyName) ||
+    codePointCompare(left.abilityName, right.abilityName);
+}
+
+/** Evaluates legal scan candidates and returns a stable species-unique shortlist. */
+export function recommendGuidedPartners(request: GuidedRecommendationRequest): PartnerRecommendation[] {
+  const options = { format: request.format, typeNames: request.typeNames };
+  validateOptions(options);
+  const current = request.currentMembers.map(toGuidedMember);
+  const need = selectPrimaryGuidedNeed(current, options);
+  if (!need) return [];
+  const currentSpecies = new Set(request.currentMembers.map(({ speciesName }) => speciesName));
+  const bestByVariety = new Map<string, RankedRecommendation>();
+
+  request.candidatePool.forEach((candidate) => {
+    if (currentSpecies.has(candidate.speciesName)) return;
+    const abilityNames = [...new Set([candidate.abilityName, ...Object.keys(candidate.abilityProfiles)])]
+      .filter((name) => name.length > 0)
+      .sort(codePointCompare);
+    abilityNames.forEach((abilityName) => {
+      const pokemon = withAbility(candidate, abilityName);
+      const evaluation = evaluateGuidedCandidateNeed(current, toGuidedMember(pokemon), need, options);
+      if (!evaluation.improves) return;
+      const recommendation: RankedRecommendation = {
+        varietyName: pokemon.name,
+        speciesName: pokemon.speciesName,
+        abilityName: pokemon.abilityName,
+        needId: need.id,
+        improvement: evaluation.improvement,
+        reasons: evaluation.reasons,
+        primaryTradeoff: evaluation.primaryTradeoff,
+        pokemon,
+        quality: candidatePriority(pokemon, { hasAlly: request.format.hasAlly })
+      };
+      const incumbent = bestByVariety.get(pokemon.name);
+      if (!incumbent || compareRecommendations(recommendation, incumbent) < 0) {
+        bestByVariety.set(pokemon.name, recommendation);
+      }
+    });
+  });
+
+  const bestBySpecies = new Map<string, RankedRecommendation>();
+  [...bestByVariety.values()].sort(compareRecommendations).forEach((recommendation) => {
+    const incumbent = bestBySpecies.get(recommendation.speciesName);
+    if (!incumbent || compareRecommendations(recommendation, incumbent) < 0) {
+      bestBySpecies.set(recommendation.speciesName, recommendation);
+    }
+  });
+  return [...bestBySpecies.values()].sort(compareRecommendations).slice(0, 5)
+    .map((recommendation) => ({
+      varietyName: recommendation.varietyName,
+      speciesName: recommendation.speciesName,
+      abilityName: recommendation.abilityName,
+      needId: recommendation.needId,
+      improvement: recommendation.improvement,
+      reasons: recommendation.reasons,
+      primaryTradeoff: recommendation.primaryTradeoff,
+      pokemon: recommendation.pokemon
+    }));
 }
