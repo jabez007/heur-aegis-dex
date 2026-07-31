@@ -235,6 +235,7 @@ import { useMetaFilters } from './composables/useMetaFilters';
 import { useNotifications } from './composables/useNotifications';
 import { useTeamBuilder } from './composables/useTeamBuilder';
 import { useWorkspaceState } from './composables/useWorkspaceState';
+import { useGuidedPlans } from './composables/useGuidedPlans';
 import { flattenToPokemon } from './lib/pokemonEntry';
 import {
   WORKSPACE_STORAGE_KEY,
@@ -276,6 +277,7 @@ const {
 } = workspace;
 const metaFilters = useMetaFilters();
 const teamBuilder = useTeamBuilder();
+const guidedPlans = useGuidedPlans();
 const { notify } = useNotifications();
 // Default to whichever regulation is in force today so the tool is correct for
 // the format being played without the user having to know which one that is.
@@ -652,9 +654,15 @@ const refreshWorkspaceArchive = (event: StorageEvent) => {
   }
 };
 
+const refreshGuidedPlanArchive = (event: StorageEvent) => {
+  guidedPlans.handleStorageEvent(event);
+};
+
 onMounted(() => {
+  guidedPlans.initialize();
   window.addEventListener('pagehide', flushDraft);
   window.addEventListener('storage', refreshWorkspaceArchive);
+  window.addEventListener('storage', refreshGuidedPlanArchive);
   void fetchTypesAndRestore();
 });
 
@@ -666,6 +674,7 @@ onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('pagehide', flushDraft);
     window.removeEventListener('storage', refreshWorkspaceArchive);
+    window.removeEventListener('storage', refreshGuidedPlanArchive);
   }
 });
 </script>

@@ -3,6 +3,7 @@ import { provideTeamBuilder } from './composables/useTeamBuilder'
 import { provideMetaFilters } from './composables/useMetaFilters'
 import { provideNotifications } from './composables/useNotifications'
 import { provideWorkspaceState } from './composables/useWorkspaceState'
+import { provideGuidedPlans } from './composables/useGuidedPlans'
 import './assets/scss/main.scss'
 import HeurAegisDexMain from './App.vue'
 import CustomCupBuilder from './components/CustomCupBuilder.vue'
@@ -177,6 +178,7 @@ export default {
     provideMetaFilters(app)
     provideNotifications(app)
     provideWorkspaceState(app)
+    provideGuidedPlans(app)
 
     app.component('HeurAegisDexMain', HeurAegisDexMain)
     app.component('CustomCupBuilder', CustomCupBuilder)

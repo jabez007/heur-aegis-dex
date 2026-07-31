@@ -26,6 +26,7 @@ import { provideMetaFilters } from './composables/useMetaFilters';
 import { provideNotifications } from './composables/useNotifications';
 import { provideTeamBuilder } from './composables/useTeamBuilder';
 import { provideWorkspaceState } from './composables/useWorkspaceState';
+import { provideGuidedPlans } from './composables/useGuidedPlans';
 import type { ResistantTypeResult } from './lib/pokedexTypes';
 import {
   WORKSPACE_STORAGE_KEY,
@@ -51,6 +52,7 @@ const statePlugin: Plugin = {
     provideMetaFilters(app);
     provideNotifications(app);
     provideWorkspaceState(app);
+    provideGuidedPlans(app);
   }
 };
 
