@@ -45,3 +45,22 @@ test('scans from the local catalog while external services are unavailable', asy
 
   await context.close();
 });
+
+test('pauses roster scoring when a rescan excludes a registered Pokemon', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.getByText('System Online // Pokedex Database Ready')).toBeVisible({ timeout: 30_000 });
+
+  await page.locator('.regulation-select').selectOption('__unrestricted__');
+  await expect(page.locator('.loading-overlay')).toBeHidden({ timeout: 30_000 });
+
+  await page.getByRole('searchbox', { name: 'Find a Pokemon' }).fill('scizor');
+  await page.getByRole('button', { name: 'Add scizor to roster' }).click();
+  await expect(page.locator('.party-slot').filter({ hasText: 'scizor' })).toBeVisible();
+
+  await page.getByLabel('Min Attacks:').fill('150');
+  await page.getByLabel('Min Attacks:').press('Tab');
+
+  await expect(page.locator('.roster-warning')).toContainText('scizor', { timeout: 30_000 });
+  await expect(page.getByText('// scoring paused')).toBeVisible();
+  await expect(page.locator('.party-slot.unavailable').filter({ hasText: 'scizor' })).toBeVisible();
+});

@@ -19,6 +19,8 @@ const {
   maxRosterSize,
   bringSize,
   canTryAnotherRoster,
+  unavailableRosterNames,
+  hasUnavailableRosterMembers,
   bringIndices,
   broughtTeam,
   isBrought,
@@ -43,6 +45,7 @@ const {
 const rosterIsFull = computed(() => roster.value.length >= maxRosterSize.value);
 const canFieldATeam = computed(() => bringIndices.value.length === bringSize.value);
 const broughtNames = computed(() => broughtTeam.value.map((member) => member.name).join(' · '));
+const unavailableRosterNameSet = computed(() => new Set(unavailableRosterNames.value));
 
 // Under open team list the opponent picks against all six, so what matters is
 // how many *different* teams the roster can field — not how many subsets exist.
@@ -141,7 +144,7 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
         </label>
         <button
           class="gba-btn action-btn mini"
-          :disabled="(rosterIsFull && !canTryAnotherRoster) || isGenerating"
+          :disabled="(rosterIsFull && !canTryAnotherRoster) || isGenerating || hasUnavailableRosterMembers"
           @click="fillRemainingSlots(props.allPokemon, props.filteredPokemon)"
         >
           {{ isGenerating ? '...' : (roster.length === 0
@@ -164,9 +167,21 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
         // <span :title="scoreHint">roster {{ Math.round(rosterEvaluation.score) }}/100</span>
         // <span :title="linesHint">{{ rosterEvaluation.viableLines }} of {{ rosterEvaluation.targetLines }} lines hold up</span>
       </span>
+      <span v-else-if="hasUnavailableRosterMembers">
+        // scoring paused
+      </span>
       <span v-else>
         // select {{ bringSize }} to bring
       </span>
+    </p>
+
+    <p
+      v-if="hasUnavailableRosterMembers"
+      class="roster-warning"
+      role="status"
+    >
+      Roster scoring paused. Unavailable in the current scan:
+      {{ unavailableRosterNames.join(', ') }}. Remove them or restore matching scan settings.
     </p>
 
     <div
@@ -222,7 +237,11 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
         v-for="(_, index) in maxRosterSize"
         :key="index"
         class="party-slot"
-        :class="{ empty: !roster[index], brought: roster[index] && isBrought(index) }"
+        :class="{
+          empty: !roster[index],
+          brought: roster[index] && isBrought(index),
+          unavailable: roster[index] && unavailableRosterNameSet.has(roster[index].name)
+        }"
       >
         <Transition
           name="party-pop"
@@ -256,12 +275,19 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
                 >
                   Ability: {{ roster[index].abilityName }}
                 </p>
+                <p
+                  v-if="unavailableRosterNameSet.has(roster[index].name)"
+                  class="slot-unavailable"
+                >
+                  Unavailable
+                </p>
               </div>
             </div>
             <div class="slot-actions">
               <button
                 class="bring-btn"
                 :class="{ active: isBrought(index) }"
+                :disabled="hasUnavailableRosterMembers"
                 :aria-pressed="isBrought(index)"
                 :aria-label="`${isBrought(index) ? 'Do not bring' : 'Bring'} ${roster[index].name}`"
                 @click="toggleBring(index)"
@@ -548,6 +574,11 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
     border: 2px dashed rgba(0,0,0,0.2);
     background: rgba(0,0,0,0.05);
   }
+
+  &.unavailable {
+    border-color: var(--gba-accent-magenta);
+    background: rgba(255, 0, 102, 0.12);
+  }
 }
 
 .slot-info {
@@ -586,6 +617,14 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
   font-size: 0.75rem;
   text-transform: capitalize;
   opacity: 0.8;
+}
+
+.slot-unavailable {
+  margin: 0;
+  color: var(--gba-accent-magenta);
+  font-family: var(--gba-font-heading);
+  font-size: 0.7rem;
+  text-transform: uppercase;
 }
 
 .remove-btn {
@@ -698,6 +737,15 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
     border-bottom: 1px dotted currentColor;
     cursor: help;
   }
+}
+
+.roster-warning {
+  margin: 0 0 12px;
+  padding: 8px;
+  border: 2px solid var(--gba-accent-magenta);
+  background: rgba(255, 0, 102, 0.12);
+  font-family: var(--gba-font-body);
+  font-size: 0.85rem;
 }
 
 .bring-bar {

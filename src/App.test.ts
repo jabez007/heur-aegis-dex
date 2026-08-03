@@ -258,6 +258,22 @@ describe('App scan and storage orchestration', () => {
     expect(recovered.draft.scan.minimumAttacks).toBe(95);
   });
 
+  it('does not rewrite valid workspace updates received from another tab', async () => {
+    mocks.cacheGet.mockReturnValue(scanResult);
+
+    mounted = mountApp();
+    await vi.waitFor(() => expect(mounted!.element.textContent).toContain('Pokedex Database Ready'));
+
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(emptyWorkspaceArchive()));
+    setItem.mockClear();
+
+    window.dispatchEvent(new StorageEvent('storage', { key: WORKSPACE_STORAGE_KEY }));
+
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
+  });
+
   it('defers a repaired-storage draft save until the initial scan is ready', async () => {
     localStorage.setItem(WORKSPACE_STORAGE_KEY, '{broken-json');
     mocks.cacheGet.mockReturnValue(null);

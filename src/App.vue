@@ -571,6 +571,9 @@ const fetchTypesAndRestore = async () => {
   if (success && pendingWorkspace.value) {
     await completeWorkspaceRestore(pendingWorkspace.value);
   } else if (!pendingWorkspace.value) {
+    if (success) {
+      teamBuilder.reconcileRoster(flattenToPokemon(types.value));
+    }
     workspaceReady.value = true;
     if (saveDraftWhenReady) {
       saveDraftWhenReady = false;
@@ -672,14 +675,19 @@ const flushDraft = () => {
 
 const refreshWorkspaceArchive = (event: StorageEvent) => {
   if (event.key !== WORKSPACE_STORAGE_KEY || !browserStorage) return;
+  const storageWasUnavailable = !workspaceStorageAvailable.value;
   try {
     workspaceArchive.value = readWorkspaceArchive(browserStorage);
     workspaceStorageAvailable.value = true;
     workspaceStorageError.value = '';
-    if (workspaceReady.value) {
-      saveDraftNow();
-    } else {
-      saveDraftWhenReady = true;
+    // Preserve local edits when another tab repairs unreadable storage. Normal
+    // cross-tab updates must remain read-only or the tabs rewrite each other.
+    if (storageWasUnavailable) {
+      if (workspaceReady.value) {
+        saveDraftNow();
+      } else {
+        saveDraftWhenReady = true;
+      }
     }
   } catch {
     // Keep the last valid in-memory archive. The other tab may be midway

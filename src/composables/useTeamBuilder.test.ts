@@ -539,6 +539,51 @@ describe('useTeamBuilder', () => {
     });
   });
 
+  describe('scan reconciliation', () => {
+    it('refreshes registered Pokemon from the latest scan while preserving their ability', () => {
+      addPokemon(pokemon('charizard'), 'blaze');
+      const refreshedStats = { ...stats, attack: 120 };
+
+      builder.reconcileRoster([
+        pokemon('charizard', { stats: refreshedStats, baseStats: refreshedStats })
+      ]);
+
+      expect(roster.value[0].abilityName).toBe('blaze');
+      expect(roster.value[0].stats.attack).toBe(120);
+      expect(builder.unavailableRosterNames.value).toEqual([]);
+    });
+
+    it('retains unavailable registrations but suspends their scoring and analysis', () => {
+      const scan = ['fire', 'water', 'grass', 'electric'].map((type, index) =>
+        pokemon(`mon-${index}`, { typeName: type, types: [type] })
+      );
+      scan.forEach((entry) => addPokemon(entry));
+      expect(builder.rosterEvaluation.value.best).not.toBeNull();
+
+      builder.reconcileRoster(scan.slice(0, 3));
+
+      expect(roster.value.map((member) => member.name)).toEqual(scan.map((entry) => entry.name));
+      expect(builder.unavailableRosterNames.value).toEqual(['mon-3']);
+      expect(builder.rosterEvaluation.value.best).toBeNull();
+      expect(builder.bringIndices.value).toEqual([]);
+      expect(builder.teamWeaknessSummary.value).toEqual({});
+    });
+
+    it('resumes scoring when a later scan contains every registration again', () => {
+      const scan = ['fire', 'water', 'grass', 'electric'].map((type, index) =>
+        pokemon(`mon-${index}`, { typeName: type, types: [type] })
+      );
+      scan.forEach((entry) => addPokemon(entry));
+      builder.reconcileRoster(scan.slice(0, 3));
+
+      builder.reconcileRoster(scan);
+
+      expect(builder.unavailableRosterNames.value).toEqual([]);
+      expect(builder.rosterEvaluation.value.best).not.toBeNull();
+      expect(builder.bringIndices.value).toHaveLength(4);
+    });
+  });
+
   it('reports whether a species is already registered', () => {
     expect(builder.hasSpecies('charizard')).toBe(false);
     addPokemon(pokemon('charizard'));
