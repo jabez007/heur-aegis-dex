@@ -517,8 +517,9 @@ export function useTeamBuilder() {
       if (!runGeneration(pool, [], 'Best roster found')) {
         notify("No valid rosters found with current filters.", "error");
       }
-    } catch (e: any) {
-      notify(`Generation failed: ${e.message}`, "error");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      notify(`Generation failed: ${message}`, "error");
     } finally {
       isGenerating.value = false;
     }
@@ -588,8 +589,9 @@ export function useTeamBuilder() {
       } else if (!isTryingAnother) {
         fillSeedNames.value = membersToKeep.map((member) => member.name);
       }
-    } catch (e: any) {
-      notify(`Filling slots failed: ${e.message}`, "error");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      notify(`Filling slots failed: ${message}`, "error");
     } finally {
       isGenerating.value = false;
     }

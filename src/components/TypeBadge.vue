@@ -5,6 +5,10 @@ const props = defineProps<{
   isQuad?: boolean;
   ariaLabel?: string;
 }>();
+
+defineSlots<{
+  default?: () => unknown;
+}>();
 </script>
 
 <template>

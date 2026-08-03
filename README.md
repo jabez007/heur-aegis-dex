@@ -81,6 +81,9 @@ Move reach is kept **separate** from STAB coverage rather than replacing it. The
 
 Heur-Aegis Dex can also be used as a component library in other Vue 3 projects. See [CHANGELOG.md](./CHANGELOG.md) for breaking changes between versions.
 
+Published packages include the project GPL-3.0 license and the BSD-3-Clause
+notice for the bundled PokeAPI-derived catalog data.
+
 Beyond the components, the package exports the engine itself — `getResistantTypes` to run a scan, `flattenToPokemon` to work with the results, `generateRosters` and `evaluateRoster` for team building, and the regulation and battle-format data.
 
 ### Installation
@@ -173,6 +176,9 @@ npm run lint:fix
 
 # Verify lazy catalog chunks and production package formats
 npm run check:browser
+
+# Pack, install, and verify ESM, CommonJS, and TypeScript consumers
+npm run check:package
 
 # Verify scanning with every external service blocked
 npm run test:browser:offline

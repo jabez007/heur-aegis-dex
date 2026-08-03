@@ -1,4 +1,4 @@
-name: Use Shared Action to Publish
+name: Publish Package
 
 on:
   release:
@@ -11,20 +11,52 @@ jobs:
       contents: read
     uses: ./.github/workflows/verify.yaml
 
-  publish_to_npm:
+  package:
     needs: verify
     runs-on: ubuntu-latest
     permissions:
-      id-token: write # Required for Trusted Publishers (OIDC)
       contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          # No git operation follows, so the persisted token would only be
-          # sitting in .git/config while `npm ci` runs install scripts. See the
-          # note in verify.yaml.
           persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and pack library
+        run: mkdir package && npm pack --pack-destination package
+
+      - name: Verify packed package
+        run: npm run check:package -- package/*.tgz
+
+      - name: Preserve package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package-tarball
+          path: package/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish_to_npm:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required for Trusted Publishers (OIDC)
+      contents: read
+    steps:
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package-tarball
+          path: package
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -32,71 +64,49 @@ jobs:
           node-version: 24.x
           registry-url: "https://registry.npmjs.org"
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build library
-        run: npm run build:lib
-
       - name: Publish to NPM
-        run: npm publish --provenance --access public
+        run: npm publish package/*.tgz --provenance --access public --registry=https://registry.npmjs.org/
 
-  upload-to-release:
+  publish_to_ghpr:
+    needs: package
     runs-on: ubuntu-latest
-    needs: publish_to_npm # Only upload to release if publish succeeds
     permissions:
-      contents: write # Required to upload assets to the release
+      packages: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
         with:
-          # This is the job where it matters most: `contents: write` above, and
-          # `npm ci` below running install scripts with that token in
-          # .git/config. action-gh-release takes its token from the environment
-          # rather than from git, so nothing here needs the credential.
-          persist-credentials: false
+          name: npm-package-tarball
+          path: package
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24.x
+          registry-url: "https://npm.pkg.github.com/"
+          scope: "@jabez007"
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Publish to GitHub Packages
+        run: npm publish package/*.tgz --access public --registry=https://npm.pkg.github.com/
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build library
-        run: npm run build:lib
-
-      - name: Zip library artifacts
-        run: zip -r heur-aegis-dex-lib.zip lib/
+  upload-to-release:
+    runs-on: ubuntu-latest
+    needs:
+      - publish_to_npm
+      - publish_to_ghpr
+    permissions:
+      contents: write # Required to upload assets to the release
+    steps:
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package-tarball
+          path: package
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: heur-aegis-dex-lib.zip
+          files: package/*.tgz
           fail_on_unmatched_files: true
-
-  publish_to_ghpr:
-    needs: verify
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          # The shared action runs `npm install` and `npm publish` and no git at
-          # all, so nothing here needs the credential checkout would persist.
-          persist-credentials: false
-
-      - name: Shared Publish to GHPR
-        uses: McCann-Hub/create-typescript-template/.github/shared/ghpr/publish@master
-        with:
-          node_version: 22.x
-        env:
-          # The action reads this name, then re-exports it as NODE_AUTH_TOKEN for
-          # `npm publish` against npm.pkg.github.com. Recorded because the
-          # requirement is invisible from here: it is an undeclared env input
-          # rather than one of the action's `inputs`, so nothing fails at parse
-          # time if it goes missing — the publish just fails to authenticate.
-          GHPR_TOKEN: ${{ secrets.GITHUB_TOKEN }}

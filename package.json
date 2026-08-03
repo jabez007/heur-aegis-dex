@@ -7,13 +7,20 @@
   "types": "lib/index.d.ts",
   "files": [
     "lib",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "LICENSE",
+    "data/POKEAPI-NOTICE.md"
   ],
   "exports": {
     ".": {
-      "import": "./lib/heur-aegis-dex.es.js",
-      "require": "./lib/heur-aegis-dex.cjs",
-      "types": "./lib/index.d.ts"
+      "import": {
+        "types": "./lib/index.d.mts",
+        "default": "./lib/heur-aegis-dex.es.js"
+      },
+      "require": {
+        "types": "./lib/index.d.cts",
+        "default": "./lib/heur-aegis-dex.cjs"
+      }
     },
     "./style.css": "./lib/heur-aegis-dex.css"
   },
@@ -44,9 +51,11 @@
     "type-check": "vue-tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "prepack": "npm run build:lib",
     "predeploy": "npm run build",
     "deploy": "push-dir --dir=dist --branch=main --cleanup",
     "check:browser": "bash scripts/check-browser-bundle.sh",
+    "check:package": "node scripts/check-package.mjs",
     "test:browser:offline": "npm run build && playwright test",
     "check:regulations": "tsx scripts/check-regulation-freshness.mjs",
     "gen:pokemon-catalog": "tsx scripts/generate-pokemon-catalog.ts",
@@ -63,6 +72,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@microsoft/api-extractor": "^7.58.12",
     "@playwright/test": "^1.54.1",
     "@types/node": "^25.8.0",
     "@vitejs/plugin-vue": "^6.0.6",
@@ -74,7 +84,7 @@
     "push-dir": "^0.4.1",
     "sass": "^1.99.0",
     "tsx": "^4.23.1",
-    "typescript": "^6.0.3",
+    "typescript": "~5.9.3",
     "typescript-eslint": "^8.59.3",
     "vite": "^8.0.12",
     "vite-plugin-dts": "^5.0.0",

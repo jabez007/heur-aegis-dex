@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Published packages are built and verified as one artifact.** `npm pack` now
+  builds the library through `prepack`, bundles format-specific declarations for
+  bundler, NodeNext ESM and Node16 CommonJS consumers, and smoke-tests the
+  installed tarball before release. npm, GitHub Packages and the GitHub release
+  receive that same tarball, including the GPL license and PokeAPI data notice.
+
 - **A deterministic Pokemon catalog foundation.** A pinned-source generator now
   emits a content-addressed catalog containing 18 types, 1,025 species and 1,351
   varieties. The generator verifies the authoritative source indexes; semantic

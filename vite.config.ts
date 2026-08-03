@@ -20,10 +20,14 @@ export default defineConfig(({ mode }) => {
           'src/**/*.fixture.ts',
           'src/lib/pokedexLive.ts'
         ],
-        outDir: 'lib',
+        outDirs: [
+          'lib',
+          { dir: 'lib', moduleFormat: 'esm' },
+          { dir: 'lib', moduleFormat: 'cjs' }
+        ],
         staticImport: true,
         insertTypesEntry: true,
-        rollupTypes: true
+        bundleTypes: true
       }) : null
     ],
     publicDir: isLib ? false : 'public',
