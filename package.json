@@ -42,6 +42,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:lan": "vite --host",
     "build": "vite build",
     "build:lib": "vite build --mode lib",
     "build:all": "npm run build && npm run build:lib",
@@ -75,6 +76,7 @@
     "@microsoft/api-extractor": "^7.58.12",
     "@playwright/test": "^1.54.1",
     "@types/node": "^25.8.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-vue": "^6.0.6",
     "eslint": "^10.4.0",
     "eslint-plugin-vue": "^10.9.1",
