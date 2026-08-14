@@ -19,8 +19,10 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * 4: the coverage-slot rule. A move type only counts as a threat beyond STAB if
  * something is weak to it, which re-prices every threat weight against a new
  * maximum.
+ *
+ * 5: IMMUNITY_VALUE corrected from -4 to -2, a unit error in its derivation.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 4 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 5 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [

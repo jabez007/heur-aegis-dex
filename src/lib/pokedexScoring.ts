@@ -25,7 +25,7 @@ export const DEFAULT_BASE_SCORE = 18;
  * rather than cheap, a stronger attacker cannot break through it, and the switch
  * it enables costs nothing. Expected damage is linear and none of that is.
  *
- * ## Where -4 comes from
+ * ## Where -2 comes from, and the unit error that first made it -4
  *
  * Not from this scale, which cannot express a threshold at all. It comes from
  * the standard alternative — reading each multiplier as hits survived, where the
@@ -33,13 +33,31 @@ export const DEFAULT_BASE_SCORE = 18;
  * needs a cap, and the cap is measurable: the lowest non-zero incoming
  * multiplier reachable anywhere in the ability × typing cross product is 0.125,
  * a quarter-resist halved again by Thick Fat. `log2(0.125)` is -3, so immunity
- * sits one rung below the worst finite damage the model can produce, at -4.
+ * sits one rung below the worst finite damage the model can produce.
+ *
+ * **That -3 is in log units and this scale is not**, which is the step that was
+ * missed. The two metrics disagree on what a plain resistance is worth: 0.5x is
+ * -1 on the log reading and -0.5 here, so the log metric prices every resistance
+ * at twice this one. Carrying -3 across unconverted made an immunity worth eight
+ * single resistances when the metric it was borrowed from says three or four.
+ * Dividing by the same factor the resistances differ by gives -2, which is what
+ * "one rung below the reachable floor" actually means in this scale's units.
+ *
+ * The symptom was visible before the arithmetic was: at -4 the defensive score
+ * correlated -0.824 with a typing's raw immunity *count* and -0.049 with its
+ * resistance count, so ten Steel resistances had stopped competing with two
+ * immunities at all. At -2 those read -0.606 and -0.162 against 0.597 for
+ * weaknesses, and all three buckets decide something again.
  *
  * So the number is borrowed rather than derived in place, and that is the soft
  * spot, stated rather than buried: it is the value the *other* metric assigns,
- * imported into this one. It is reasoned against a metric, not validated against
- * match outcomes — the same standing as `MEMBER_WEIGHTS` and `TYPE_MODULATION`,
- * and unlike `STATUS_THREAT`, which is measured.
+ * converted into this one. It is reasoned against a metric, not validated
+ * against match outcomes — the same standing as `MEMBER_WEIGHTS` and
+ * `TYPE_MODULATION`, and unlike `STATUS_THREAT`, which is measured.
+ *
+ * Capping at the floor itself rather than a rung below would give -1.5, and is
+ * arguably cleaner for stopping at what the model can observe. -2 keeps the
+ * "one rung below" reading the change was made under.
  *
  * ## What it changed
  *
@@ -49,7 +67,7 @@ export const DEFAULT_BASE_SCORE = 18;
  * rank correlation against the old scale was 0.797 where this is 0.831. The
  * larger change was never the one being asked for, so it was not taken.
  */
-export const IMMUNITY_VALUE = -4;
+export const IMMUNITY_VALUE = -2;
 
 /**
  * Scores how much a typing suffers on defence. Lower is better.
@@ -64,19 +82,18 @@ export const IMMUNITY_VALUE = -4;
  * **Typings no longer land on it by cancellation.** They used to: Normal's
  * Fighting weakness at +1 against its Ghost immunity at -1 netted exactly to
  * `baseScore`, and that tidiness was the clearest symptom of pricing an immunity
- * as a quantity of damage. With `IMMUNITY_VALUE` at -4 Normal scores 15, and the
- * distribution moves with it: 11 of the 171 combinations sit on the line against
- * 14 before, 93 beat it against 42, and 67 fall short against 115.
+ * as a quantity of damage. With `IMMUNITY_VALUE` at -2 Normal scores 17, and the
+ * distribution moves with it: 13 of the 171 combinations sit on the line against
+ * 14 before, 69 beat it against 42, and 89 fall short against 115.
  *
  * That last shift reaches `maxDamageFromScore` in `getResistantTypes`, which
- * admits typings at or under the line. It now passes 104 of 171 where it passed
+ * admits typings at or under the line. It now passes 82 of 171 where it passed
  * 56. The filter is still the neutral line rather than a tuned threshold — a
  * typing with empty buckets still scores exactly `baseScore`, so "at least as
  * good as taking neutral damage from everything" means what it says — but it is
- * a markedly weaker filter, because on this valuation far more typings clear it.
- * Whether the default scan wants a filter that admits 61% of typings is a
- * separate question from whether an immunity is worth -4, and it is not answered
- * here.
+ * a looser filter, because on this valuation more typings clear it. Whether the
+ * default scan wants one that admits 48% of typings is a separate question from
+ * whether an immunity is worth -2, and it is not answered here.
  *
  * ## Threat weighting
  *
@@ -184,20 +201,22 @@ const MEASURED_AT_BASE_SCORE = 18;
  *
  * ## Re-measured 2026-08-14, for IMMUNITY_VALUE
  *
- * The floor fell from 11.25 to 0.25 and the ceiling did not move. Both follow
+ * The floor fell from 11.25 to 8.25 and the ceiling did not move. Both follow
  * directly from what changed: only typings with immunities are affected, so the
  * ceiling — Rock/Ice, which has none — is untouched, while the floor is set by
- * the profile holding the most immunities and now collects four times as much
- * for each. Ghost/Steel with Earth Eater is immune to Normal, Fighting, Poison
- * and Ground, and takes -16 where it used to take -4.
+ * the profile holding the most immunities and now collects twice as much for
+ * each. Ghost/Steel with Earth Eater is immune to Normal, Fighting, Poison and
+ * Ground, and takes -8 where it used to take -4.
  *
- * The range therefore widens from 14.75 to 25.75, which *compresses* every
+ * The range therefore widens from 14.75 to 17.75, which *compresses* every
  * typing's normalized score — the direction this whole comment warns against.
- * It is accepted here rather than corrected because the compression is not
- * spurious: the extra range is occupied by real profiles, and the raw spread
- * between typings grew by more than the denominator did, since an immunity is
- * now the single largest term any bucket can contribute. The realized swing is
- * the number that settles it, and it is measured under `TYPE_MODULATION`.
+ * It is accepted rather than corrected because the compression is not spurious:
+ * the extra range is occupied by real profiles, and the raw spread between
+ * typings grew alongside the denominator. The realized swing is the number that
+ * settles it, and it is measured under `TYPE_MODULATION`.
+ *
+ * These are the numbers for -2. An earlier pass shipped -4 through a unit error
+ * and measured 0.25..26 here; that bound is superseded, not an alternative.
  *
  * ## Scaling, and its limit
  *
@@ -207,7 +226,7 @@ const MEASURED_AT_BASE_SCORE = 18;
  * scan run with fewer types is a different chart whose real extremes nobody has
  * checked. Values outside the bounds clamp, as they do for `STAT_CEILINGS`.
  */
-const OBSERVED_DAMAGE_FROM = { min: 0.25, max: 26 } as const;
+const OBSERVED_DAMAGE_FROM = { min: 8.25, max: 26 } as const;
 const OBSERVED_DAMAGE_TO = { min: 16, max: 27 } as const;
 
 /**

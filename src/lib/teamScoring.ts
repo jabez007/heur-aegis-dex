@@ -425,27 +425,37 @@ export const COMPOSITE_WEIGHTS = {
  *
  * Synergy maxima unchanged for the third time, for the same reason as above.
  *
- * ## Re-measured once more the same day, for the coverage-slot rule
+ * ## Re-measured twice more the same day
  *
- * `typeThreat.ts` stopped counting a move type as coverage unless something is
- * weak to it, which drops Normal from the heaviest attacking type to the
- * lightest and re-prices every other weight against a new maximum. Quality moved
- * a little further: doubles 0.1521..0.6024 to 0.1539..0.6104, singles
- * 0.1314..0.6108 to 0.1343..0.6191. Synergy unchanged for the fourth time.
+ * First for the coverage-slot rule: `typeThreat.ts` stopped counting a move type
+ * as coverage unless something is weak to it, which drops Normal from the
+ * heaviest attacking type to the lightest and re-prices every weight against a
+ * new maximum.
  *
- * `OBSERVED_DAMAGE_FROM` did **not** need re-running, which is worth stating so
- * nobody re-runs it looking for a change. It is measured with uniform weights
- * and the coverage rule only moves threat weights, so the unweighted extremes
- * are untouched at 0.25..26. The threat-weighted range did move, from
- * 14.96..21.98 to 7.81..24.35, and that one is derived at runtime.
+ * Then for `IMMUNITY_VALUE` being corrected from -4 to -2, a unit error rather
+ * than a change of mind — the derivation's -3 was in log units, where a
+ * resistance is worth -1, and this scale prices a resistance at -0.5. The
+ * numbers below are that final state. Quality landed at doubles
+ * 0.1558..0.6221 and singles 0.1368..0.6330, which is within 0.01 of where it
+ * sat before any of the immunity work; the -4 pass had pushed the doubles
+ * ceiling down to 0.6024.
+ *
+ * Synergy unchanged throughout, now for the fifth measurement, for the reason
+ * given above.
+ *
+ * `OBSERVED_DAMAGE_FROM` needed re-running for the immunity value and **not**
+ * for the coverage rule, which is worth stating so nobody goes looking. It is
+ * measured with uniform weights, so a change to the threat weights cannot move
+ * it; a change to a bucket coefficient can. The threat-weighted range, derived
+ * at runtime, is 12.42..24.35.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.1539, max: 0.6104 },
+    quality: { min: 0.1558, max: 0.6221 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1343, max: 0.6191 },
+    quality: { min: 0.1368, max: 0.6330 },
     synergy: { min: -1, max: 0.8189 }
   }
 } as const;

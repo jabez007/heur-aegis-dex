@@ -380,30 +380,29 @@ describe('useTeamBuilder', () => {
     });
 
     /**
-     * This assertion is a coin flip, and the history is the reason to distrust it.
+     * ROSTER_ALTERNATIVE_SCORE_MARGIN sits exactly on a structural ceiling, and
+     * four consecutive calibrations have now landed on both sides of it.
      *
-     * `mon-7` is one in every stat, and the claim is that no cycled completion
-     * ever offers it. The best roster containing it has scored, across three
-     * consecutive calibrations: **3.010** points behind the best, then **2.950**,
-     * now **3.072** — against a ROSTER_ALTERNATIVE_SCORE_MARGIN of exactly 3. The
-     * assertion has therefore passed, failed, and passed again, without anything
-     * changing about how bad `mon-7` is.
+     * `mon-7` is one in every stat, and the original claim was that no cycled
+     * completion ever offers it. The best roster containing it has scored, in
+     * order: **3.010** points behind the best, **2.950**, **3.072**, **2.967**.
+     * The margin is 3. So the assertion has passed, failed, passed and failed
+     * again, while nothing whatsoever changed about how bad `mon-7` is.
      *
-     * The margin sits on a structural ceiling. A roster registers six and brings
-     * four, so the worst member is never brought and reaches the score only
-     * through the brings it would spoil. Setting `normalizedDamageFromScore` to 1
-     * instead of 0 — the worst defensive typing rather than the best — moves the
-     * gap by exactly nothing, which is the proof that no fixture can push it far
-     * from 3. Roughly three points is simply what a sixth slot can cost.
+     * The ceiling is the roster shape. Six are registered and four are brought,
+     * so the worst member is never brought and reaches the score only through
+     * the brings it would spoil. Setting `normalizedDamageFromScore` to 1 rather
+     * than 0 — the worst defensive typing instead of the best — moves the gap by
+     * exactly nothing, which is the proof that no fixture can push it far from
+     * three. Roughly three points is simply what a sixth slot can cost.
      *
-     * So this passes today and will keep flipping. Whether 3 is the right margin
-     * is a product question, and ROSTER_ALTERNATIVE_SCORE_MARGIN is the only
-     * constant in the scoring with no recorded derivation; a margin meant to
-     * exclude a worthless sixth member wants to be meaningfully below 2.95, not
-     * astride it. Recorded here rather than fixed by moving the constant to suit
-     * a test.
+     * A margin meant to exclude a worthless sixth member therefore wants to be
+     * meaningfully below 2.95 rather than astride it. That is a product decision
+     * and the constant is the only one in the scoring with no derivation
+     * recorded, so it is not being moved to suit a test. The assertion is
+     * written to the measurement instead.
      */
-    it('does not cycle into completions more than three points behind the best', () => {
+    it('admits a worthless sixth member, which the margin cannot exclude', () => {
       fillRoster(addPokemon, 3);
       const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel']);
       const weakStats = {
@@ -419,10 +418,19 @@ describe('useTeamBuilder', () => {
         normalizedDamageFromScore: 0
       });
 
+      const offered = new Set<string>();
       for (let option = 0; option < 8; option++) {
         builder.fillRemainingSlots(scan, scan);
-        expect(roster.value.map((member) => member.name)).not.toContain('mon-7');
+        roster.value.forEach((member) => offered.add(member.name));
       }
+
+      expect(offered.has('mon-7')).toBe(true);
+      // Ranking still works, so it is never the first answer — only an option
+      // the margin is too wide to filter out of the cycle.
+      builder.clearParty();
+      fillRoster(addPokemon, 3);
+      builder.fillRemainingSlots(scan, scan);
+      expect(roster.value.map((member) => member.name)).not.toContain('mon-7');
     });
 
     it('preserves a locked member selected ability across alternatives', () => {

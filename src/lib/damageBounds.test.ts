@@ -30,7 +30,7 @@ describe('weighted damage-from bounds', () => {
       baseTypes, DEFAULT_BASE_SCORE, weightsFrom({})
     );
 
-    expect(derived).toEqual({ min: 0.25, max: 26 });
+    expect(derived).toEqual({ min: 8.25, max: 26 });
     expect(derived).toEqual(damageFromScoreBounds(DEFAULT_BASE_SCORE));
   });
 

@@ -67,21 +67,22 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
     // It is not the `quality` key. Ursaluna leads Excadrill on member quality
     // both before the change and after — 0.56082 against 0.53633, then 0.55340
     // against 0.52032 — so the flip happens on `primaryTradeoff.delta`, which is
-    // compared first. Two revaluations have now moved this one slot in opposite
-    // directions without either of them saying anything about which Pokemon is
-    // better.
+    // compared first. Three revaluations have now shuffled the tail of this list
+    // without any of them saying anything about which Pokemon is better:
+    // Excadrill in, Ursaluna back, and correcting IMMUNITY_VALUE from -4 to -2
+    // dropping Mamoswine for Excadrill at the fifth slot.
     //
-    // The other four hold their places through both changes, which is the real
-    // signal. Goodra-hisui is again the one that improves outright, 0.186 to
-    // 0.137 to 0.341 normalized: Steel/Dragon is weak only to Fighting and
-    // Ground, and its Poison and Grass immunities are now worth four times what
-    // they were.
+    // The top three hold their places through all of it, which is the real
+    // signal. Goodra-hisui is the one that improves outright at every step —
+    // 0.186 to 0.137 to 0.341 to 0.220 normalized — because Steel/Dragon is weak
+    // only to Fighting and Ground and its Poison and Grass immunities now count
+    // double.
     expect(first.map(({ varietyName }) => varietyName)).toEqual([
       'archaludon',
       'dragapult',
       'goodra-hisui',
       'ursaluna',
-      'mamoswine'
+      'excadrill'
     ]);
     // Pin the tie itself, so a change that makes these five genuinely separable
     // shows up as this assertion failing rather than as a reshuffled list whose

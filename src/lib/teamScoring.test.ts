@@ -283,22 +283,22 @@ describe('damage score normalization', () => {
     // Same raw score, same baseline, same normalized value — regardless of what
     // else the user has filtered in or out.
     expect(normalizeDamageFromScore(18, 18)).toBeCloseTo(normalizeDamageFromScore(18, 18));
-    // Bounds are the observed extremes (0.25..26 and 16..27 at baseScore 18),
+    // Bounds are the observed extremes (8.25..26 and 16..27 at baseScore 18),
     // not the formula's, so a median typing sits near the middle of the range
     // instead of bunched against one end. See pokedexScoring.ts.
     //
-    // The defensive floor fell from 11.25 when IMMUNITY_VALUE moved to -4:
-    // Ghost/Steel with Earth Eater is immune to four types and now collects -16
+    // The defensive floor fell from 11.25 when IMMUNITY_VALUE moved to -2:
+    // Ghost/Steel with Earth Eater is immune to four types and now collects -8
     // for them. The neutral line no longer sits near the middle as a result,
     // which is a property of the valuation rather than of the normalization.
-    expect(normalizeDamageFromScore(18, 18)).toBeCloseTo((18 - 0.25) / (26 - 0.25));
+    expect(normalizeDamageFromScore(18, 18)).toBeCloseTo((18 - 8.25) / (26 - 8.25));
     expect(normalizeDamageToScore(18, 18)).toBeCloseTo((18 - 16) / (27 - 16));
   });
 
   it('maps the observed extremes onto 0 and 1', () => {
     // The best and worst a real Pokemon reaches, which is what the scale is
     // anchored to. The formula extremes are unreachable and clamp.
-    expect(normalizeDamageFromScore(0.25, 18)).toBeCloseTo(0);
+    expect(normalizeDamageFromScore(8.25, 18)).toBeCloseTo(0);
     expect(normalizeDamageFromScore(26, 18)).toBeCloseTo(1);
     expect(normalizeDamageToScore(16, 18)).toBeCloseTo(0);
     expect(normalizeDamageToScore(27, 18)).toBeCloseTo(1);
