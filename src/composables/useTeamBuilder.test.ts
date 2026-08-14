@@ -380,29 +380,27 @@ describe('useTeamBuilder', () => {
     });
 
     /**
-     * ROSTER_ALTERNATIVE_SCORE_MARGIN sits exactly on a structural ceiling, and
-     * four consecutive calibrations have now landed on both sides of it.
+     * This assertion used to be a coin flip and is now decided by 0.84 points.
      *
-     * `mon-7` is one in every stat, and the original claim was that no cycled
-     * completion ever offers it. The best roster containing it has scored, in
-     * order: **3.010** points behind the best, **2.950**, **3.072**, **2.967**.
-     * The margin is 3. So the assertion has passed, failed, passed and failed
-     * again, while nothing whatsoever changed about how bad `mon-7` is.
+     * `mon-7` is one in every stat. The best roster containing it scored, across
+     * four consecutive recalibrations, **3.010** points behind the best, then
+     * **2.950**, **3.072** and **2.967** — against a
+     * ROSTER_ALTERNATIVE_SCORE_MARGIN that was 3. So this passed, failed, passed
+     * and failed again while nothing changed about how bad `mon-7` is.
      *
-     * The ceiling is the roster shape. Six are registered and four are brought,
-     * so the worst member is never brought and reaches the score only through
-     * the brings it would spoil. Setting `normalizedDamageFromScore` to 1 rather
-     * than 0 — the worst defensive typing instead of the best — moves the gap by
-     * exactly nothing, which is the proof that no fixture can push it far from
-     * three. Roughly three points is simply what a sixth slot can cost.
+     * The reason it sat on the line is structural. Six are registered and four
+     * brought, so the worst member is never brought and reaches the score only
+     * through the brings it would spoil; setting `normalizedDamageFromScore` to
+     * 1 rather than 0 — worst defensive typing instead of best — moves the gap
+     * by exactly nothing. Roughly three points is simply what a wasted sixth
+     * slot can cost, so a margin of 3 could never exclude one.
      *
-     * A margin meant to exclude a worthless sixth member therefore wants to be
-     * meaningfully below 2.95 rather than astride it. That is a product decision
-     * and the constant is the only one in the scoring with no derivation
-     * recorded, so it is not being moved to suit a test. The assertion is
-     * written to the measurement instead.
+     * The margin is now derived rather than assumed: one member's worth of
+     * roster quality, measured at 2.13. That is 0.84 clear of the lowest gap the
+     * four calibrations produced, about seven times the drift any of them
+     * caused, so the exclusion holds for a stated reason instead of by luck.
      */
-    it('admits a worthless sixth member, which the margin cannot exclude', () => {
+    it('does not cycle into completions a member downgrade behind the best', () => {
       fillRoster(addPokemon, 3);
       const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel']);
       const weakStats = {
@@ -418,19 +416,10 @@ describe('useTeamBuilder', () => {
         normalizedDamageFromScore: 0
       });
 
-      const offered = new Set<string>();
       for (let option = 0; option < 8; option++) {
         builder.fillRemainingSlots(scan, scan);
-        roster.value.forEach((member) => offered.add(member.name));
+        expect(roster.value.map((member) => member.name)).not.toContain('mon-7');
       }
-
-      expect(offered.has('mon-7')).toBe(true);
-      // Ranking still works, so it is never the first answer — only an option
-      // the margin is too wide to filter out of the cycle.
-      builder.clearParty();
-      fillRoster(addPokemon, 3);
-      builder.fillRemainingSlots(scan, scan);
-      expect(roster.value.map((member) => member.name)).not.toContain('mon-7');
     });
 
     it('preserves a locked member selected ability across alternatives', () => {

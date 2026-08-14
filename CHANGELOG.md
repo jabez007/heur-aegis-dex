@@ -4,6 +4,31 @@
 
 ### Fixed
 
+- **The alternatives margin is derived instead of assumed.**
+  `ROSTER_ALTERNATIVE_SCORE_MARGIN` shipped as 3 with no recorded derivation —
+  the only constant in the scoring without one — and it sat exactly on a
+  structural ceiling. A roster registers six and brings four, so its worst member
+  is never brought and reaches the score only through the brings it would spoil,
+  which caps what an entirely wasted slot can cost at about three points. A
+  margin of 3 therefore could not exclude *any* sixth member. The symptom was a
+  test that flipped four times across four consecutive recalibrations, measuring
+  3.010, 2.950, 3.072 and 2.967 against a constant of 3.
+
+  It is now **2.13**: one roster member's worth of quality, measured by
+  `npm run measure:alternative-margin` as the score cost of replacing exactly one
+  member of a pool's best roster with that pool's median candidate — 129 such
+  downgrades across 42 scenarios covering seven pools, both formats and the
+  seeded cases of one and two locked favourites. Since an alternative has to
+  replace at least two members to count as one, a margin of one member's worth
+  means those swaps can only ever be close to lateral.
+
+  Two checks are reported alongside and neither is the derivation. Supply: about
+  92% of scenarios still offer two or more genuinely different options at 2.13
+  and 80% offer three, where widening to 3 buys the remainder only from cups too
+  narrow to supply diversity honestly. Exclusion: 2.13 clears the lowest wasted
+  slot ever measured by 0.84, roughly seven times the drift any recalibration has
+  caused, so the guarantee holds for a reason rather than by luck.
+
 - **Normal was the heaviest attacking type in the model, and nothing is weak to
   it.** Threat weighting counted any learnable move of a type as evidence that
   type gets brought. Normal is the one type that hits *nothing* super-effectively

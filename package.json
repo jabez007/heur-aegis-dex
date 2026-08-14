@@ -62,6 +62,7 @@
     "gen:pokemon-catalog": "tsx scripts/generate-pokemon-catalog.ts",
     "gen:coverage-moves": "node scripts/gen-coverage-moves.mjs",
     "gen:scoring-fixture": "tsx scripts/gen-scoring-fixture.mjs",
+    "measure:alternative-margin": "tsx scripts/measure-alternative-margin.mjs",
     "measure:composite-bounds": "tsx scripts/measure-composite-bounds.mjs",
     "measure:damage-bounds": "tsx scripts/measure-damage-bounds.mjs",
     "measure:status-threat": "tsx scripts/measure-status-threat.mjs",

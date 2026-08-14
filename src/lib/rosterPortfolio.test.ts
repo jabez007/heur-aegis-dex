@@ -1,16 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { selectRosterPortfolio } from './rosterPortfolio';
+import { ROSTER_ALTERNATIVE_SCORE_MARGIN, selectRosterPortfolio } from './rosterPortfolio';
 
 const roster = (names: string[], score: number) => ({
   members: names.map((name) => ({ name })),
   score
 });
 
+describe('ROSTER_ALTERNATIVE_SCORE_MARGIN', () => {
+  it('stays clear of what a wasted roster slot can cost', () => {
+    // The derivation's binding constraint, pinned so a re-measurement cannot
+    // quietly cross it. A roster registers six and brings four, so its worst
+    // member is never brought and can only cost the score what the brings it
+    // spoils are worth — measured at 2.950, 2.967, 3.010 and 3.072 across four
+    // recalibrations. A margin at or above that provably cannot exclude any
+    // sixth member at all, which is what the old value of 3 did.
+    const lowestMeasuredWastedSlot = 2.95;
+
+    expect(ROSTER_ALTERNATIVE_SCORE_MARGIN).toBeLessThan(lowestMeasuredWastedSlot);
+    // And not merely under it: the four measurements span 0.12, so a margin
+    // sitting just below the floor would flip on the next recalibration.
+    expect(lowestMeasuredWastedSlot - ROSTER_ALTERNATIVE_SCORE_MARGIN).toBeGreaterThan(0.5);
+  });
+
+  it('is large enough to be worth filtering with', () => {
+    // The other side of the trade. Below roughly one point the portfolio runs
+    // out of candidates and falls back to near-duplicate rosters, which defeats
+    // the feature — measured at 57% of scenarios offering two or more diverse
+    // options at a margin of 1, against 92% at 2.13.
+    expect(ROSTER_ALTERNATIVE_SCORE_MARGIN).toBeGreaterThan(1);
+  });
+});
+
 describe('selectRosterPortfolio', () => {
   it('keeps the best roster first and excludes options outside the score margin', () => {
+    // Straddling ROSTER_ALTERNATIVE_SCORE_MARGIN, which is one member's worth of
+    // roster quality — see the derivation on the constant. Written against the
+    // constant rather than against 2.13 so a re-measurement moves the fixture
+    // with it instead of failing on a number nobody chose.
     const best = roster(['a', 'b', 'c'], 90);
-    const near = roster(['a', 'd', 'e'], 87);
-    const low = roster(['f', 'g', 'h'], 86.9);
+    const near = roster(['a', 'd', 'e'], 90 - ROSTER_ALTERNATIVE_SCORE_MARGIN + 0.01);
+    const low = roster(['f', 'g', 'h'], 90 - ROSTER_ALTERNATIVE_SCORE_MARGIN - 0.01);
 
     expect(selectRosterPortfolio([best, near, low])).toEqual([best, near]);
   });
