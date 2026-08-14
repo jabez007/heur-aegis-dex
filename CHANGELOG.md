@@ -9,6 +9,8 @@
   rosters within three score points of it. Alternatives preferentially replace
   at least two Pokemon and maximize their distance from choices already shown;
   closer substitutions remain available when the search finds nothing broader.
+  A persistent Workbench readout shows the option number, score gap, and Pokemon
+  swapped out and in.
 
 - **Published packages are built and verified as one artifact.** `npm pack` now
   builds the library through `prepack`, bundles format-specific declarations for

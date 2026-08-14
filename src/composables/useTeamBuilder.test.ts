@@ -320,10 +320,24 @@ describe('useTeamBuilder', () => {
       const first = new Set(roster.value.map((member) => member.name));
 
       expect(builder.canTryAnotherRoster.value).toBe(true);
+      expect(builder.generationAlternative.value).toMatchObject({
+        optionNumber: 1,
+        scoreBehindBest: 0,
+        removedNames: [],
+        addedNames: []
+      });
       builder.fillRemainingSlots(scan, scan);
 
       const replacements = roster.value.filter((member) => !first.has(member.name));
       expect(replacements.length).toBeGreaterThanOrEqual(2);
+      expect(builder.generationAlternative.value).toMatchObject({
+        optionNumber: 2,
+        removedNames: expect.arrayContaining([...first].filter((name) =>
+          !roster.value.some((member) => member.name === name))),
+        addedNames: expect.arrayContaining(replacements.map((member) => member.name))
+      });
+      expect(builder.generationAlternative.value!.scoreBehindBest).toBeGreaterThanOrEqual(0);
+      expect(builder.generationAlternative.value!.scoreBehindBest).toBeLessThanOrEqual(3);
     });
 
     it('keeps the registered members and adds to them', () => {

@@ -19,6 +19,7 @@ const {
   maxRosterSize,
   bringSize,
   canTryAnotherRoster,
+  generationAlternative,
   unavailableRosterNames,
   hasUnavailableRosterMembers,
   bringIndices,
@@ -46,6 +47,13 @@ const rosterIsFull = computed(() => roster.value.length >= maxRosterSize.value);
 const canFieldATeam = computed(() => bringIndices.value.length === bringSize.value);
 const broughtNames = computed(() => broughtTeam.value.map((member) => member.name).join(' · '));
 const unavailableRosterNameSet = computed(() => new Set(unavailableRosterNames.value));
+const generationScoreLabel = computed(() => {
+  const alternative = generationAlternative.value;
+  if (!alternative) return '';
+  if (alternative.optionNumber === 1) return 'Best roster found';
+  if (alternative.scoreBehindBest < 0.05) return 'Tied with best';
+  return `${alternative.scoreBehindBest.toFixed(1)} points behind best`;
+});
 
 // Under open team list the opponent picks against all six, so what matters is
 // how many *different* teams the roster can field — not how many subsets exist.
@@ -174,6 +182,37 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
         // select {{ bringSize }} to bring
       </span>
     </p>
+
+    <Transition
+      name="analysis-fade"
+      mode="out-in"
+    >
+      <div
+        v-if="generationAlternative"
+        :key="generationAlternative.optionNumber"
+        class="generation-summary"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="generation-option">
+          OPTION {{ generationAlternative.optionNumber }}/{{ generationAlternative.optionCount }}
+        </span>
+        <p class="generation-detail">
+          <strong>
+            {{ generationScoreLabel }}
+          </strong>
+          <span
+            v-if="generationAlternative.removedNames.length > 0"
+            class="generation-swap"
+          >
+            <span class="swap-label out">OUT</span>
+            <span class="swap-names">{{ generationAlternative.removedNames.join(', ') }}</span>
+            <span class="swap-label in">IN</span>
+            <span class="swap-names">{{ generationAlternative.addedNames.join(', ') }}</span>
+          </span>
+        </p>
+      </div>
+    </Transition>
 
     <p
       v-if="hasUnavailableRosterMembers"
@@ -746,6 +785,73 @@ const formatRole = (role: string) => ROLE_LABELS[role] || role;
   background: rgba(255, 0, 102, 0.12);
   font-family: var(--gba-font-body);
   font-size: 0.85rem;
+}
+
+.generation-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 6px 8px;
+  border: 2px solid var(--gba-text-dark);
+  background: rgba(255, 255, 255, 0.25);
+  font-family: var(--gba-font-body);
+  font-size: 0.8rem;
+}
+
+.generation-option {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  background: var(--gba-accent-yellow);
+  border: 2px solid var(--gba-text-dark);
+  font-family: var(--gba-font-heading);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.generation-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+
+.generation-swap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.swap-label {
+  padding: 1px 4px;
+  border: 1px solid var(--gba-text-dark);
+  font-family: var(--gba-font-heading);
+  font-size: 0.6rem;
+
+  &.out {
+    background: var(--gba-accent-magenta);
+    color: white;
+  }
+
+  &.in {
+    background: var(--gba-accent-cyan);
+  }
+}
+
+.swap-names {
+  text-transform: capitalize;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .generation-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .bring-bar {

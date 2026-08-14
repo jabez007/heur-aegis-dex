@@ -35,7 +35,7 @@ export { useMetaFilters, provideMetaFilters, ALL_TYPES } from './composables/use
 export { useNotifications, provideNotifications } from './composables/useNotifications'
 export { useWorkspaceState, provideWorkspaceState } from './composables/useWorkspaceState'
 
-export type { PartyMember } from './composables/useTeamBuilder'
+export type { GenerationAlternativeSummary, PartyMember } from './composables/useTeamBuilder'
 export type { Notification } from './composables/useNotifications'
 export {
   WORKSPACE_STORAGE_KEY,

@@ -45,6 +45,14 @@ export interface PartyMember {
   typeName: string;
 }
 
+export interface GenerationAlternativeSummary {
+  optionNumber: number;
+  optionCount: number;
+  scoreBehindBest: number;
+  removedNames: string[];
+  addedNames: string[];
+}
+
 const teamBuilderState = createInjectableState('heur-aegis-dex:team-builder', () => ({
   /** Registered Pokemon — the "show", up to the format's maximum. */
   roster: ref<PartyMember[]>([]),
@@ -57,6 +65,7 @@ const teamBuilderState = createInjectableState('heur-aegis-dex:team-builder', ()
   lastFilledRosterKey: ref<string | null>(null),
   fillAlternativeCount: ref(0),
   fillAlternativesDirty: ref(false),
+  generationAlternative: ref<GenerationAlternativeSummary | null>(null),
   /** Pokemon varieties automatic roster generation must not add. */
   excludedPokemonNames: ref<string[]>([]),
   /** Advances only for deliberate edits that supersede a restored team. */
@@ -91,6 +100,7 @@ export function useTeamBuilder() {
     lastFilledRosterKey,
     fillAlternativeCount,
     fillAlternativesDirty,
+    generationAlternative,
     excludedPokemonNames,
     teamEditRevision,
     rosterEditRevision,
@@ -119,6 +129,7 @@ export function useTeamBuilder() {
     lastFilledRosterKey.value = null;
     fillAlternativeCount.value = 0;
     fillAlternativesDirty.value = false;
+    generationAlternative.value = null;
   };
 
   const isExcludedFromGeneration = (name: string) => excludedPokemonNames.value.includes(name);
@@ -132,6 +143,7 @@ export function useTeamBuilder() {
     }
     fillAlternativesDirty.value = generationCycleActive.value;
     lastFilledRosterKey.value = null;
+    generationAlternative.value = null;
   };
 
   const clearGenerationExclusions = () => {
@@ -139,6 +151,7 @@ export function useTeamBuilder() {
     excludedPokemonNames.value = [];
     fillAlternativesDirty.value = generationCycleActive.value;
     lastFilledRosterKey.value = null;
+    generationAlternative.value = null;
   };
 
   const toRosterMember = (member: PartyMember): RosterMember => ({
@@ -464,6 +477,9 @@ export function useTeamBuilder() {
     successMessage: string,
     cycleAlternatives = false
   ): boolean => {
+    const previousRosterNames = roster.value.length >= maxRosterSize.value
+      ? roster.value.map((member) => member.name)
+      : [];
     const allowedPokemon = pool.filter((entry) => !isExcludedFromGeneration(entry.name));
     const rosters = generateRosters({
       pokemon: allowedPokemon,
@@ -475,6 +491,7 @@ export function useTeamBuilder() {
     if (cycleAlternatives) {
       fillAlternativesDirty.value = false;
       fillAlternativeCount.value = 0;
+      generationAlternative.value = null;
     }
     if (rosters.length === 0) return false;
 
@@ -490,11 +507,26 @@ export function useTeamBuilder() {
       ? (previousIndex + 1) % alternatives.length
       : 0;
     const selected = alternatives[selectedIndex];
+    const selectedNames = new Set(selected.members.map((member) => member.name));
+    const previousNames = new Set(previousRosterNames);
 
     roster.value = selected.members.map(fromPokemonEntry);
     unavailableRosterNames.value = [];
     manualBringIndices.value = null;
     lastFilledRosterKey.value = rosterKey(selected.members);
+    generationAlternative.value = cycleAlternatives && alternatives.length > 1
+      ? {
+          optionNumber: selectedIndex + 1,
+          optionCount: alternatives.length,
+          scoreBehindBest: alternatives[0].score - selected.score,
+          removedNames: previousRosterNames.filter((name) => !selectedNames.has(name)),
+          addedNames: previousRosterNames.length > 0
+            ? selected.members
+              .map((member) => member.name)
+              .filter((name) => !previousNames.has(name))
+            : []
+        }
+      : null;
     markRosterEdited();
     // Deliberately not "optimal": generateRosters prunes twice, so this is the
     // best roster the search found, not the best that exists.
@@ -608,6 +640,7 @@ export function useTeamBuilder() {
     maxRosterSize,
     bringSize,
     canTryAnotherRoster,
+    generationAlternative,
     teamEditRevision,
     rosterEditRevision,
     unavailableRosterNames,
