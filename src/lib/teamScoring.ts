@@ -127,9 +127,9 @@ export const MEMBER_WEIGHTS = {
  *
  * | term    | floor | ceiling | realized share | nominal |
  * | ------- | ----- | ------- | -------------- | ------- |
-  * | offense | 0.320 | 0.992   | 0.349          | 0.35    |
-  * | bulk    | 0.264 | 0.876   | 0.419          | 0.45    |
-  * | speed   | 0.133 | 1.000   | 0.232          | 0.20    |
+  * | offense | 0.320 | 0.992   | 0.347          | 0.35    |
+  * | bulk    | 0.264 | 0.785   | 0.355          | 0.45    |
+  * | speed   | 0.133 | 1.000   | 0.298          | 0.20    |
  *
  * The floors are what matter here. An 85 Attack — unusable in a format where the
  * Pokemon worth bringing carry 130 — still collected **52%** of the offence term,
@@ -175,14 +175,39 @@ export const MEMBER_WEIGHTS = {
  * the speed of the other 204. The effect is small and it is not a side effect
  * nobody chose.
  *
-  * Measured 2026-07-29 by `npm run measure:composite-bounds` over all 208 legal
+ * ## Why the bulk ceiling fell from 0.876 to 0.785
+ *
+ * Re-measured 2026-08-13, after the resist abilities — Thick Fat, Heatproof,
+ * Water Bubble, Solid Rock and half of Purifying Salt — moved out of
+ * `abilityEffects.ts` and into `pokedexAbilities.ts`, where each is computed from
+ * the Pokemon's own damage relations instead of a flat multiplier on this term.
+ *
+ * The old ceiling was theirs. A bulk multiplier scales `hpAdjustedBulk`, so those
+ * constants were inflating the top of this range — Snorlax's HP times Thick Fat's
+ * 1.12 defined a ceiling that no stat line reaches. Removing them did not make
+ * any Pokemon less bulky; it stopped an ability being counted as bulk.
+ *
+ * The cost is the mirror of the Speed Boost note above, in the other direction:
+ * narrowing the denominator lifts every Pokemon's bulk term by about 10%. The
+ * shape is right — the range genuinely got narrower — but it means the migration
+ * slightly raised bulk across the pool while lowering it sharply for the seven
+ * Pokemon that had been overpaid.
+ *
+ * Bulk's realized share fell to 0.355 against a nominal 0.45, and speed's rose to
+ * 0.298 against 0.20, which is the widest this table has drifted from
+ * MEMBER_WEIGHTS. That is not the migration mispricing anything — it is the
+ * ability multipliers having quietly propped up bulk's spread, and it is recorded
+ * rather than corrected because closing it means changing MEMBER_WEIGHTS or
+ * STAT_CEILINGS, neither of which this change has a mandate to touch.
+ *
+  * Measured 2026-08-13 by `npm run measure:composite-bounds` over all 208 legal
  * species of Regulation M-B, computed exactly as `scoreMemberQuality` computes
  * them with ability multipliers applied. Rerun after changing STAT_CEILINGS,
  * SECONDARY_OFFENSE_WEIGHT, the ability tables or MEMBER_WEIGHTS.
  */
 export const OBSERVED_STAT_TERMS = {
   offense: { min: 0.32, max: 0.9923 },
-  bulk: { min: 0.2642, max: 0.876 },
+  bulk: { min: 0.2642, max: 0.7849 },
   speed: { min: 0.1333, max: 1 }
 } as const;
 
@@ -319,8 +344,8 @@ export const COMPOSITE_WEIGHTS = {
  *
  * | half           | nominal weight | points of swing |
  * | -------------- | -------------- | --------------- |
-  * | member quality | 0.45           | 8.0             |
-  * | team synergy   | 0.55           | 31.1            |
+  * | member quality | 0.45           | 8.5             |
+  * | team synergy   | 0.55           | 30.4            |
  *
  * A stated 45/55 split behaving as **4 to 1**. Half of all large member-quality
  * gaps were overturned by synergy, so how good the Pokemon were was close to a
@@ -335,9 +360,13 @@ export const COMPOSITE_WEIGHTS = {
  *
  * ## How these were measured
  *
- * `scripts/measure-composite-bounds.mjs`, run 2026-07-28 against Regulation M-B,
+ * `scripts/measure-composite-bounds.mjs`, run 2026-08-13 against Regulation M-B,
  * and **rerun whenever `scoreMemberQuality` changes** — these bounds are measured
- * on its output, so a change to OBSERVED_STAT_TERMS invalidates them. Details:
+ * on its output, so a change to OBSERVED_STAT_TERMS invalidates them. That
+ * dependency is an ordering constraint, not just a trigger: the run that sets
+ * OBSERVED_STAT_TERMS must be pasted in and the script run *again* before these
+ * numbers mean anything, because the first run measures quality against the old
+ * term ranges. Details:
  * every legal species in its default form, resolved through the species endpoint
  * so the dozen that exist only under a form suffix are included, then 200,000
  * random brings per format. Rerun it after any change to MEMBER_WEIGHTS,
@@ -378,20 +407,28 @@ export const COMPOSITE_WEIGHTS = {
  * percentile of 0.635. Clamping there would blind the search at exactly the point
  * it does its work. These bounds clamp nothing.
  *
-  * The residual is **1.81:1 in doubles and 1.71:1 in singles**, against a nominal
+  * The residual is **1.85:1 in doubles and 1.68:1 in singles**, against a nominal
  * 1.22:1 — recorded rather than tuned away. Synergy keeps roughly half again the
  * influence the weights claim, because its own -1 clamp compresses the bottom of
  * its range and normalizing cannot undo that. Closing the rest means changing
- * `scoreTeamSynergy`, not these constants. This takes the error from 228% to 53%.
+ * `scoreTeamSynergy`, not these constants. Unnormalized, doubles runs 3.57:1;
+ * these bounds take the error against nominal from 193% to 52%.
+ *
+ * The 2026-08-13 rerun, after the resist abilities moved to the type layer,
+ * moved both quality bounds up — doubles 0.145..0.567 to 0.154..0.614 — because
+ * `OBSERVED_STAT_TERMS` narrowed the bulk denominator and lifted every Pokemon's
+ * bulk term with it. Singles synergy widened 0.8078 to 0.8189 on a new observed
+ * maximum; doubles observed 0.7770 and **kept its 0.8124**, per the widen-only
+ * rule above.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.145, max: 0.567 },
+    quality: { min: 0.154, max: 0.6137 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1289, max: 0.577 },
-    synergy: { min: -1, max: 0.8078 }
+    quality: { min: 0.1361, max: 0.6223 },
+    synergy: { min: -1, max: 0.8189 }
   }
 } as const;
 

@@ -5,6 +5,7 @@ import {
   getQualityMultipliers,
   hasAbilityQualityRule
 } from './abilityEffects';
+import { isDamageTakenAbility } from './pokedexAbilities';
 import { MEMBER_WEIGHTS, scoreMemberQuality } from './teamScoring';
 
 describe('ABILITY_QUALITY_EFFECTS', () => {
@@ -14,10 +15,30 @@ describe('ABILITY_QUALITY_EFFECTS', () => {
     });
   });
 
-  it('gives every unapplied rule a condition, and every applied rule none', () => {
+  it('gives every unapplied rule a condition or a destination, and every applied rule neither', () => {
     ABILITY_QUALITY_EFFECTS.forEach((rule) => {
-      if (rule.applied) expect(rule.condition, `${rule.ability}`).toBeUndefined();
-      else expect(rule.condition, `${rule.ability}`).toBeTruthy();
+      if (rule.applied) {
+        expect(rule.condition, `${rule.ability}`).toBeUndefined();
+        expect(rule.migratedTo, `${rule.ability}`).toBeUndefined();
+      } else {
+        // Unapplied means one of two different things, and they must not blur:
+        // a condition the tool cannot see, or an effect priced somewhere better.
+        expect(
+          rule.condition || rule.migratedTo,
+          `${rule.ability} needs a condition or a migratedTo`
+        ).toBeTruthy();
+      }
+    });
+  });
+
+  it('leaves migrated abilities entirely to the module that took them', () => {
+    // Double-counting is the failure mode this guards. An ability priced from
+    // damage relations must not also collect a bulk multiplier here.
+    ABILITY_QUALITY_EFFECTS.filter((rule) => rule.migratedTo).forEach((rule) => {
+      expect(getQualityMultipliers(rule.ability), `${rule.ability}`)
+        .toEqual({ bulk: 1, offense: 1, speed: 1 });
+      expect(isDamageTakenAbility(rule.ability), `${rule.ability} should be priced by the type layer`)
+        .toBe(true);
     });
   });
 
@@ -105,6 +126,13 @@ describe('getQualityMultipliers', () => {
 
   it('treats Libero exactly as Protean', () => {
     expect(getQualityMultipliers('libero')).toEqual(getQualityMultipliers('protean'));
+  });
+
+  it('is neutral for a resist ability the type layer now prices', () => {
+    // Thick Fat used to return 1.12 here. It returns nothing now, and the point
+    // of the migration is that the credit is not lost — it is computed per
+    // Pokemon in pokedexAbilities.ts, where the typing is in scope.
+    expect(getQualityMultipliers('thick-fat')).toEqual({ bulk: 1, offense: 1, speed: 1 });
   });
 });
 

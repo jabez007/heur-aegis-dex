@@ -33,7 +33,7 @@
  * data the way Prankster is — the pool this tool already scores is a reasonable
  * stand-in for the opponent, so their expected value can be *measured*. Mold
  * Breaker is recorded below with that measurement, and it came to 0.0046 against
- * a random legal Pokemon, a seventh of the smallest applied entry.
+ * a random legal Pokemon, a fifth of the smallest applied entry.
  *
  * The size is the reason it is rejected, but the category is worth a warning of
  * its own. Crediting any of these turns this file into a matchup model, and a
@@ -44,13 +44,32 @@
  * should be a decision made on purpose rather than one arrived at by adding a
  * seventh reasonable-looking multiplier.
  *
+ * ## What belongs here, and what belongs in the type layer
+ *
+ * An ability whose effect is *a change to the typing* does not belong in this
+ * file, however convenient a multiplier is. Thick Fat, Heatproof, Water Bubble,
+ * Solid Rock and half of Purifying Salt all lived here once and have moved to
+ * `pokedexAbilities.ts`, where each Pokemon's benefit is computed from its own
+ * damage relations. Their entries are kept below with the reason, because the
+ * mistake is an easy one to make twice.
+ *
+ * The tell is whether the ability's worth varies with the typing it is attached
+ * to. Thick Fat is worth six times as much to Appletun as to Azumarill, and no
+ * constant can say that. Multiscale is worth the same to everyone.
+ *
  * ## Multipliers are deliberately small
  *
  * These scale a component of `scoreMemberQuality`, which is already bounded to
  * 0..1 and compresses hard at the top. A 1.25 on bulk is a large effect in that
  * space, not a small one. They are sized to reorder Pokemon whose quality is
- * close — the same budget discipline `CANDIDATE_WEIGHTS` documents — and like
- * every other weight here they are reasoned rather than measured.
+ * close — the same budget discipline `CANDIDATE_WEIGHTS` documents.
+ *
+ * These are the model's last unmeasured constants, and that is worth stating
+ * plainly rather than defending. `OBSERVED_STAT_TERMS`, `OBSERVED_DAMAGE_FROM`,
+ * `COMPOSITE_BOUNDS` and `OBSERVED_MEMBER_QUALITY` are all measured against the
+ * pool and dated, with scripts to regenerate them. Nothing here is, because
+ * nothing in the repo can measure what ignoring stat boosts is worth. That makes
+ * them reasoned rather than measured — an exception, not the house style.
  *
  * ## Why speed is scored here rather than in statAbilities
  *
@@ -67,7 +86,9 @@
  * line is *worth*, which is where an effect that accrues belongs.
  *
  * Enumerated on 2026-07-27 by walking the Regulation M-B roster's abilities, so
- * the recorded entries are ones a legal Pokemon actually carries.
+ * the recorded entries are ones a legal Pokemon actually carries. Re-walked on
+ * 2026-08-13 against the same roster, which turned up Heatproof — on the roster
+ * the whole time, and missed because it sits on one hidden slot.
  */
 
 export type QualityComponent = 'bulk' | 'offense' | 'speed';
@@ -82,6 +103,12 @@ export interface AbilityQualityRule {
   readonly applied: boolean;
   /** What has to happen first. Absent for the unconditional ones. */
   readonly condition?: string;
+  /**
+   * Module that prices this ability instead, for effects that turned out to
+   * belong somewhere else. An entry with this set is not unscored — it is scored
+   * better elsewhere, and the record stays so nobody re-adds the constant.
+   */
+  readonly migratedTo?: string;
   readonly reason: string;
 }
 
@@ -125,31 +152,15 @@ export const ABILITY_QUALITY_EFFECTS: readonly AbilityQualityRule[] = [
       + 'no business outlasting because none of the chip damage that wears others down applies.'
   },
   {
-    ability: 'thick-fat',
-    component: 'bulk',
-    multiplier: 1.12,
-    applied: true,
-    reason:
-      'Halves both Fire and Ice damage, two of the most common attacking types. Unusual among resist abilities in '
-      + 'covering two types at once, which is why it is here rather than treated as a near-immunity.'
-  },
-  {
     ability: 'purifying-salt',
     component: 'bulk',
-    multiplier: 1.12,
+    multiplier: 1.08,
     applied: true,
     reason:
-      'Blocks all status and halves incoming Ghost damage. Status immunity is worth real bulk in a format where '
-      + 'burn and paralysis are how bulky Pokemon are answered.'
-  },
-  {
-    ability: 'water-bubble',
-    component: 'bulk',
-    multiplier: 1.10,
-    applied: true,
-    reason:
-      'Halves Fire damage and blocks burn, on top of doubling the holder\'s Water moves. Only the defensive half is '
-      + 'credited here; the offensive half depends on carrying a Water move, which is a moveset assumption.'
+      'Blocks all status outright. Status immunity is worth real bulk in a format where burn and paralysis are how '
+      + 'bulky Pokemon are answered, and unlike the halved Ghost damage it is not a typing effect, so it stays here '
+      + 'while the Ghost half moved to pokedexAbilities.ts.\n\n'
+      + 'Reduced from 1.12 when the Ghost half left, since that number was priced for both halves together.'
   },
   {
     ability: 'sturdy',
@@ -160,14 +171,56 @@ export const ABILITY_QUALITY_EFFECTS: readonly AbilityQualityRule[] = [
       'Guarantees surviving one hit from full HP. Real but narrow: it does nothing once chipped, and the Pokemon that '
       + 'carry it are usually bulky enough that the guarantee is redundant against everything but a clean OHKO.'
   },
+
+  // Migrated to the type layer. Recorded so the constants are not re-added.
+  {
+    ability: 'thick-fat',
+    component: 'bulk',
+    multiplier: 1.12,
+    applied: false,
+    migratedTo: 'pokedexAbilities.ts',
+    reason:
+      'The entry that showed this table was solving the wrong problem. Thick Fat halves Fire and Ice, so what it is '
+      + 'worth depends entirely on the typing under it — measured across its own carriers the real benefit ran from '
+      + '0.0033 for Azumarill, which already resists both, to 0.0180 for Appletun. A single constant cannot express '
+      + 'a six-fold spread.\n\n'
+      + 'Worse, the constant scaled `hpAdjustedBulk`, so what it actually paid out tracked how bulky the Pokemon '
+      + 'already was — an axis with no connection to the ability. The ordering came out close to inverted: Azumarill '
+      + 'collected the second-largest award for the smallest real effect. The 1.12 was also about four times the '
+      + 'derived value across the board.\n\n'
+      + 'Now computed from each Pokemon\'s own damage relations, the way the type immunities always were.'
+  },
+  {
+    ability: 'heatproof',
+    component: 'bulk',
+    multiplier: 1.06,
+    applied: false,
+    migratedTo: 'pokedexAbilities.ts',
+    reason:
+      'Half of Thick Fat — Fire only — and briefly priced by halving its constant, which inherited the same defect. '
+      + 'Derived from typing now. Sinistcha is the only legal carrier, on its hidden slot.'
+  },
+  {
+    ability: 'water-bubble',
+    component: 'bulk',
+    multiplier: 1.10,
+    applied: false,
+    migratedTo: 'pokedexAbilities.ts',
+    reason:
+      'The halved Fire damage is a typing effect and moved. The offensive half — doubled Water moves — was never '
+      + 'credited here and still is not, because it needs a Water move in the set.'
+  },
   {
     ability: 'solid-rock',
     component: 'bulk',
     multiplier: 1.10,
-    applied: true,
+    applied: false,
+    migratedTo: 'pokedexAbilities.ts',
     reason:
-      'Reduces super-effective damage by a quarter, which is exactly the damage that decides matches. Applies to '
-      + 'whatever the Pokemon happens to be weak to, so it needs no prediction.'
+      'Reduces super-effective damage by a quarter, so its worth is set by how many weaknesses the typing has and how '
+      + 'severe they are — a Pokemon with one weakness and a Pokemon with five were paid the same 1.10. Derived per '
+      + 'Pokemon now. Filter is the same ability and is modelled alongside it, which also closes the gap where Filter '
+      + 'scored nothing at all.'
   },
   {
     ability: 'adaptability',
@@ -321,8 +374,8 @@ export const ABILITY_QUALITY_EFFECTS: readonly AbilityQualityRule[] = [
       + 'and the pool this tool already scores is a legitimate stand-in for the opponent, so the expected value is '
       + 'computable rather than guesswork.\n\n'
       + 'Computed 2026-07-28 across all 208 legal species: 20.7% carry a selected ability Mold Breaker would turn '
-      + 'off, and those abilities are worth a mean 0.0224 of member quality — an expected **0.0046**. Sturdy, the '
-      + 'smallest applied entry above, is worth roughly 0.033. Mold Breaker is a seventh of the weakest thing in '
+      + 'off, and those abilities are worth a mean 0.0224 of member quality — an expected **0.0046**. Heatproof, the '
+      + 'smallest applied entry above, is worth roughly 0.021. Mold Breaker is a fifth of the weakest thing in '
       + 'this table, because the abilities it meets most often are the cheap ones (Sturdy seven times, Flash Fire '
       + 'six) while the ones worth taking off the field are singletons — one Dragonite at 0.0900, one Furfrou at '
       + '0.0816.\n\n'

@@ -71,16 +71,24 @@ const MEASURED_AT_BASE_SCORE = 18;
  *
  * ## How these were measured
  *
- * Every one of the 171 type combinations, crossed with each of the eleven
- * abilities granting a type immunity plus the no-ability case. That is a
- * superset of what any roster holds, which is the property a bound needs: a
- * Pokemon cannot fall outside it. Abilities never touch the offensive buckets,
- * so `to` is the typing range unmodified.
+ * `scripts/measure-damage-bounds.mjs`, re-run 2026-08-13. Every one of the 171
+ * type combinations, crossed with each of the seventeen abilities that alter
+ * damage relations plus the no-ability case — 3,078 profiles. That is a superset
+ * of what any roster holds, which is the property a bound needs: a Pokemon
+ * cannot fall outside it. Abilities never touch the offensive buckets, so `to`
+ * is the typing range unmodified.
  *
  * Including abilities moves the defensive minimum from 13.25 to 11.25 — Steel/
  * Fairy with Earth Eater. Pinning the bound at the bare-typing 13.25 would have
  * saturated the entire top of the range to zero, losing exactly the
  * discrimination this change exists to recover.
+ *
+ * The cross product grew from eleven abilities to seventeen when the resist
+ * abilities moved into `pokedexAbilities.ts`, and **neither bound moved**. Thick
+ * Fat on Steel/Fairy reaches 11.25 exactly, tying Earth Eater rather than beating
+ * it: halving an existing 0.5x resistance is worth a quarter of a weakness-weight,
+ * and the two paths to the floor happen to meet. The numbers below are unchanged
+ * from the 2026-07-28 measurement, confirmed rather than superseded.
  *
  * ## Scaling, and its limit
  *

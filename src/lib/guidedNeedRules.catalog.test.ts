@@ -41,12 +41,26 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
     const second = recommendGuidedPartners(request);
 
     expect(first).toHaveLength(5);
+    // This list moved when the resist abilities left abilityEffects.ts for the
+    // type layer, and it moved for two reasons worth separating.
+    //
+    // Mamoswine sat second and now sits last. It carries Thick Fat, which the old
+    // flat 1.12 on bulk overpaid — Ice/Ground gains real Fire relief, but the
+    // constant was roughly four times the derived value and it scaled Mamoswine's
+    // already-large bulk on top.
+    //
+    // Ursaluna carries no resist ability at all and still entered, displacing
+    // Excadrill. That is the second-order effect: removing those multipliers
+    // dropped OBSERVED_STAT_TERMS.bulk.max from 0.876 to 0.785, and the narrower
+    // denominator lifts the bulk term for every Pokemon. A 130-HP bear benefits
+    // most. Recorded because it is the surprising half — a change to the ability
+    // tables reordered a Pokemon with no ability in them.
     expect(first.map(({ varietyName }) => varietyName)).toEqual([
       'archaludon',
-      'mamoswine',
       'dragapult',
-      'excadrill',
-      'goodra-hisui'
+      'goodra-hisui',
+      'ursaluna',
+      'mamoswine'
     ]);
     expect(first.every(({ needId, reasons }) =>
       needId === 'shared-quadruple-weakness' &&

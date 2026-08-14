@@ -63,6 +63,7 @@
     "gen:coverage-moves": "node scripts/gen-coverage-moves.mjs",
     "gen:scoring-fixture": "tsx scripts/gen-scoring-fixture.mjs",
     "measure:composite-bounds": "tsx scripts/measure-composite-bounds.mjs",
+    "measure:damage-bounds": "tsx scripts/measure-damage-bounds.mjs",
     "measure:support-eligibility": "tsx scripts/measure-support-eligibility.mjs"
   },
   "dependencies": {
