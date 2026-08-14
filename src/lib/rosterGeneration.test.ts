@@ -4,7 +4,8 @@ import {
   candidatePriority,
   countSharedWeaknesses,
   countTypeOverlap,
-  DEFAULT_SHARED_WEAKNESS_SLACK,
+  countUnansweredWeaknesses,
+  DEFAULT_UNANSWERED_WEAKNESS_SLACK,
   generateRosters
 } from './rosterGeneration';
 import { DEFAULT_BASE_SCORE, normalizeDamageFromScore } from './pokedexScoring';
@@ -325,23 +326,83 @@ describe('generateRosters', () => {
       mon('f', { types: ['bug'], typeName: 'bug', weaknesses: ['flying'] })
     ];
 
-    const rosters = generateRosters({ pokemon, format: doubles, seed, sharedWeaknessSlack: 0 });
+    const rosters = generateRosters({ pokemon, format: doubles, seed, unansweredWeaknessSlack: 0 });
 
     expect(rosters.length).toBeGreaterThan(0);
     expect(countSharedWeaknesses(rosters[0].members)).toBe(0);
     expect(rosters[0].members.map((m) => m.name)).not.toContain('excadrill');
   });
 
-  it('spends the default slack on a Pokemon good enough to be worth it', () => {
-    // The other side of the same case, and a deliberate loosening rather than a
-    // regression. Goodra-Hisui and Excadrill share Fire and Fighting — exactly
-    // DEFAULT_SHARED_WEAKNESS_SLACK — so at the default the generator will take
-    // Excadrill when it is the strongest thing available, and the test above
-    // shows slack 0 still refuses it.
+  it('does not charge for a shared weakness the roster answers', () => {
+    // The whole reason this counts unanswered weaknesses rather than shared
+    // ones. Two members weak to Ground is a hole; two members weak to Ground
+    // with a third resisting it is a hole somebody covers.
+    const shared = [
+      mon('x', { types: ['rock'], weaknesses: ['ground'] }),
+      mon('y', { types: ['fire'], weaknesses: ['ground'] })
+    ];
+    expect(countSharedWeaknesses(shared)).toBe(1);
+    expect(countUnansweredWeaknesses(shared)).toBe(1);
+
+    const answered = [...shared, mon('z', { types: ['flying'], resistances: ['ground'] })];
+    expect(countSharedWeaknesses(answered)).toBe(1);
+    expect(countUnansweredWeaknesses(answered)).toBe(0);
+  });
+
+  it('treats an immunity as an answer', () => {
+    // `resistances` is the broad reduced-damage set and already carries the 0x
+    // bucket, so Levitate needs no special case. Pinned because a future change
+    // to createTypeSummary could quietly narrow that set.
+    const roster = [
+      mon('x', { weaknesses: ['ground'] }),
+      mon('y', { weaknesses: ['ground'] }),
+      mon('z', { resistances: ['ground'], immunities: ['ground'] })
+    ];
+    expect(countUnansweredWeaknesses(roster)).toBe(0);
+  });
+
+  it('finds a roster whose answer arrives after the weakness', () => {
+    // The non-monotonicity that makes this measure awkward to search. Two strong
+    // members share a Ground weakness, and the member that resists Ground sorts
+    // last in the pool. A beam pruning on the count itself would drop the pair
+    // before ever seeing the answer, and return nothing at budget 0.
+    const strong = {
+      stats: { hp: 110, attack: 135, defense: 120, 'special-attack': 120, 'special-defense': 110, speed: 100 },
+      normalizedDamageFromScore: 0.2
+    };
+    const weakStats = {
+      stats: { hp: 50, attack: 50, defense: 50, 'special-attack': 50, 'special-defense': 50, speed: 50 },
+      normalizedDamageFromScore: 0.8
+    };
+    const pokemon = [
+      mon('a', { types: ['rock'], typeName: 'rock', weaknesses: ['ground'], ...strong }),
+      mon('b', { types: ['fire'], typeName: 'fire', weaknesses: ['ground'], ...strong }),
+      mon('c', { types: ['water'], typeName: 'water', weaknesses: ['grass'], ...strong }),
+      mon('d', { types: ['ghost'], typeName: 'ghost', weaknesses: ['dark'], ...strong }),
+      mon('e', { types: ['fairy'], typeName: 'fairy', weaknesses: ['poison'], ...strong }),
+      // Deliberately the weakest thing here, so candidate ranking puts it last.
+      mon('answerer', { types: ['flying'], typeName: 'flying', resistances: ['ground'], ...weakStats })
+    ];
+
+    const rosters = generateRosters({ pokemon, format: doubles, unansweredWeaknessSlack: 0 });
+
+    expect(rosters.length).toBeGreaterThan(0);
+    expect(countUnansweredWeaknesses(rosters[0].members)).toBe(0);
+    // Both Ground-weak members and the answer, which only fits because the
+    // search pruned on a bound rather than on the count.
+    expect(rosters[0].members.map((m) => m.name).sort())
+      .toEqual(['a', 'answerer', 'b', 'c', 'd', 'e']);
+  });
+
+  it('takes the doubled-up Pokemon once a teammate answers what it doubles', () => {
+    // The other side of the reported case, and the point of counting unanswered
+    // weaknesses rather than shared ones. The pool is identical to the test
+    // above except that two members now resist Fire and Fighting — so the pair
+    // Goodra-Hisui and Excadrill costs nothing, and the generator takes the
+    // strongest thing available instead of refusing it on a technicality.
     //
-    // Pinned because it is the behaviour someone will report as a bug, and the
-    // answer is that it was measured: refusing every shared weakness cost 0.91
-    // points in doubles and 1.92 in singles on the real pool.
+    // Under countSharedWeaknesses this roster was impossible at the default: the
+    // pair spent 2 whatever the rest of the team could cover.
     const seed = [mon('goodra-hisui', {
       types: ['steel', 'dragon'], typeName: 'steel/dragon',
       weaknesses: ['fire', 'fighting', 'ground']
@@ -354,19 +415,21 @@ describe('generateRosters', () => {
         stats: { hp: 110, attack: 135, defense: 120, 'special-attack': 50, 'special-defense': 65, speed: 88 },
         normalizedDamageFromScore: 0.2
       }),
-      mon('a', { types: ['water'], typeName: 'water', weaknesses: ['electric'] }),
-      mon('b', { types: ['fire'], typeName: 'fire', weaknesses: ['water'] }),
-      mon('c', { types: ['grass'], typeName: 'grass', weaknesses: ['bug'] }),
-      mon('d', { types: ['ghost'], typeName: 'ghost', weaknesses: ['dark'] }),
-      mon('e', { types: ['fairy'], typeName: 'fairy', weaknesses: ['poison'] }),
-      mon('f', { types: ['bug'], typeName: 'bug', weaknesses: ['flying'] })
+      mon('a', { types: ['water'], typeName: 'water', weaknesses: ['electric'], resistances: ['fire'] }),
+      mon('b', { types: ['fire'], typeName: 'fire', weaknesses: ['water'], resistances: ['fire'] }),
+      mon('c', { types: ['grass'], typeName: 'grass', weaknesses: ['bug'], resistances: ['ground'] }),
+      mon('d', { types: ['ghost'], typeName: 'ghost', weaknesses: ['dark'], resistances: ['fighting'] }),
+      mon('e', { types: ['fairy'], typeName: 'fairy', weaknesses: ['poison'], resistances: ['fighting'] }),
+      mon('f', { types: ['bug'], typeName: 'bug', weaknesses: ['flying'], resistances: ['water'] })
     ];
 
     const rosters = generateRosters({ pokemon, format: doubles, seed });
 
     expect(rosters[0].members.map((m) => m.name)).toContain('excadrill');
-    expect(countSharedWeaknesses(rosters[0].members))
-      .toBeLessThanOrEqual(DEFAULT_SHARED_WEAKNESS_SLACK);
+    expect(countUnansweredWeaknesses(rosters[0].members))
+      .toBeLessThanOrEqual(DEFAULT_UNANSWERED_WEAKNESS_SLACK);
+    // And it really is a roster the shared-weakness rule would have refused.
+    expect(countSharedWeaknesses(rosters[0].members)).toBeGreaterThan(0);
   });
 
   it('allows a shared type when the weaknesses do not actually overlap', () => {
@@ -420,7 +483,7 @@ describe('generateRosters', () => {
       mon('g', { types: ['bug'], typeName: 'bug', weaknesses: ['flying'] })
     ];
 
-    const constrained = generateRosters({ pokemon, format: doubles, sharedWeaknessSlack: 0 });
+    const constrained = generateRosters({ pokemon, format: doubles, unansweredWeaknessSlack: 0 });
     const unconstrained = generateRosters({ pokemon, format: doubles, allowDuplicateTypings: true });
 
     expect(constrained.length).toBeGreaterThan(0);
@@ -446,7 +509,7 @@ describe('generateRosters', () => {
       mon('g', { types: ['bug'], weaknesses: ['flying'] })
     ];
 
-    const best = generateRosters({ pokemon, format: doubles, sharedWeaknessSlack: 0 });
+    const best = generateRosters({ pokemon, format: doubles, unansweredWeaknessSlack: 0 });
     const achieved = countSharedWeaknesses(best[0].members);
 
     // Every six-member combination of this pool, checked exhaustively.

@@ -12,11 +12,21 @@
  * Three constraints survive that. No duplicate species, which is a rule of the
  * format. No two members on the same type combination, which is not — you may
  * register two Steel/Dragons — but which a *generated* roster should not spend a
- * slot on. And a budget on how often the roster repeats any single elemental
- * type, searched strictest-first so a repeat is spent only when nothing cleaner
- * fits. See `typingKey` and `countTypeOverlap` for why the synergy penalties
- * alone did not settle either. All three bind generation only; a hand-built
- * roster is scored as it is.
+ * slot on. And a budget on how often the roster repeats a weakness *nothing on
+ * it resists*, searched strictest-first so a repeat is spent only when nothing
+ * cleaner fits. All three bind generation only; a hand-built roster is scored as
+ * it is.
+ *
+ * That third constraint has been rewritten twice, and the pattern is worth
+ * naming because it will probably happen again. It began as `countTypeOverlap`,
+ * a budget on repeated elemental types. That was a proxy for repeated
+ * weaknesses, and wrong for 10.7% of type-sharing pairs. Repeated weaknesses
+ * were in turn a proxy for repeated *unanswered* weaknesses, and overstated the
+ * threat in 96% of generated rosters. Each stage measured the stand-in for the
+ * next one down. See `countTypeOverlap`, `countSharedWeaknesses` and
+ * `countUnansweredWeaknesses` — the first two are kept, unused by the search,
+ * because the reasoning that retired them is the reasoning that would retire
+ * this one.
  *
  * Like the type search this is a beam, not an exhaustive enumeration, and it
  * prunes twice over:
@@ -245,53 +255,57 @@ export interface GenerateRostersOptions {
    */
   allowDuplicateTypings?: boolean;
   /**
-   * Shared weaknesses allowed *above* the fewest the pool can manage. Defaults
-   * to `DEFAULT_SHARED_WEAKNESS_SLACK`.
+   * Unanswered shared weaknesses allowed *above* the fewest the pool can manage.
+   * Defaults to `DEFAULT_UNANSWERED_WEAKNESS_SLACK`, which is 0.
    *
    * Expressed as slack rather than an absolute budget because the floor depends
-   * on the pool: a user filtered down to Steel and Dragon cannot reach zero, and
-   * an absolute cap would either fail there or be vacuous on the full roster.
-   * 0 reproduces the strictest roster the pool allows.
+   * on the pool: a user filtered down to Steel and Dragon cannot reach zero on
+   * the raw count, and an absolute cap would either fail there or be vacuous on
+   * the full roster. Raising this trades defensive tidiness for the individual
+   * quality of the members.
    */
-  sharedWeaknessSlack?: number;
+  unansweredWeaknessSlack?: number;
   candidateLimit?: number;
 }
 
 /**
- * How much redundancy the generator will accept to get a better roster.
+ * How much unanswered redundancy the generator will accept for a better roster.
  *
- * Not zero, and the reason is measured. Refusing every shared weakness is
- * achievable on the full pool — six Pokemon really can carry eighteen weaknesses
- * across eighteen types with no repeat — but only a narrow set of rosters manage
- * it, so the purity is bought with quality:
+ * Zero, and the reason it can afford to be is that the constraint became almost
+ * free once it stopped counting weaknesses the roster already covers:
  *
  * | slack | doubles | singles |
  * | ----- | ------- | ------- |
- * | 0     | 88.88   | 88.56   |
- * | 1     | 89.37   | 89.02   |
- * | 2     | 89.70   | 89.52   |
- * | 3     | 89.79   | 89.89   |
+ * | 0     | 89.70   | 90.48   |
+ * | 1     | 89.79   | 90.48   |
+ * | 2     | 89.79   | 90.48   |
  * | none  | 89.79   | 90.48   |
  *
- * At 0 the generator was paying 0.91 points in doubles and 1.92 in singles, on a
- * scale where every weight in this model carries less uncertainty than that. The
- * old type-overlap rule cost 0.12, which is why nobody had to think about this
- * before: it was a mild preference and this is a strong one.
+ * Strict costs **0.09 points in doubles and nothing at all in singles**, where
+ * the singles roster the generator picks *is* the unconstrained optimum. There
+ * is no purity to buy: a roster with no unanswered redundancy is simply also the
+ * best roster.
  *
- * 2 takes back most of the difference while still refusing the rosters that
- * answer the same threat three times.
+ * ## Why this was briefly 2
  *
- * ## What this deliberately re-admits
+ * The same table against `countSharedWeaknesses` read 88.88 / 88.56 at strict,
+ * against 89.79 / 90.48 unconstrained — 0.91 and 1.92 points, which is a lot on
+ * a scale where every weight in this model carries less uncertainty than that.
+ * A default of 2 was the right answer to that measurement.
  *
- * A pair sharing two weaknesses now fits inside the default budget, and that
- * includes the Goodra-Hisui and Excadrill pairing this file's history names as
- * the reported defect — they share Fire and Fighting, which is exactly 2.
+ * The measurement was the problem. Nearly all of that cost was being charged for
+ * shared weaknesses the roster *answered*, and once the count dropped them the
+ * justification for slack went with it. The singles roster at strict carries
+ * four shared weaknesses and a repeated type, every one of them covered by a
+ * teammate; the previous rule refused it and charged 1.92 points to do so.
  *
- * That is a real loosening and it is the point rather than an oversight: the
- * generator will now spend those two on a Pokemon good enough to be worth them,
- * and refuse when it is not. Setting this to 0 restores the old refusal.
+ * The knob is kept because the floor mechanism still needs it and a user may
+ * reasonably want to trade defensive tidiness for individual quality. It is
+ * simply no longer paying for anything by default.
+ *
+ * Measured 2026-08-13 over the app's default candidate pool.
  */
-export const DEFAULT_SHARED_WEAKNESS_SLACK = 2;
+export const DEFAULT_UNANSWERED_WEAKNESS_SLACK = 0;
 
 /**
  * Identity used to keep a generated roster off the same typing twice.
@@ -440,6 +454,106 @@ export function countSharedWeaknesses(roster: { weaknesses?: string[] }[]): numb
   return [...counts.values()].reduce((total, count) => total + count - 1, 0);
 }
 
+interface WeaknessProfile {
+  weaknesses?: string[];
+  /** Includes immunities: `createTypeSummary` builds this as the 0x, 0.25x and 0.5x buckets. */
+  resistances?: string[];
+}
+
+/**
+ * How many times a roster repeats a weakness *that nothing on it resists*.
+ *
+ * The measure the search actually constrains on, and the third step in a chain
+ * where each stage was a stand-in for the next. Repeated typings stood in for
+ * repeated weaknesses; repeated weaknesses stand in for this.
+ *
+ * Two members weak to Ground with a third resisting it is a hole somebody
+ * covers. Two members weak to Ground with nobody answering is how a game is
+ * lost, and only the second is worth spending budget on. `teamCoverage.ts` has
+ * said so all along — its `defensivelyUncoveredWeaknesses` is documented as "the
+ * types that actually threaten the team" — and the roster search was not reading
+ * it.
+ *
+ * The gap is not marginal. Across the top 200 generated rosters in each format,
+ * **96%** had a raw shared-weakness count that overstated the real threat, and
+ * the roster the generator picked in doubles counted 2 shared weaknesses of
+ * which **0** were unanswered. It was paying budget for redundancy that the
+ * roster already covered.
+ *
+ * Measured 2026-08-13 over the app's default candidate pool.
+ *
+ * ## Immunities need no special case
+ *
+ * `resistances` is the broad "takes reduced damage" set and already contains the
+ * 0x bucket, so a Levitate answer to Ground counts here without being named
+ * separately. That is the same set `resistanceBreadth` scores against.
+ *
+ * @param roster Members carrying ability-adjusted weaknesses and resistances.
+ * @returns Repetitions of unanswered weaknesses, 0 when every shared weakness
+ *   has someone to switch into.
+ */
+export function countUnansweredWeaknesses(roster: WeaknessProfile[]): number {
+  const counts = new Map<string, number>();
+  const answered = new Set<string>();
+  roster.forEach((member) => {
+    (member.weaknesses ?? []).forEach((weakness) => {
+      counts.set(weakness, (counts.get(weakness) ?? 0) + 1);
+    });
+    (member.resistances ?? []).forEach((resistance) => answered.add(resistance));
+  });
+
+  let total = 0;
+  counts.forEach((count, type) => {
+    if (!answered.has(type)) total += count - 1;
+  });
+  return total;
+}
+
+/**
+ * Lower bound on what `countUnansweredWeaknesses` can still fall to.
+ *
+ * Needed because that measure is **not prefix-monotone**: adding a member who
+ * resists Ground removes Ground from the tally entirely, so a partial roster
+ * over budget can still complete to one under it. `countSharedWeaknesses` had no
+ * such problem — adding a member could only ever raise it — and pruning the beam
+ * on the direct count would silently discard valid rosters.
+ *
+ * So the beam prunes on this instead. A repeated weakness counts against a
+ * partial only when *nothing left in the candidate pool* resists it, which makes
+ * the value a true lower bound on any completion: those types cannot be answered
+ * by anyone still available, and their counts only grow as members are added.
+ * Pruning when the bound exceeds the budget therefore cannot drop a roster that
+ * would have met it.
+ *
+ * The bound is loose early — with the whole pool remaining, almost every type is
+ * still answerable and the bound sits near zero — and tightens as the search
+ * consumes candidates. That is the right shape for a beam: permissive while
+ * options remain, decisive once they do not.
+ *
+ * @param roster Members chosen so far.
+ * @param answerableLater Types some remaining candidate still resists.
+ * @returns A count no completion of this roster can go below.
+ */
+function boundUnansweredWeaknesses(
+  roster: WeaknessProfile[],
+  answerableLater: ReadonlySet<string>
+): number {
+  const counts = new Map<string, number>();
+  const answered = new Set<string>();
+  roster.forEach((member) => {
+    (member.weaknesses ?? []).forEach((weakness) => {
+      counts.set(weakness, (counts.get(weakness) ?? 0) + 1);
+    });
+    (member.resistances ?? []).forEach((resistance) => answered.add(resistance));
+  });
+
+  let total = 0;
+  counts.forEach((count, type) => {
+    if (!answered.has(type) && !answerableLater.has(type)) total += count - 1;
+  });
+  return total;
+}
+
 export interface GeneratedRoster {
   members: PokemonEntry[];
   evaluation: RosterEvaluation;
@@ -505,7 +619,7 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
  *
  * Two constraints bind the search, and neither enters a score. No two members
  * on the same type combination, and no more shared weaknesses than the pool's
- * own floor plus `sharedWeaknessSlack`.
+ * own floor plus `unansweredWeaknessSlack`.
  *
  * A narrow pool — a user filtering the browser down to a handful of typings —
  * must still get a roster rather than an error, so the floor is measured against
@@ -539,10 +653,10 @@ export function generateRosters(options: GenerateRostersOptions): GeneratedRoste
   const relaxed = searchRosters(options, false, Infinity);
   if (relaxed.length === 0) return searchRosters(options, true, Infinity);
 
-  const slack = options.sharedWeaknessSlack ?? DEFAULT_SHARED_WEAKNESS_SLACK;
+  const slack = options.unansweredWeaknessSlack ?? DEFAULT_UNANSWERED_WEAKNESS_SLACK;
 
   let low = 0;
-  let high = countSharedWeaknesses(relaxed[0].members);
+  let high = countUnansweredWeaknesses(relaxed[0].members);
   let floor = high;
   let strictest = relaxed;
 
@@ -551,7 +665,7 @@ export function generateRosters(options: GenerateRostersOptions): GeneratedRoste
     const found = searchRosters(options, false, mid);
     if (found.length > 0) {
       strictest = found;
-      floor = countSharedWeaknesses(found[0].members);
+      floor = countUnansweredWeaknesses(found[0].members);
       high = floor;
     } else {
       low = mid + 1;
@@ -564,7 +678,7 @@ export function generateRosters(options: GenerateRostersOptions): GeneratedRoste
   // higher budgets admit strictly more rosters. Saves the final search on the
   // common case where the pool is wide enough that slack covers the gap.
   const budget = floor + slack;
-  if (countSharedWeaknesses(relaxed[0].members) <= budget) return relaxed;
+  if (countUnansweredWeaknesses(relaxed[0].members) <= budget) return relaxed;
 
   const loosened = searchRosters(options, false, budget);
   return loosened.length > 0 ? loosened : strictest;
@@ -573,7 +687,7 @@ export function generateRosters(options: GenerateRostersOptions): GeneratedRoste
 function searchRosters(
   options: GenerateRostersOptions,
   allowDuplicateTypings: boolean,
-  maxSharedWeaknesses: number
+  maxUnansweredWeaknesses: number
 ): GeneratedRoster[] {
   const {
     pokemon,
@@ -627,18 +741,29 @@ function searchRosters(
     return key;
   };
 
-  const canAdd = (roster: PokemonEntry[], candidate: PokemonEntry): boolean => {
+  // Types some candidate at or after each index still resists, built back to
+  // front. `answerableLater[i]` is what the pool can still cover once the search
+  // has passed index i, and it is what keeps the pruning bound sound.
+  const answerableLater: Set<string>[] = new Array(candidates.length + 1);
+  answerableLater[candidates.length] = new Set();
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const next = new Set(answerableLater[i + 1]);
+    (candidates[i].resistances ?? []).forEach((resistance) => next.add(resistance));
+    answerableLater[i] = next;
+  }
+
+  const canAdd = (roster: PokemonEntry[], candidate: PokemonEntry, index: number): boolean => {
     if (roster.length >= rosterSize) return false;
     if (roster.some((member) => member.name === candidate.name)) return false;
     if (!allowDuplicateSpecies && roster.some((member) => member.speciesName === candidate.speciesName)) return false;
     // A seed that already doubles a typing keeps whatever the user chose; this
     // only stops the search from adding more of one.
     if (!allowDuplicateTypings && roster.some((member) => typing(member) === typing(candidate))) return false;
-    // Prefix-monotone: adding a member can only raise the count, so pruning a
-    // partial that already exceeds the budget cannot discard a valid full
-    // roster. That is what makes the bisection above sound.
-    if (maxSharedWeaknesses !== Infinity
-      && countSharedWeaknesses([...roster, candidate]) > maxSharedWeaknesses) return false;
+    // Pruned on the lower bound rather than the measure itself, because the
+    // measure can *fall* when a member is added. See boundUnansweredWeaknesses.
+    if (maxUnansweredWeaknesses !== Infinity
+      && boundUnansweredWeaknesses([...roster, candidate], answerableLater[index + 1])
+        > maxUnansweredWeaknesses) return false;
     return true;
   };
 
@@ -648,7 +773,7 @@ function searchRosters(
     const remaining = candidates.length - index - 1;
     const expanded = partials.flatMap((roster) => {
       const branches = [roster];
-      if (canAdd(roster, candidate)) branches.push([...roster, candidate]);
+      if (canAdd(roster, candidate, index)) branches.push([...roster, candidate]);
       return branches;
     });
 
@@ -668,6 +793,10 @@ function searchRosters(
 
   return partials
     .filter((roster) => roster.length === rosterSize)
+    // The beam pruned on a lower bound, which is deliberately permissive. Only a
+    // finished roster can be measured, so the real budget is enforced here.
+    .filter((roster) => maxUnansweredWeaknesses === Infinity
+      || countUnansweredWeaknesses(roster) <= maxUnansweredWeaknesses)
     .map((members) => {
       const evaluation = evaluateRoster(members.map(toRosterMember), scoringOptions);
       return { members, evaluation, score: evaluation.score };
