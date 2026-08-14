@@ -311,6 +311,21 @@ describe('useTeamBuilder', () => {
     const scanOf = (types: string[]) =>
       types.map((type, index) => pokemon(`mon-${index}`, { typeName: type, types: [type] }));
 
+    it('cycles through meaningfully different alternatives after fresh generation', () => {
+      const scan = scanOf([
+        'fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel', 'psychic', 'flying'
+      ]);
+
+      builder.generateFullTeam(scan);
+      const first = new Set(roster.value.map((member) => member.name));
+
+      expect(builder.canTryAnotherRoster.value).toBe(true);
+      builder.fillRemainingSlots(scan, scan);
+
+      const replacements = roster.value.filter((member) => !first.has(member.name));
+      expect(replacements.length).toBeGreaterThanOrEqual(2);
+    });
+
     it('keeps the registered members and adds to them', () => {
       fillRoster(addPokemon, 3);
       const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock']);

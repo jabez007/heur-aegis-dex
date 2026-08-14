@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Fresh roster generation now offers meaningfully different alternatives.**
+  The strongest roster remains first, then `Try Another` steps through up to six
+  rosters within three score points of it. Alternatives preferentially replace
+  at least two Pokemon and maximize their distance from choices already shown;
+  closer substitutions remain available when the search finds nothing broader.
+
 - **Published packages are built and verified as one artifact.** `npm pack` now
   builds the library through `prepack`, bundles format-specific declarations for
   bundler, NodeNext ESM and Node16 CommonJS consumers, and smoke-tests the

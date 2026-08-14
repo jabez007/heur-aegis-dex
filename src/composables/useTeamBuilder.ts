@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import { withAbility, type PokemonEntry } from '../lib/pokemonEntry';
 import type { WorkspaceSnapshotV1 } from '../lib/workspacePersistence';
 import { generateRosters } from '../lib/rosterGeneration';
+import { selectRosterPortfolio } from '../lib/rosterPortfolio';
 import { analyzeTeamCoverage } from '../lib/teamCoverage';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from '../lib/abilityRoles';
 import { evaluateRoster, type RosterMember } from '../lib/rosterScoring';
@@ -13,8 +14,6 @@ import {
 } from '../lib/battleFormats';
 import { useNotifications } from './useNotifications';
 import { createInjectableState } from './injectableState';
-
-const FILL_ALTERNATIVE_SCORE_MARGIN = 3;
 
 export interface PartyMember {
   /** PokeAPI variety name, unique within the roster. */
@@ -54,6 +53,7 @@ const teamBuilderState = createInjectableState('heur-aegis-dex:team-builder', ()
   formatId: ref<BattleFormatId>(DEFAULT_BATTLE_FORMAT),
   isGenerating: ref(false),
   fillSeedNames: ref<string[]>([]),
+  generationCycleActive: ref(false),
   lastFilledRosterKey: ref<string | null>(null),
   fillAlternativeCount: ref(0),
   fillAlternativesDirty: ref(false),
@@ -87,6 +87,7 @@ export function useTeamBuilder() {
     formatId,
     isGenerating,
     fillSeedNames,
+    generationCycleActive,
     lastFilledRosterKey,
     fillAlternativeCount,
     fillAlternativesDirty,
@@ -107,13 +108,14 @@ export function useTeamBuilder() {
   const bringSize = computed(() => format.value.broughtToBattle);
   const canTryAnotherRoster = computed(() =>
     roster.value.length >= maxRosterSize.value &&
-    fillSeedNames.value.length > 0 &&
+    generationCycleActive.value &&
     (fillAlternativeCount.value > 1 || fillAlternativesDirty.value)
   );
   const hasUnavailableRosterMembers = computed(() => unavailableRosterNames.value.length > 0);
 
   const resetFillCycle = () => {
     fillSeedNames.value = [];
+    generationCycleActive.value = false;
     lastFilledRosterKey.value = null;
     fillAlternativeCount.value = 0;
     fillAlternativesDirty.value = false;
@@ -128,14 +130,14 @@ export function useTeamBuilder() {
     } else {
       excludedPokemonNames.value.splice(index, 1);
     }
-    fillAlternativesDirty.value = fillSeedNames.value.length > 0;
+    fillAlternativesDirty.value = generationCycleActive.value;
     lastFilledRosterKey.value = null;
   };
 
   const clearGenerationExclusions = () => {
     if (excludedPokemonNames.value.length === 0) return;
     excludedPokemonNames.value = [];
-    fillAlternativesDirty.value = fillSeedNames.value.length > 0;
+    fillAlternativesDirty.value = generationCycleActive.value;
     lastFilledRosterKey.value = null;
   };
 
@@ -476,9 +478,8 @@ export function useTeamBuilder() {
     }
     if (rosters.length === 0) return false;
 
-    const alternatives = cycleAlternatives
-      ? rosters.filter((candidate) => rosters[0].score - candidate.score <= FILL_ALTERNATIVE_SCORE_MARGIN)
-      : [rosters[0]];
+    const alternatives = cycleAlternatives ? selectRosterPortfolio(rosters) : [rosters[0]];
+    if (cycleAlternatives) generationCycleActive.value = true;
     fillAlternativeCount.value = cycleAlternatives ? alternatives.length : 0;
     const rosterKey = (members: PokemonEntry[]) =>
       members.map((member) => member.name).sort().join('|');
@@ -514,7 +515,7 @@ export function useTeamBuilder() {
     isGenerating.value = true;
     try {
       resetFillCycle();
-      if (!runGeneration(pool, [], 'Best roster found')) {
+      if (!runGeneration(pool, [], 'Best roster found', true)) {
         notify("No valid rosters found with current filters.", "error");
       }
     } catch (error: unknown) {
