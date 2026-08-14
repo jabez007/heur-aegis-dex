@@ -66,10 +66,17 @@
  *
  * These are the model's last unmeasured constants, and that is worth stating
  * plainly rather than defending. `OBSERVED_STAT_TERMS`, `OBSERVED_DAMAGE_FROM`,
- * `COMPOSITE_BOUNDS` and `OBSERVED_MEMBER_QUALITY` are all measured against the
- * pool and dated, with scripts to regenerate them. Nothing here is, because
- * nothing in the repo can measure what ignoring stat boosts is worth. That makes
- * them reasoned rather than measured — an exception, not the house style.
+ * `COMPOSITE_BOUNDS`, `OBSERVED_MEMBER_QUALITY` and now `STATUS_THREAT` are all
+ * measured against the pool and dated, with scripts to regenerate them. Nothing
+ * still in this table is, because nothing in the repo can measure what ignoring
+ * stat boosts is worth. That makes them reasoned rather than measured — an
+ * exception, not the house style.
+ *
+ * Purifying Salt was the last entry here with a measurable alternative, and it
+ * left. What remains — Multiscale, Unaware, Disguise, Magic Guard, Sturdy,
+ * Adaptability, Protean, Libero, Speed Boost — is genuinely judgement, and each
+ * would need a new kind of data rather than a new script. That is the honest
+ * boundary of this table, not a queue of work.
  *
  * ## Why speed is scored here rather than in statAbilities
  *
@@ -90,6 +97,9 @@
  * 2026-08-13 against the same roster, which turned up Heatproof — on the roster
  * the whole time, and missed because it sits on one hidden slot.
  */
+
+import type { PokemonStats } from './pokedexTypes';
+import { getStatusImmunityMultipliers, grantsStatusImmunity } from './statusThreat';
 
 export type QualityComponent = 'bulk' | 'offense' | 'speed';
 
@@ -155,12 +165,19 @@ export const ABILITY_QUALITY_EFFECTS: readonly AbilityQualityRule[] = [
     ability: 'purifying-salt',
     component: 'bulk',
     multiplier: 1.08,
-    applied: true,
+    applied: false,
+    migratedTo: 'statusThreat.ts',
     reason:
-      'Blocks all status outright. Status immunity is worth real bulk in a format where burn and paralysis are how '
-      + 'bulky Pokemon are answered, and unlike the halved Ghost damage it is not a typing effect, so it stays here '
-      + 'while the Ghost half moved to pokedexAbilities.ts.\n\n'
-      + 'Reduced from 1.12 when the Ghost half left, since that number was priced for both halves together.'
+      'Blocks all status outright. Briefly held a 1.08 here after the Ghost half left for pokedexAbilities.ts, and '
+      + 'that number was derived by subtraction from the old 1.12 — the last hand-picked constant in the model with a '
+      + 'measurable alternative.\n\n'
+      + 'It had the same two defects as Thick Fat. Status immunity is not bulk, so the multiplier was on the wrong '
+      + 'term: what burn takes is Attack and what paralysis takes is Speed. And its worth is not the same for two '
+      + 'Pokemon — burn costs Garganacl 0.1068 of quality and paralysis only 0.0231, a four-fold gap inside a single '
+      + 'carrier that one number cannot express.\n\n'
+      + 'Derived per Pokemon now, from measured frequencies rather than judgement. See statusThreat.ts, which also '
+      + 'records what the derivation still cannot price: poison and sleep reach a quarter of the pool between them '
+      + 'and cost nothing in this model, so the credit is a floor.'
   },
   {
     ability: 'sturdy',
@@ -420,10 +437,23 @@ export function hasAbilityQualityRule(abilityName: string | undefined | null): b
  * @returns Bulk, offense and speed multipliers, each 1 when nothing applies.
  */
 export function getQualityMultipliers(
-  abilityName: string | undefined | null
+  abilityName: string | undefined | null,
+  stats?: PokemonStats
 ): Record<QualityComponent, number> {
   const neutral: Record<QualityComponent, number> = { bulk: 1, offense: 1, speed: 1 };
   const rule = getAbilityQualityEffect(abilityName);
-  if (!rule) return neutral;
-  return { ...neutral, [rule.component]: rule.multiplier };
+  const base = rule ? { ...neutral, [rule.component]: rule.multiplier } : neutral;
+
+  // Purifying Salt is derived rather than tabled, because what a status immunity
+  // is worth depends on the stat line it protects. Omitting `stats` scores it as
+  // though the ability does nothing, which is the safe direction and matches how
+  // an omitted ability is already treated.
+  if (!stats || !grantsStatusImmunity(abilityName)) return base;
+
+  const status = getStatusImmunityMultipliers(stats);
+  return {
+    ...base,
+    offense: base.offense * status.offense,
+    speed: base.speed * status.speed
+  };
 }

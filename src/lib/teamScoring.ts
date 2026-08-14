@@ -13,7 +13,7 @@
  */
 
 import type { PokemonStats } from './pokedexTypes';
-import { hpAdjustedBulk } from './statMetrics';
+import { effectiveOffense, hpAdjustedBulk } from './statMetrics';
 import type { TeamCoverageAnalysis } from './teamCoverage';
 import { getApplicableRoles, type AbilityRole, type TeamRoleAnalysis } from './abilityRoles';
 import { getQualityMultipliers } from './abilityEffects';
@@ -37,59 +37,14 @@ export const STAT_CEILINGS = {
   speed: 150
 } as const;
 
-/**
- * How much the weaker attacking stat counts toward offence.
- *
- * The weaker side is not worthless — it is the angle a Pokemon has left when
- * something walls its primary — but it is not a second attacker either, because
- * moveslots and the stat that powers them are both finite.
- *
- * Reasoned, not validated against usage data, like `MIXED_ATTACKER_RATIO`.
- */
-export const SECONDARY_OFFENSE_WEIGHT = 0.3;
+// `effectiveOffense` and its weight moved to `statMetrics.ts`, beside
+// `hpAdjustedBulk` — the two are the same kind of thing and only one of them
+// was there. The move was forced by `statusThreat.ts`, which needs to know what
+// burn costs a stat line and cannot import this module: this one imports the
+// ability tables, and the ability tables need statusThreat. Re-exported here
+// because every existing caller reads them from this module.
+export { effectiveOffense, SECONDARY_OFFENSE_WEIGHT } from './statMetrics';
 
-/**
- * Offensive stat value a Pokemon can actually bring to bear.
- *
- * `attack + special-attack` was the previous measure and it is blind to whether
- * a Pokemon can use both halves. Azumarill swings the 100 Attack Huge Power
- * built for it and never touches its 60 Special Attack; Blastoise has 83/85,
- * neither of them notable. Summed, Blastoise scored *higher* — 168 against 160.
- *
- * `coverageMoves.ts` already rejected this reasoning at the layer above. Its
- * `getAttackerBias` reads Azumarill's movepool as physical, on the argument that
- * crediting Pelipper with physical coverage it cannot use at 50 Attack describes
- * a Pokemon that does not exist. That argument stopped at the coverage layer and
- * never reached the term that scores the stats themselves.
- *
- * There was a second half to it. A 300 ceiling on the sum is only approachable
- * by a mixed attacker — the highest sum anywhere in the validation fixture is
- * 234 — so a one-sided attacker was capped near its own total no matter how
- * elite its real attacking stat, because half the numerator was a stat it never
- * used.
- *
- * ## Why this is smooth rather than a classification
- *
- * `getAttackerBias` returns a category, and reusing it here would put a cliff at
- * the boundary: two Pokemon either side of `MIXED_ATTACKER_RATIO` would score
- * very differently over a single point of difference. A category is right for
- * "which moves would this Pokemon run", where the answer really is discrete. It
- * is wrong for a magnitude. Discounting the weaker stat gives the same ordering
- * without the discontinuity.
- *
- * The rescaled ceiling is chosen so genuinely mixed attackers land where they
- * already did — Lucario moves 0.750 to 0.759, Simisear 0.653 to 0.653 — and only
- * one-sided attackers move. This is meant to stop under-rating them, not to
- * re-scale everything.
- *
- * @param stats Base stats of the form the Pokemon fights in, ability applied.
- * @returns Primary attacking stat plus the discounted secondary.
- */
-export function effectiveOffense(stats: PokemonStats): number {
-  const physical = stats.attack;
-  const special = stats['special-attack'];
-  return Math.max(physical, special) + (SECONDARY_OFFENSE_WEIGHT * Math.min(physical, special));
-}
 
 /**
  * Weights for a single member's quality. These sum to 1, so member quality is
@@ -204,6 +159,13 @@ export const MEMBER_WEIGHTS = {
  * species of Regulation M-B, computed exactly as `scoreMemberQuality` computes
  * them with ability multipliers applied. Rerun after changing STAT_CEILINGS,
  * SECONDARY_OFFENSE_WEIGHT, the ability tables or MEMBER_WEIGHTS.
+ *
+ * Rerun again the same day when Purifying Salt became a derived offence and
+ * speed multiplier (`statusThreat.ts`), and **nothing moved**. Garganacl is the
+ * only carrier, and it is neither fast enough for the speed credit to approach
+ * the ceiling nor offensive enough to approach the offence one, so the reachable
+ * extremes are still set by other Pokemon entirely. Recorded because a rerun
+ * that confirms a bound is as much a result as one that moves it.
  */
 export const OBSERVED_STAT_TERMS = {
   offense: { min: 0.32, max: 0.9923 },
@@ -460,7 +422,7 @@ export function scoreMemberQuality(member: MemberQualityInput): number {
   // affect. Applied before the rescale, so an ability cannot push a term past
   // the reachable ceiling the pool was measured against — which is also what
   // gives an already-fast Speed Boost carrier less credit than a slow one.
-  const ability = getQualityMultipliers(member.abilityName);
+  const ability = getQualityMultipliers(member.abilityName, stats);
 
   // Each term is put on its own reachable range, not on 0..1. Every one of them
   // has a floor well above zero — an unusable 85 Attack collected 52% of the

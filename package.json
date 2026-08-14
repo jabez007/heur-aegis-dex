@@ -64,6 +64,7 @@
     "gen:scoring-fixture": "tsx scripts/gen-scoring-fixture.mjs",
     "measure:composite-bounds": "tsx scripts/measure-composite-bounds.mjs",
     "measure:damage-bounds": "tsx scripts/measure-damage-bounds.mjs",
+    "measure:status-threat": "tsx scripts/measure-status-threat.mjs",
     "measure:support-eligibility": "tsx scripts/measure-support-eligibility.mjs"
   },
   "dependencies": {

@@ -1,6 +1,11 @@
 // Generates the coverage-move table from PokeAPI's `champions` version group,
 // which is the actual Pokemon Champions movepool rather than a union across
 // games. Keyed by PokeAPI *variety* name, matching what the app already holds.
+//
+// Also emits the status-move table, from the same fetch. Coverage asks what a
+// Pokemon can hit; status asks what it can inflict, and the second question was
+// unanswerable until this ran — which is why every status-facing ability in the
+// model was a hand-picked constant. See STATUS_THREAT in statusThreat.ts.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
@@ -85,7 +90,10 @@ await mapLimit(allMoves, CONCURRENCY, async (move) => {
   moveMeta.set(move, {
     type: data.type?.name,
     power: data.power,
-    damageClass: data.damage_class?.name
+    damageClass: data.damage_class?.name,
+    ailment: data.meta?.ailment?.name,
+    ailmentChance: data.meta?.ailment_chance,
+    accuracy: data.accuracy
   });
 });
 
@@ -124,6 +132,38 @@ for (const [variety, moves] of varietyMoves) {
   }
 }
 
+// The five non-volatile status conditions, which are the ones an ability like
+// Purifying Salt blocks and the ones that persist across turns. Confusion and
+// its kin are deliberately absent: they are volatile, they are not blocked by
+// the same abilities, and treating them alike would overstate every number
+// downstream.
+const NON_VOLATILE_AILMENTS = new Set(['burn', 'paralysis', 'poison', 'sleep', 'freeze']);
+
+// What counts as *being able to inflict* a status.
+//
+// The bar is reliability, for the same reason the coverage table has a power
+// floor: a move that lands the status one time in ten describes a Pokemon that
+// does not really have that tool. So a status-class move whose whole purpose is
+// the ailment counts (Will-O-Wisp, Thunder Wave, Spore), and so does a damaging
+// move that inflicts it every time (Nuzzle at 100%). A 10% burn on Flamethrower
+// does not.
+//
+// Accuracy is deliberately not a factor. Will-O-Wisp at 85% is still a Pokemon
+// that burns things; folding accuracy in here would make this a damage
+// calculator rather than a capability table.
+const isStatusMove = (move) => {
+  const meta = moveMeta.get(move);
+  if (!meta || !meta.ailment || !NON_VOLATILE_AILMENTS.has(meta.ailment)) return false;
+  return meta.damageClass === 'status' || meta.ailmentChance === 100;
+};
+
+const statusTable = {};
+for (const [variety, moves] of varietyMoves) {
+  const ailments = new Set();
+  for (const move of moves.filter(isStatusMove)) ailments.add(moveMeta.get(move).ailment);
+  if (ailments.size > 0) statusTable[variety] = [...ailments].sort();
+}
+
 const summarize = (pick) => {
   const counts = Object.values(table).map((entry) => pick(entry).length).sort((a, b) => a - b);
   const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
@@ -148,11 +188,34 @@ const lines = Object.keys(table).sort().map((variety) => {
   return `  '${variety}': { physical: [${quoted(physical)}], special: [${quoted(special)}] }`;
 });
 writeFileSync('coverage-table.txt', lines.join(',\n') + '\n');
+
+const statusLines = Object.keys(statusTable).sort().map((variety) =>
+  `  '${variety}': [${statusTable[variety].map((a) => `'${a}'`).join(', ')}]`
+);
+writeFileSync('status-table.txt', statusLines.join(',\n') + '\n');
+
+// Frequency across the pool, which is the number the ability model needs. Each
+// ailment is counted per variety that can inflict it at all.
+const ailmentCounts = {};
+for (const ailments of Object.values(statusTable)) {
+  for (const ailment of ailments) ailmentCounts[ailment] = (ailmentCounts[ailment] || 0) + 1;
+}
+const varietyCount = varieties.length;
+console.log(`\nstatus entries: ${Object.keys(statusTable).length}/${varietyCount}`);
+for (const [ailment, count] of Object.entries(ailmentCounts).sort((a, b) => b[1] - a[1])) {
+  console.log(`  ${ailment.padEnd(10)} ${String(count).padStart(4)}  ${(100 * count / varietyCount).toFixed(1)}%`);
+}
+
 writeFileSync('coverage-stats.json', JSON.stringify({
   minPower: MIN_POWER,
   versionGroup: VERSION_GROUP,
   entries: Object.keys(table).length,
   varieties: varieties.length,
-  distinctMoves: allMoves.length
+  distinctMoves: allMoves.length,
+  statusEntries: Object.keys(statusTable).length,
+  ailmentCounts,
+  ailmentShare: Object.fromEntries(
+    Object.entries(ailmentCounts).map(([a, c]) => [a, c / varietyCount])
+  )
 }, null, 2));
-console.log('\nwrote coverage-table.txt');
+console.log('\nwrote coverage-table.txt and status-table.txt');

@@ -6,6 +6,7 @@ import {
   hasAbilityQualityRule
 } from './abilityEffects';
 import { isDamageTakenAbility } from './pokedexAbilities';
+import { grantsStatusImmunity } from './statusThreat';
 import { MEMBER_WEIGHTS, scoreMemberQuality } from './teamScoring';
 
 describe('ABILITY_QUALITY_EFFECTS', () => {
@@ -32,13 +33,22 @@ describe('ABILITY_QUALITY_EFFECTS', () => {
   });
 
   it('leaves migrated abilities entirely to the module that took them', () => {
-    // Double-counting is the failure mode this guards. An ability priced from
-    // damage relations must not also collect a bulk multiplier here.
+    // Double-counting is the failure mode this guards: an ability priced from
+    // damage relations or from the status model must not also collect a flat
+    // multiplier here. Checked against the destination the rule names, so a
+    // migratedTo pointing nowhere real fails rather than passing quietly.
+    const owners: Record<string, (ability: string) => boolean> = {
+      'pokedexAbilities.ts': isDamageTakenAbility,
+      'statusThreat.ts': grantsStatusImmunity
+    };
+
     ABILITY_QUALITY_EFFECTS.filter((rule) => rule.migratedTo).forEach((rule) => {
-      expect(getQualityMultipliers(rule.ability), `${rule.ability}`)
+      expect(getQualityMultipliers(rule.ability), `${rule.ability} must not pay twice`)
         .toEqual({ bulk: 1, offense: 1, speed: 1 });
-      expect(isDamageTakenAbility(rule.ability), `${rule.ability} should be priced by the type layer`)
-        .toBe(true);
+
+      const owns = owners[rule.migratedTo as string];
+      expect(owns, `${rule.ability} names an unknown destination ${rule.migratedTo}`).toBeTruthy();
+      expect(owns(rule.ability), `${rule.migratedTo} should price ${rule.ability}`).toBe(true);
     });
   });
 

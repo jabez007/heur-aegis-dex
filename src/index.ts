@@ -167,6 +167,14 @@ export {
 } from './lib/abilityEffects'
 export type { AbilityQualityRule, QualityComponent } from './lib/abilityEffects'
 
+export {
+  STATUS_THREAT,
+  getStatusImmunityMultipliers,
+  grantsStatusImmunity
+} from './lib/statusThreat'
+export { STATUS_MOVE_AILMENTS } from './lib/statusMoveData'
+export type { Ailment } from './lib/statusMoveData'
+
 export default {
   install: (app: App) => {
     // Each app gets its own party, filters and notifications. Without this the

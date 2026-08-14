@@ -171,8 +171,8 @@ const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor(
   const clamp01 = (v) => Math.min(1, Math.max(0, v));
   const terms = { offense: [], bulk: [], speed: [] };
   pool.forEach((m) => {
-    const a = getQualityMultipliers(m.abilityName);
     const s = m.stats;
+    const a = getQualityMultipliers(m.abilityName, s);
     terms.offense.push(clamp01((effectiveOffense(s) / STAT_CEILINGS.offense) * a.offense));
     terms.bulk.push(clamp01((hpAdjustedBulk(s) / STAT_CEILINGS.bulk) * a.bulk));
     terms.speed.push(clamp01((s.speed / STAT_CEILINGS.speed) * a.speed));

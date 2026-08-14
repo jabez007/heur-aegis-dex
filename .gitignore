@@ -48,3 +48,10 @@ test-results/
 .temp/
 .cache/
 .gemini/
+
+# Generator scratch output. `gen:coverage-moves` writes these for a human to
+# paste into coverageMoveData.ts / statusMoveData.ts; the generated modules are
+# committed, the raw dumps are not.
+/coverage-table.txt
+/status-table.txt
+/coverage-stats.json
