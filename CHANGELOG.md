@@ -4,6 +4,33 @@
 
 ### Added
 
+- **A weakness now costs what the metagame can actually charge for it.** Every
+  type weakness was priced identically, so a Pokemon weak only to Fighting scored
+  the same whether or not anything in the format could click a Fighting move.
+  `damage_from_score` now scales each bucket — weaknesses, resistances and
+  immunities alike — by how much of the pool can attack with that type.
+
+  The measure is **availability, not typing prevalence**, and the two are close
+  to inverted. Across the 208 legal species of Regulation M-B, Water is the most
+  common typing (12.5%) and one of the rarest attacks (28.9% can bring one),
+  while 63.5% can bring a Fighting move against 10.1% that are Fighting-type.
+  Strip every Fighting-type out of the format and Fighting is still a heavier
+  threat than Dragon or Fairy, because Close Combat and Body Press do not care
+  what their user is typed. A weight built on typing would have called that free.
+
+  Weights are derived, never stored: a scan measures its regulation, and the
+  browser re-derives the same numbers when it flattens a cached result. Selecting
+  a cup in the browser re-prices everything live against that cup, which is where
+  this earns its keep — in a Boulder Cup of Rock, Ground, Steel and Fighting,
+  Annihilape's Ghost immunity to Fighting moves it from fifth to second.
+
+  Both halves of the calibration moved with it. `OBSERVED_DAMAGE_FROM` is now
+  derived per weighting from the same 3,078-profile cross product the
+  measurement script uses, with a test pinning the uniform case to its published
+  11.25..26; `COMPOSITE_BOUNDS` was re-measured, moving doubles quality from
+  0.154..0.6137 to 0.1559..0.6249. Live PokeAPI scans stay unweighted, since
+  they cannot measure a pool before they have fetched one.
+
 - **Fresh roster generation now offers meaningfully different alternatives.**
   The strongest roster remains first, then `Try Another` steps through up to six
   rosters within three score points of it. Alternatives preferentially replace

@@ -3,6 +3,21 @@ export interface NamedResource {
   url?: string;
 }
 
+/**
+ * A damage reduction that lands between buckets, kept per attacking type.
+ *
+ * Solid Rock's 0.75x has no bucket to live in, so `calculateDamageFromScore`
+ * cannot see it and the difference is carried alongside the buckets instead.
+ * Recorded per type rather than pre-summed because the sum depends on the threat
+ * weighting in force, and a cup can change that after the scan has run.
+ */
+export interface DamageResidual {
+  /** Attacking type the reduction applies to. */
+  name: string;
+  /** Score difference in bucket units, the same `multiplier - 1` scale. */
+  delta: number;
+}
+
 export interface DamageRelations {
   double_damage_from: NamedResource[];
   half_damage_from: NamedResource[];
@@ -12,6 +27,8 @@ export interface DamageRelations {
   no_damage_to: NamedResource[];
   quadruple_damage_from?: NamedResource[];
   quarter_damage_from?: NamedResource[];
+  /** Between-bucket reductions this score includes. Absent when there are none. */
+  damage_from_residuals?: DamageResidual[];
   damage_from_score?: number;
   damage_to_score?: number;
 }
@@ -34,6 +51,14 @@ export interface PokemonTypeData {
 
 export interface TeamTypeData {
   name: string;
+  /**
+   * Range `damage_from_score` was computed to occupy, when the scan weighted it
+   * by metagame threat. Carried because a weighted score and the range it is
+   * normalized against have to come from the same measurement, and the consumer
+   * flattening this result is usually not the code that ran the scan. Absent on
+   * unweighted results, where the published constants apply.
+   */
+  damage_from_bounds?: { min: number; max: number };
   weaknesses: string[];
   quadruple_weaknesses?: string[];
   resistances: string[];

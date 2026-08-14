@@ -15,7 +15,14 @@
  * the seam that lets them.
  */
 
-import { DEFAULT_BASE_SCORE, normalizeDamageFromScore, normalizeDamageToScore } from './pokedexScoring';
+import {
+  DEFAULT_BASE_SCORE,
+  calculateDamageFromResidual,
+  calculateDamageFromScore,
+  normalizeDamageFromScore,
+  normalizeDamageToScore
+} from './pokedexScoring';
+import type { DamageScoreBounds } from './pokedexScoring';
 import type {
   AbilityProfile,
   DamageRelations,
@@ -24,7 +31,57 @@ import type {
   PokemonStats,
   TeamTypeData
 } from './pokedexTypes';
+import type { TypeThreatWeights } from './typeThreat';
 import { getEffectiveStats, getStatAbilityName, totalStats } from './statAbilities';
+
+/**
+ * The metagame a flattened Pokemon is scored against.
+ *
+ * A scan bakes in the weighting of the regulation it ran under, and that is the
+ * wrong answer for two cases the browser has to handle. A cup narrows the pool
+ * after the scan is finished, and a cached scan may predate the weighting
+ * entirely. Both are solved the same way: the raw defensive score is recomputed
+ * here from the damage relations every entry already carries, so the stored
+ * score is treated as a cache rather than as the truth.
+ *
+ * Weights and bounds travel together and must come from the same measurement.
+ * A score weighted one way and normalized against another way's range is the
+ * compression bug `damageBounds.ts` exists to prevent, and it is silent.
+ */
+export interface ThreatScoring {
+  /**
+   * Weighting to re-score under. Absent keeps the score the scan recorded, which
+   * is what a result read on its own terms wants: the scan already weighted it,
+   * and only the range it was measured against has to travel alongside.
+   */
+  readonly weights?: TypeThreatWeights;
+  readonly bounds: DamageScoreBounds;
+}
+
+/** Reads a scan's own recorded range without re-scoring anything under it. */
+const asStoredScoring = (
+  bounds: DamageScoreBounds | undefined
+): ThreatScoring | undefined => (bounds ? { bounds } : undefined);
+
+/**
+ * Re-derives a defensive score under a weighting, falling back to the stored one.
+ *
+ * @param relations Damage relations from the profile being scored.
+ * @param stored Score the scan recorded, used when the buckets are unavailable.
+ * @param baseScore Baseline the score is calculated with.
+ * @param scoring Weights to score with, or undefined to keep the stored score.
+ * @returns The raw defensive score to normalize.
+ */
+const rescoreDamageFrom = (
+  relations: DamageRelations | undefined,
+  stored: number | undefined,
+  baseScore: number,
+  scoring: ThreatScoring | undefined
+): number | undefined => {
+  if (!scoring?.weights || !relations) return stored;
+  return calculateDamageFromScore(relations, baseScore, scoring.weights)
+    + calculateDamageFromResidual(relations, scoring.weights);
+};
 
 export interface PokemonEntry {
   /** PokeAPI variety name. Unique, and the key everything else joins on. */
@@ -66,6 +123,17 @@ export interface PokemonEntry {
   moveCoverages: string[];
   normalizedDamageToScore: number;
   normalizedDamageFromScore: number;
+  /**
+   * The metagame `normalizedDamageFromScore` was computed under.
+   *
+   * Carried on the Pokemon so that re-deriving its profile — which `withAbility`
+   * does from eight call sites across the guided flow, the workbench and the
+   * roster — lands on the same scale it was flattened onto. Without it every one
+   * of those call sites would have to remember to pass the weighting, and the
+   * failure when one forgot would be a silently compressed defensive term rather
+   * than an error.
+   */
+  scoring?: ThreatScoring;
 }
 
 /**
@@ -115,15 +183,24 @@ const EMPTY_STATS: PokemonStats = {
 /**
  * Converts one scan entry into a Pokemon record.
  *
+ * The ability stays as the scan selected it. Under a cup's weighting a different
+ * ability could win — Levitate is worth what Ground is worth — but re-running
+ * that choice means re-scoring every profile through member quality, and the
+ * user can pick the ability directly anyway, at which point `withAbility`
+ * re-derives everything under the same weights. Recorded as a known edge rather
+ * than left to be discovered.
+ *
  * @param entry Pokemon as the scan stored it, nested under a type.
  * @param typeName The type combination it was found under.
  * @param baseScore Baseline the damage scores were calculated with.
+ * @param scoring Metagame to score against. Omitted keeps the scan's own scores.
  * @returns A flat Pokemon record, or null when the entry lacks usable data.
  */
 export function toPokemonEntry(
   entry: PokemonListEntry,
   typeName: string,
-  baseScore: number = DEFAULT_BASE_SCORE
+  baseScore: number = DEFAULT_BASE_SCORE,
+  scoring?: ThreatScoring
 ): PokemonEntry | null {
   if (!entry?.pokemon?.name || !entry.stats) return null;
 
@@ -163,11 +240,19 @@ export function toPokemonEntry(
     // same profile, so the two agree today; the asymmetry was a trap rather
     // than a live defect, and `withAbility` below already reads it this way.
     moveCoverages: profile?.move_coverages ?? entry.effective_move_coverages ?? [],
+    scoring,
     normalizedDamageToScore: normalizeDamageToScore(
       profile?.damage_to_score ?? entry.effective_damage_to_score, baseScore
     ),
     normalizedDamageFromScore: normalizeDamageFromScore(
-      profile?.damage_from_score ?? entry.effective_damage_from_score, baseScore
+      rescoreDamageFrom(
+        profile?.damage_relations ?? entry.effective_damage_relations,
+        profile?.damage_from_score ?? entry.effective_damage_from_score,
+        baseScore,
+        scoring
+      ),
+      baseScore,
+      scoring?.bounds
     )
   };
 }
@@ -234,6 +319,8 @@ export interface FlattenOptions {
   baseScore?: number;
   /** Keep only one entry per species. Off by default, since browsing wants every form. */
   uniqueBySpecies?: boolean;
+  /** Metagame to re-score defensive typing against. Omitted keeps the scan's own. */
+  scoring?: ThreatScoring;
 }
 
 /**
@@ -251,15 +338,21 @@ export function flattenToPokemon(
   types: Array<TeamTypeData | { name: string; pokemon?: PokemonListEntry[] }>,
   options: FlattenOptions = {}
 ): PokemonEntry[] {
-  const { baseScore = DEFAULT_BASE_SCORE, uniqueBySpecies = false } = options;
+  const { baseScore = DEFAULT_BASE_SCORE, uniqueBySpecies = false, scoring } = options;
 
   const seenVarieties = new Set<string>();
   const seenSpecies = new Set<string>();
   const results: PokemonEntry[] = [];
 
   types.forEach((typeData) => {
+    // With no override, a result is read on its own terms: the scan recorded the
+    // range its scores were computed to occupy, and normalizing them against the
+    // unweighted constants instead would silently compress the whole defensive
+    // term. An explicit `scoring` replaces both halves together.
+    const resolved = scoring ?? asStoredScoring((typeData as TeamTypeData).damage_from_bounds);
+
     (typeData.pokemon || []).forEach((entry) => {
-      const pokemon = toPokemonEntry(entry, typeData.name, baseScore);
+      const pokemon = toPokemonEntry(entry, typeData.name, baseScore, resolved);
       if (!pokemon) return;
       if (seenVarieties.has(pokemon.name)) return;
       if (uniqueBySpecies && seenSpecies.has(pokemon.speciesName)) return;
@@ -283,12 +376,15 @@ export function flattenToPokemon(
  * @param entry Pokemon to adjust.
  * @param abilityName Ability to select. Unknown names leave the entry unchanged.
  * @param baseScore Baseline the damage scores were calculated with.
+ * @param scoring Metagame to score against. Defaults to the one the Pokemon was
+ *   flattened under, which is what keeps an ability swap on the same scale.
  * @returns A new entry with the chosen ability applied.
  */
 export function withAbility(
   entry: PokemonEntry,
   abilityName: string | undefined | null,
-  baseScore: number = DEFAULT_BASE_SCORE
+  baseScore: number = DEFAULT_BASE_SCORE,
+  scoring: ThreatScoring | undefined = entry.scoring
 ): PokemonEntry {
   if (!abilityName || abilityName === entry.abilityName) return entry;
 
@@ -303,6 +399,7 @@ export function withAbility(
     ...entry,
     abilityName,
     stats,
+    scoring,
     baseStats: entry.baseStats,
     statAbilityName: getStatAbilityName([abilityName]),
     statsTotal: profile.stats_total ?? totalStats(stats),
@@ -313,7 +410,11 @@ export function withAbility(
     immunities: profile.immunities ?? entry.immunities,
     coverages: profile.coverages ?? entry.coverages,
     normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, baseScore),
-    normalizedDamageFromScore: normalizeDamageFromScore(profile.damage_from_score, baseScore)
+    normalizedDamageFromScore: normalizeDamageFromScore(
+      rescoreDamageFrom(profile.damage_relations, profile.damage_from_score, baseScore, scoring),
+      baseScore,
+      scoring?.bounds
+    )
   };
 }
 

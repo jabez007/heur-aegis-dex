@@ -1,4 +1,6 @@
+import { UNIFORM_TYPE_THREAT, typeThreatWeight } from './typeThreat';
 import type { DamageRelations, NamedResource } from './pokedexTypes';
+import type { TypeThreatWeights } from './typeThreat';
 
 /**
  * Baseline used to normalize damage scores. It doubles as the number of
@@ -24,15 +26,50 @@ export const DEFAULT_BASE_SCORE = 18;
  *
  * This is what makes `maxDamageFromScore` in `getResistantTypes` a principled
  * filter rather than a tuned threshold — see the comment at that call site.
+ *
+ * ## Threat weighting
+ *
+ * Each bucket entry is multiplied by its attacking type's threat weight, so a
+ * weakness to a type the metagame cannot bring costs close to nothing and a
+ * weakness to one it brings constantly costs close to the full amount. Passing
+ * `UNIFORM_TYPE_THREAT` — the default — restores the original count and is what
+ * every existing caller and every recorded calibration measured. See
+ * `typeThreat.ts` for what the weights measure and why it is availability of
+ * the attack rather than prevalence of the typing.
+ *
+ * **The weights apply to resistances and immunities too, not only weaknesses,**
+ * and that is not optional. The neutral line above survives only because the
+ * terms cancel: Normal is weak to Fighting and immune to Ghost, and those are
+ * +1 and -1 today. Weight the weakness at 0.588 while leaving the immunity at 1
+ * and Normal scores *better* than "takes neutral damage from everything" for no
+ * reason at all. Weighting both sides keeps every cancellation exact, and the
+ * score keeps a plain reading: `baseScore` plus the threat-weighted sum of
+ * `multiplier - 1` over every type, which is expected damage taken across the
+ * distribution of attacks the pool can actually make.
+ *
+ * @param dr Damage relations to score.
+ * @param baseScore Baseline, which is also the number of types in play.
+ * @param weights Threat weight per attacking type. Defaults to uniform.
  */
-export const calculateDamageFromScore = (dr: DamageRelations, baseScore: number): number => {
-  let score = baseScore;
-  if (dr.quadruple_damage_from) score += (3 * dr.quadruple_damage_from.length);
-  score += dr.double_damage_from.length;
-  score -= (0.5 * dr.half_damage_from.length);
-  if (dr.quarter_damage_from) score -= (0.75 * dr.quarter_damage_from.length);
-  score -= dr.no_damage_from.length;
-  return score;
+export const calculateDamageFromScore = (
+  dr: DamageRelations,
+  baseScore: number,
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
+): number => {
+  // The coefficients are `multiplier - 1`, the identity DAMAGE_FROM_BUCKETS in
+  // pokedexAbilities.ts depends on. Keep them in step with that table.
+  const weighted = (bucket: NamedResource[] | undefined, coefficient: number): number =>
+    (bucket || []).reduce(
+      (sum, { name }) => sum + (coefficient * typeThreatWeight(weights, name)),
+      0
+    );
+
+  return baseScore
+    + weighted(dr.quadruple_damage_from, 3)
+    + weighted(dr.double_damage_from, 1)
+    + weighted(dr.half_damage_from, -0.5)
+    + weighted(dr.quarter_damage_from, -0.75)
+    + weighted(dr.no_damage_from, -1);
 };
 
 export const calculateDamageToScore = (dr: DamageRelations, baseScore: number): number => {
@@ -102,17 +139,50 @@ const OBSERVED_DAMAGE_FROM = { min: 11.25, max: 26 } as const;
 const OBSERVED_DAMAGE_TO = { min: 16, max: 27 } as const;
 
 /**
- * Bounds of calculateDamageFromScore for a given baseline.
+ * Prices the between-bucket reductions a damage-reduction ability leaves behind.
+ *
+ * Kept here beside `calculateDamageFromScore` because the two are one score: a
+ * caller that computes the buckets without adding this is reading a profile with
+ * Solid Rock silently switched off.
+ *
+ * @param dr Damage relations carrying the residuals, if any.
+ * @param weights Threat weight per attacking type. Defaults to uniform.
+ * @returns The residual total to add to the bucket-derived score.
+ */
+export const calculateDamageFromResidual = (
+  dr: DamageRelations,
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
+): number =>
+  (dr.damage_from_residuals || []).reduce(
+    (sum, { name, delta }) => sum + (delta * typeThreatWeight(weights, name)),
+    0
+  );
+
+/** Reachable extremes of a score, used to normalize it onto 0..1. */
+export interface DamageScoreBounds {
+  readonly min: number;
+  readonly max: number;
+}
+
+/**
+ * Bounds of calculateDamageFromScore for a given baseline, unweighted.
  *
  * Bounds come from the measurement above rather than from the types present in a
  * scan, so an entry always normalizes to the same value regardless of which
  * Pokemon it was scanned alongside. That determinism is why these are constants
  * rather than a pass over the current results.
  *
+ * These hold only for `UNIFORM_TYPE_THREAT`. Under threat weighting every bucket
+ * shrinks by its type's weight, the reachable extremes close in, and normalizing
+ * against these would re-create the exact compression the comment above exists to
+ * document — a weighted score would occupy a fraction of its nominal range and
+ * the defensive term would quietly stop deciding anything. `damageBounds.ts`
+ * derives the weighted equivalents; nothing else may substitute for them.
+ *
  * @param baseScore Baseline score, which is also the number of types in play.
  * @returns The minimum and maximum defensive score a real Pokemon reaches.
  */
-export const damageFromScoreBounds = (baseScore: number) => {
+export const damageFromScoreBounds = (baseScore: number): DamageScoreBounds => {
   const scale = baseScore / MEASURED_AT_BASE_SCORE;
   return { min: OBSERVED_DAMAGE_FROM.min * scale, max: OBSERVED_DAMAGE_FROM.max * scale };
 };
@@ -134,11 +204,18 @@ export const damageToScoreBounds = (baseScore: number) => {
  *
  * @param score Raw defensive score, or undefined when unavailable.
  * @param baseScore Baseline the score was calculated with.
+ * @param bounds Extremes to normalize against. Required whenever the score was
+ *   calculated with threat weights, since the unweighted default no longer
+ *   describes the range a weighted score can reach.
  * @returns A value in 0..1, or 0.5 when the score is unknown.
  */
-export const normalizeDamageFromScore = (score: number | undefined, baseScore: number): number => {
+export const normalizeDamageFromScore = (
+  score: number | undefined,
+  baseScore: number,
+  bounds: DamageScoreBounds = damageFromScoreBounds(baseScore)
+): number => {
   if (score === undefined) return 0.5;
-  const { min, max } = damageFromScoreBounds(baseScore);
+  const { min, max } = bounds;
   return max === min ? 0.5 : clamp01((score - min) / (max - min));
 };
 
@@ -171,6 +248,9 @@ export const cloneDamageRelations = (dr: DamageRelations): DamageRelations => ({
   no_damage_to: [...dr.no_damage_to],
   quadruple_damage_from: [...(dr.quadruple_damage_from || [])],
   quarter_damage_from: [...(dr.quarter_damage_from || [])],
+  damage_from_residuals: dr.damage_from_residuals
+    ? dr.damage_from_residuals.map((residual) => ({ ...residual }))
+    : undefined,
   damage_from_score: dr.damage_from_score,
   damage_to_score: dr.damage_to_score
 });

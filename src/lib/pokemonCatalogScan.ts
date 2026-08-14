@@ -1,10 +1,14 @@
 import { getMergedBattleForm, sharesTyping } from './battleForms';
+import { measureDamageFromBounds } from './damageBounds';
 import { enrichPokemon } from './pokemonEnrichment';
 import { calculateDamageFromScore, calculateDamageToScore } from './pokedexScoring';
 import {
+  applyThreatWeights,
   resolveResistantTypeScanOptions,
   runResistantTypeScan
 } from './resistantTypeScan';
+import { getThreatWeights } from './threatPool';
+import { UNIFORM_TYPE_THREAT } from './typeThreat';
 import type { OffensiveTypeChart } from './coverageMoves';
 import type {
   CatalogTypeV1,
@@ -20,14 +24,23 @@ import type {
   ResistantTypeResult
 } from './pokedexTypes';
 import type { ResistantTypeScanOptions } from './resistantTypeScan';
+import type { TypeThreatWeights } from './typeThreat';
 
 const resources = (names: readonly string[]): NamedResource[] => names.map((name) => ({ name }));
 
-/** Converts a normalized catalog type into the scan engine's base-type shape. */
+/**
+ * Converts a normalized catalog type into the scan engine's base-type shape.
+ *
+ * @param type Catalog type with its damage relations.
+ * @param catalog Verified catalog, for the varieties carrying the type.
+ * @param baseScore Baseline the scores are calculated with.
+ * @param weights Threat weight per attacking type. Defaults to uniform.
+ */
 export function catalogTypeToPokemonType(
   type: CatalogTypeV1,
   catalog: PokemonCatalogV1,
-  baseScore: number
+  baseScore: number,
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
 ): PokemonTypeData {
   const damageRelations: DamageRelations = {
     double_damage_from: resources(type.damageRelations.doubleDamageFrom),
@@ -37,7 +50,7 @@ export function catalogTypeToPokemonType(
     half_damage_to: resources(type.damageRelations.halfDamageTo),
     no_damage_to: resources(type.damageRelations.noDamageTo)
   };
-  damageRelations.damage_from_score = calculateDamageFromScore(damageRelations, baseScore);
+  damageRelations.damage_from_score = calculateDamageFromScore(damageRelations, baseScore, weights);
   damageRelations.damage_to_score = calculateDamageToScore(damageRelations, baseScore);
 
   return {
@@ -55,14 +68,21 @@ export function catalogTypeToPokemonType(
   };
 }
 
-/** Builds the standard base types from a validated catalog without network access. */
+/**
+ * Builds the standard base types from a validated catalog without network access.
+ *
+ * @param catalog Verified catalog.
+ * @param baseScore Baseline, which is also how many types are kept.
+ * @param weights Threat weight per attacking type. Defaults to uniform.
+ */
 export function getCatalogBaseTypes(
   catalog: PokemonCatalogV1,
-  baseScore: number
+  baseScore: number,
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
 ): PokemonTypeData[] {
   return catalog.types
     .filter((type) => type.id <= baseScore)
-    .map((type) => catalogTypeToPokemonType(type, catalog, baseScore));
+    .map((type) => catalogTypeToPokemonType(type, catalog, baseScore, weights));
 }
 
 const toFacts = (
@@ -120,8 +140,29 @@ export async function getCatalogResistantTypes(
   catalog: PokemonCatalogV1,
   options: ResistantTypeScanOptions = {}
 ): Promise<ResistantTypeResult[]> {
-  const resolvedOptions = resolveResistantTypeScanOptions(options);
-  const baseTypes = getCatalogBaseTypes(catalog, resolvedOptions.baseScore);
+  const resolved = resolveResistantTypeScanOptions(options);
+
+  // Weights come from the regulation the scan is restricted to, so a scan
+  // prepares against the metagame it is a scan of. The browser re-derives the
+  // same weights from the same regulation when it flattens a cached result, so
+  // nothing here needs serializing — see `threatPool.ts`.
+  const weights = resolved.weightByThreat
+    ? getThreatWeights(catalog, {
+      regulation: resolved.regulation,
+      baseScore: resolved.baseScore
+    })
+    : UNIFORM_TYPE_THREAT;
+
+  // Bounds are derived from an unweighted lattice, since only the buckets are
+  // read from it and the weights are applied when each combination is scored.
+  const resolvedOptions = applyThreatWeights(
+    resolved,
+    weights,
+    measureDamageFromBounds(
+      getCatalogBaseTypes(catalog, resolved.baseScore), resolved.baseScore, weights
+    )
+  );
+  const baseTypes = getCatalogBaseTypes(catalog, resolvedOptions.baseScore, weights);
   const varietiesByName = new Map(catalog.varieties.map((variety) => [variety.name, variety]));
 
   return runResistantTypeScan(baseTypes, resolvedOptions, {

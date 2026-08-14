@@ -18,6 +18,9 @@
 // when someone reruns a script is a bound nobody has checked.
 
 import { chooseDefaultAbility, getBaseTypes, getDualTypes } from '../src/lib/pokedex.ts';
+import { loadPokemonCatalog } from '../src/lib/pokemonCatalogLoader.ts';
+import { measureDamageFromBounds } from '../src/lib/damageBounds.ts';
+import { getThreatWeights } from '../src/lib/threatPool.ts';
 import { applyAbilityModifiers } from '../src/lib/pokedexAbilities.ts';
 import { buildOffensiveTypeChart, getMoveCoverage } from '../src/lib/coverageMoves.ts';
 import { getEffectiveStats } from '../src/lib/statAbilities.ts';
@@ -43,8 +46,19 @@ const regulation = getRegulation('M-B') ?? { legalSpecies: new Set(), id: 'none'
 const species = [...regulation.legalSpecies].sort();
 process.stderr.write(`regulation ${regulation.id}: ${species.length} legal species\n`);
 
-const base = await getBaseTypes(BASE);
-const allTypes = base.concat(await getDualTypes(BASE, base));
+// Member quality is measured under the weighting the scan actually runs, since
+// that is what `scoreMemberQuality` will see in production. Measuring it flat
+// would bound a formula nothing uses — the same mistake, one level up, that
+// OBSERVED_DAMAGE_FROM records for the damage scores themselves.
+const catalog = await loadPokemonCatalog();
+const weights = getThreatWeights(catalog, { regulation, baseScore: BASE });
+const fromBounds = measureDamageFromBounds(await getBaseTypes(BASE), BASE, weights);
+process.stderr.write(
+  `threat-weighted damage-from bounds: ${fromBounds.min.toFixed(4)}..${fromBounds.max.toFixed(4)}\n`
+);
+
+const base = await getBaseTypes(BASE, weights);
+const allTypes = base.concat(await getDualTypes(BASE, base, weights));
 const chart = buildOffensiveTypeChart(base);
 
 const findType = (types) => {
@@ -92,10 +106,13 @@ for (const [index, name] of species.entries()) {
 
   const abilityNames = poke.abilities.map((a) => a.ability.name);
   const baseStats = poke.stats.reduce((acc, s) => ({ ...acc, [s.stat.name]: s.base_stat }), {});
-  const { abilityProfiles } = applyAbilityModifiers(typeData.damage_relations, abilityNames, BASE);
+  const { abilityProfiles } = applyAbilityModifiers(
+    typeData.damage_relations, abilityNames, BASE, weights
+  );
   const profile = chooseDefaultAbility(
     abilityProfiles.map((p) => ({ ...p, stats: getEffectiveStats(baseStats, [p.ability_name]) })),
-    BASE
+    BASE,
+    fromBounds
   );
 
   pool.push({
@@ -110,7 +127,9 @@ for (const [index, name] of species.entries()) {
     coverages: profile.coverages ?? [],
     moveCoverages: getMoveCoverage(name, chart, profile.stats),
     normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, BASE),
-    normalizedDamageFromScore: normalizeDamageFromScore(profile.damage_from_score, BASE)
+    normalizedDamageFromScore: normalizeDamageFromScore(
+      profile.damage_from_score, BASE, fromBounds
+    )
   });
 }
 

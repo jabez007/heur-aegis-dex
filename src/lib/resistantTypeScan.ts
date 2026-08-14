@@ -6,12 +6,17 @@ import {
   calculateDamageToScore,
   cloneDamageRelations,
   createTypeSummary,
+  damageFromScoreBounds,
   filterUniqueBy
 } from './pokedexScoring';
 import { getRegulation } from './regulations';
+import { UNIFORM_TYPE_THREAT } from './typeThreat';
 import type { OffensiveTypeChart } from './coverageMoves';
+import type { DamageScoreBounds } from './pokedexScoring';
 import type { PokemonEnrichmentOptions } from './pokemonEnrichment';
 import type { PokemonListEntry, PokemonTypeData, ResistantTypeResult } from './pokedexTypes';
+import type { Regulation } from './regulations';
+import type { TypeThreatWeights } from './typeThreat';
 
 export const DEFAULT_STATS_FILTERS = {
   minimumAttacks: 80,
@@ -33,6 +38,14 @@ export interface ResistantTypeScanOptions {
     includeMoveCoverage?: boolean;
     /** Restrict results to a known regulation roster; null means unrestricted. */
     regulation?: string | null;
+    /**
+     * Scale each type's contribution to the defensive score by how much of the
+     * pool can actually attack with it. On by default: a weakness nothing in the
+     * metagame can exploit is not a weakness, and pricing it as one was the
+     * model's largest remaining false signal. Set false for the flat count every
+     * calibration before `typeThreat.ts` was measured against.
+     */
+    weightByThreat?: boolean;
   };
   statsFilters?: {
     /** @deprecated Ignored. Total base stats are no longer a scan filter. */
@@ -51,6 +64,10 @@ export interface ResolvedResistantTypeScanOptions {
     readonly allowQuadrupleDamage: boolean;
     readonly limitQuadrupleDamage: boolean;
   };
+  /** Whether the caller asked for threat weighting; the weights need a pool. */
+  readonly weightByThreat: boolean;
+  /** Resolved regulation, kept so the source can build the threat pool from it. */
+  readonly regulation?: Regulation;
   readonly enrichment: PokemonEnrichmentOptions;
 }
 
@@ -80,6 +97,7 @@ export function resolveResistantTypeScanOptions(
     includeAbilityImmunities: true,
     includeMoveCoverage: true,
     regulation: null,
+    weightByThreat: true,
     ...options.pokemonFilters
   };
   const regulation = pokemonFilters.regulation
@@ -92,8 +110,12 @@ export function resolveResistantTypeScanOptions(
   return {
     baseScore,
     typeFilters,
+    weightByThreat: pokemonFilters.weightByThreat,
+    regulation,
     enrichment: {
       baseScore,
+      threatWeights: UNIFORM_TYPE_THREAT,
+      damageFromBounds: damageFromScoreBounds(baseScore),
       inPokedex: pokemonFilters.inPokedex,
       allowMegas: pokemonFilters.allowMegas,
       includeAbilityImmunities: pokemonFilters.includeAbilityImmunities,
@@ -104,6 +126,32 @@ export function resolveResistantTypeScanOptions(
         DEFAULT_STATS_FILTERS.minimumBulk,
       regulation
     }
+  };
+}
+
+/**
+ * Attaches the threat weights a scan will score with.
+ *
+ * Separate from `resolveResistantTypeScanOptions` because measuring the weights
+ * needs the pool, and the pool needs the resolved regulation. Resolution runs
+ * first with uniform weights, the source measures, and this folds the result
+ * back in — which also keeps the invalid-regulation error firing before any data
+ * source is touched.
+ *
+ * @param options Already-resolved scan options.
+ * @param weights Threat weights measured over the scan's own pool.
+ * @param bounds Extremes the weighted score reaches, from `damageBounds.ts`.
+ * @returns Options scoring with those weights.
+ */
+export function applyThreatWeights(
+  options: ResolvedResistantTypeScanOptions,
+  weights: TypeThreatWeights,
+  bounds: DamageScoreBounds
+): ResolvedResistantTypeScanOptions {
+  if (!options.weightByThreat) return options;
+  return {
+    ...options,
+    enrichment: { ...options.enrichment, threatWeights: weights, damageFromBounds: bounds }
   };
 }
 
@@ -159,10 +207,17 @@ const clonePokemonEntry = (entry: PokemonListEntry): PokemonListEntry => {
   };
 };
 
-/** Builds every unordered dual type from already acquired base types. */
+/**
+ * Builds every unordered dual type from already acquired base types.
+ *
+ * @param baseTypes Single elemental types with their damage relations.
+ * @param baseScore Baseline the scores are calculated with.
+ * @param weights Threat weight per attacking type. Defaults to uniform.
+ */
 export function buildDualTypes(
   baseTypes: readonly PokemonTypeData[],
-  baseScore: number
+  baseScore: number,
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
 ): PokemonTypeData[] {
   return pairCombinations(baseTypes).map(([first, second]) => {
     const dr0 = first.damage_relations;
@@ -213,7 +268,8 @@ export function buildDualTypes(
     };
     dualType.damage_relations.damage_from_score = calculateDamageFromScore(
       dualType.damage_relations,
-      baseScore
+      baseScore,
+      weights
     );
     dualType.damage_relations.damage_to_score = calculateDamageToScore(
       dualType.damage_relations,
@@ -243,7 +299,9 @@ export async function runResistantTypeScan(
   options: ResolvedResistantTypeScanOptions,
   source: ResistantTypeScanSource
 ): Promise<ResistantTypeResult[]> {
-  const allTypes = baseTypes.concat(buildDualTypes(baseTypes, options.baseScore));
+  const allTypes = baseTypes.concat(
+    buildDualTypes(baseTypes, options.baseScore, options.enrichment.threatWeights)
+  );
   const offensiveChart = buildOffensiveTypeChart(baseTypes);
   await source.prepare?.(allTypes);
 
@@ -259,6 +317,7 @@ export async function runResistantTypeScan(
       return {
         name: type.name,
         include_ability_immunities: options.enrichment.includeAbilityImmunities,
+        damage_from_bounds: options.enrichment.damageFromBounds,
         ...createTypeSummary(type.damage_relations),
         pokemon
       } satisfies ResistantTypeResult;

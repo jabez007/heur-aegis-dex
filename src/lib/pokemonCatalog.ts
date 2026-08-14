@@ -6,8 +6,14 @@ export const POKEMON_CATALOG_CONTENT_HASH =
   'ab1cd34ca0fc4fd13481ea610dbb7ddb4bdd890dbe21525c556dffebe41ee1f0' as const;
 export const POKEMON_CATALOG_REGULATION_DIGEST =
   'd7526351fb644511b27bc142e2e6a43f045a7fd2580ce2f9e28ec3fb21e7e09d' as const;
-/** Bump whenever scan rules change without changing catalog or regulation data. */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 1 as const;
+/**
+ * Bump whenever scan rules change without changing catalog or regulation data.
+ *
+ * 2: threat weighting. `damage_from_score` is now scaled by how much of the
+ * regulation's pool can attack with each type, so every cached score predates a
+ * different formula and normalizes against a different range.
+ */
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 2 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [

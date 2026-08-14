@@ -1,10 +1,13 @@
-import type { DamageRelations, NamedResource } from './pokedexTypes';
+import type { DamageRelations, DamageResidual, NamedResource } from './pokedexTypes';
 import {
+  calculateDamageFromResidual,
   calculateDamageFromScore,
   calculateDamageToScore,
   cloneDamageRelations,
   createTypeSummary
 } from './pokedexScoring';
+import { UNIFORM_TYPE_THREAT } from './typeThreat';
+import type { TypeThreatWeights } from './typeThreat';
 
 const ABILITY_IMMUNITIES: Record<string, string> = {
   'dry-skin': 'water',
@@ -127,15 +130,17 @@ const setDamageTakenMultiplier = (dr: DamageRelations, typeName: string, multipl
 /**
  * Applies a damage-reduction ability to a set of damage relations.
  *
- * @returns The residual to add to the bucket-derived score, non-zero only when a
- *   reduction lands between buckets.
+ * @returns The residuals to add to the bucket-derived score, one per type whose
+ *   reduction landed between buckets. Left unpriced here: threat weighting is
+ *   applied when the residuals are summed, so a scan's residuals stay correct
+ *   after a cup re-weights them.
  */
-const applyDamageTakenRule = (dr: DamageRelations, rule: DamageTakenRule): number => {
+const applyDamageTakenRule = (dr: DamageRelations, rule: DamageTakenRule): DamageResidual[] => {
   const affected = rule.superEffectiveOnly
     ? (dr.quadruple_damage_from || []).concat(dr.double_damage_from).map((resource) => resource.name)
     : (rule.types || []);
 
-  let residual = 0;
+  const residuals: DamageResidual[] = [];
   // Snapshot first: `superEffectiveOnly` reads the weakness buckets, and
   // rewriting them while iterating would drop types out from under the loop.
   [...new Set(affected)].forEach((typeName) => {
@@ -144,10 +149,10 @@ const applyDamageTakenRule = (dr: DamageRelations, rule: DamageTakenRule): numbe
     if (!setDamageTakenMultiplier(dr, typeName, after)) {
       // Bucket unchanged; carry the exact score difference, since the bucket
       // weight is `multiplier - 1` and the constant terms cancel.
-      residual += after - before;
+      residuals.push({ name: typeName, delta: after - before });
     }
   });
-  return residual;
+  return residuals;
 };
 
 /**
@@ -200,7 +205,8 @@ const buildDamageRelations = (
   dr: DamageRelations,
   abilityName: string,
   baseScore: number,
-  respectImmunities: boolean
+  respectImmunities: boolean,
+  weights: TypeThreatWeights
 ): DamageRelations => {
   const immunityType = respectImmunities ? ABILITY_IMMUNITIES[abilityName] : undefined;
   const nextDamageRelations = cloneDamageRelations(dr);
@@ -219,15 +225,23 @@ const buildDamageRelations = (
   // Reductions run under the same flag as immunities: both are ability effects
   // on the typing, and the raw profile exists to show the typing without them.
   const reduction = respectImmunities ? ABILITY_DAMAGE_TAKEN[abilityName] : undefined;
-  const residual = reduction ? applyDamageTakenRule(nextDamageRelations, reduction) : 0;
+  const residuals = reduction ? applyDamageTakenRule(nextDamageRelations, reduction) : [];
+  nextDamageRelations.damage_from_residuals = residuals.length > 0 ? residuals : undefined;
 
-  nextDamageRelations.damage_from_score = calculateDamageFromScore(nextDamageRelations, baseScore) + residual;
+  nextDamageRelations.damage_from_score =
+    calculateDamageFromScore(nextDamageRelations, baseScore, weights)
+    + calculateDamageFromResidual(nextDamageRelations, weights);
   nextDamageRelations.damage_to_score = calculateDamageToScore(nextDamageRelations, baseScore);
   return nextDamageRelations;
 };
 
-export const createAbilityProfile = (dr: DamageRelations, abilityName: string, baseScore: number) => {
-  const damageRelations = buildDamageRelations(dr, abilityName, baseScore, true);
+export const createAbilityProfile = (
+  dr: DamageRelations,
+  abilityName: string,
+  baseScore: number,
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
+) => {
+  const damageRelations = buildDamageRelations(dr, abilityName, baseScore, true, weights);
   return {
     ability_name: abilityName,
     damage_relations: damageRelations,
@@ -235,8 +249,13 @@ export const createAbilityProfile = (dr: DamageRelations, abilityName: string, b
   };
 };
 
-export const createRawAbilityProfile = (dr: DamageRelations, abilityName: string, baseScore: number) => {
-  const damageRelations = buildDamageRelations(dr, abilityName, baseScore, false);
+export const createRawAbilityProfile = (
+  dr: DamageRelations,
+  abilityName: string,
+  baseScore: number,
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
+) => {
+  const damageRelations = buildDamageRelations(dr, abilityName, baseScore, false, weights);
   return {
     ability_name: abilityName,
     damage_relations: damageRelations,
@@ -244,9 +263,15 @@ export const createRawAbilityProfile = (dr: DamageRelations, abilityName: string
   };
 };
 
-export const applyAbilityModifiers = (dr: DamageRelations, abilityNames: string[], baseScore: number) => {
+export const applyAbilityModifiers = (
+  dr: DamageRelations,
+  abilityNames: string[],
+  baseScore: number,
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
+) => {
   const candidateAbilities = abilityNames.length > 0 ? abilityNames : [''];
-  const abilityProfiles = candidateAbilities.map((abilityName) => createAbilityProfile(dr, abilityName, baseScore));
+  const abilityProfiles = candidateAbilities.map((abilityName) =>
+    createAbilityProfile(dr, abilityName, baseScore, weights));
 
   const bestProfile = abilityProfiles.reduce<ReturnType<typeof createAbilityProfile> | null>((best, profile) => {
     if (!best) return profile;
@@ -255,6 +280,6 @@ export const applyAbilityModifiers = (dr: DamageRelations, abilityNames: string[
 
   return {
     abilityProfiles,
-    bestProfile: bestProfile || createAbilityProfile(dr, '', baseScore)
+    bestProfile: bestProfile || createAbilityProfile(dr, '', baseScore, weights)
   };
 };

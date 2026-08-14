@@ -13,6 +13,8 @@ import { getEffectiveStats, getStatAbilityName, totalStats } from './statAbiliti
 import { scoreMemberQuality } from './teamScoring';
 import { isVarietyBreedable } from './unbreedableForms';
 import type { OffensiveTypeChart } from './coverageMoves';
+import type { DamageScoreBounds } from './pokedexScoring';
+import type { TypeThreatWeights } from './typeThreat';
 import type {
   AbilityProfile,
   PokemonAbilitySlot,
@@ -55,6 +57,17 @@ export interface PokemonEnrichmentFacts {
 
 export interface PokemonEnrichmentOptions {
   readonly baseScore: number;
+  /**
+   * How much each attacking type threatens the pool being prepared against.
+   * Uniform reproduces the flat count every score before `typeThreat.ts` used.
+   */
+  readonly threatWeights: TypeThreatWeights;
+  /**
+   * Extremes the weighted defensive score reaches under `threatWeights`. Carried
+   * rather than looked up because deriving it costs a 3,078-profile cross product
+   * and every entry in a scan shares one.
+   */
+  readonly damageFromBounds: DamageScoreBounds;
   readonly inPokedex: string;
   readonly allowMegas: boolean;
   readonly includeAbilityImmunities: boolean;
@@ -64,17 +77,34 @@ export interface PokemonEnrichmentOptions {
   readonly regulation?: Regulation;
 }
 
-/** Picks the ability whose complete modelled loadout has the highest member quality. */
+/**
+ * Picks the ability whose complete modelled loadout has the highest member quality.
+ *
+ * Threat weighting reaches this choice, not just the score it produces. Levitate
+ * is worth what Ground is worth: in a metagame full of Earthquake it can be the
+ * best ability on the Pokemon, and in one without Ground attackers it is worth
+ * nothing and some other ability should win. That only happens if the profiles
+ * are compared under the weights and bounds actually in force, which is why both
+ * arrive here rather than being defaulted.
+ *
+ * @param profiles Candidate ability profiles, already scored.
+ * @param baseScore Baseline the scores were calculated with.
+ * @param bounds Extremes to normalize the defensive score against. Defaults to
+ *   the unweighted measurement, which is correct only for unweighted profiles.
+ */
 export function chooseDefaultAbility<T extends AbilityProfile & { stats: PokemonStats }>(
   profiles: T[],
-  baseScore: number
+  baseScore: number,
+  bounds?: DamageScoreBounds
 ): T {
   const supportBonus = CANDIDATE_WEIGHTS.supportRole / CANDIDATE_WEIGHTS.quality;
   const score = (profile: T) =>
     scoreMemberQuality({
       stats: profile.stats,
       normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, baseScore),
-      normalizedDamageFromScore: normalizeDamageFromScore(profile.damage_from_score, baseScore),
+      normalizedDamageFromScore: normalizeDamageFromScore(
+        profile.damage_from_score, baseScore, bounds
+      ),
       abilityName: profile.ability_name
     }) + (getAbilityEffect(profile.ability_name) ? supportBonus : 0);
 
@@ -139,12 +169,18 @@ export function enrichPokemon(
   const abilityNames = facts.abilities.map((ability) => ability.name);
   const baseDamageRelations = cloneDamageRelations(type.damage_relations);
   const { abilityProfiles } = options.includeAbilityImmunities
-    ? applyAbilityModifiers(baseDamageRelations, abilityNames, options.baseScore)
+    ? applyAbilityModifiers(
+      baseDamageRelations, abilityNames, options.baseScore, options.threatWeights
+    )
     : {
       abilityProfiles: abilityNames.length > 0
         ? abilityNames.map((abilityName) =>
-          createRawAbilityProfile(baseDamageRelations, abilityName, options.baseScore))
-        : [createRawAbilityProfile(baseDamageRelations, '', options.baseScore)]
+          createRawAbilityProfile(
+            baseDamageRelations, abilityName, options.baseScore, options.threatWeights
+          ))
+        : [createRawAbilityProfile(
+          baseDamageRelations, '', options.baseScore, options.threatWeights
+        )]
     };
 
   const profilesWithStats = abilityProfiles.map((profile) => {
@@ -165,7 +201,9 @@ export function enrichPokemon(
   );
   if (!clearsStatFloors) return null;
 
-  const selectedProfile = chooseDefaultAbility(profilesWithStats, options.baseScore);
+  const selectedProfile = chooseDefaultAbility(
+    profilesWithStats, options.baseScore, options.damageFromBounds
+  );
   entry.ability_profiles = Object.fromEntries(
     profilesWithStats.map((profile) => [profile.ability_name || '', profile])
   );

@@ -383,13 +383,36 @@ export const COMPOSITE_WEIGHTS = {
  * maximum; doubles observed 0.7770 and **kept its 0.8124**, per the widen-only
  * rule above.
  */
+/**
+ * ## Re-measured 2026-08-14, for threat weighting
+ *
+ * `typeThreat.ts` scales each type's contribution to the defensive score by how
+ * much of the pool can attack with it, which changes what `scoreMemberQuality`
+ * produces and so invalidates any bound measured on its output. The rerun was
+ * mandatory rather than diligent.
+ *
+ * The quality bounds are replaced outright, per the rule above: they have a
+ * closed form, so a fresh run is strictly more correct. They barely moved —
+ * doubles 0.154..0.6137 to 0.1559..0.6249 — because typing enters quality
+ * through `TYPE_MODULATION`, which scales a stat term rather than standing on
+ * its own. A change that reorders the defensive ranking is still a small change
+ * to the extremes of the blend that contains it.
+ *
+ * **Both synergy maxima are unchanged, and that is a result rather than an
+ * oversight.** Doubles sampled 0.7770 against the recorded 0.8124 and singles
+ * hit 0.8189 exactly; the first is kept under the widen-only rule and the second
+ * confirms it. Synergy is computed by `analyzeTeamCoverage`, which still counts
+ * weaknesses without weighting them, so it *should* be invariant here. If a
+ * later change teaches the coverage analysis about threat weights, these two
+ * numbers move and this paragraph stops being true.
+ */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.154, max: 0.6137 },
+    quality: { min: 0.1559, max: 0.6249 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1361, max: 0.6223 },
+    quality: { min: 0.1367, max: 0.6338 },
     synergy: { min: -1, max: 0.8189 }
   }
 } as const;

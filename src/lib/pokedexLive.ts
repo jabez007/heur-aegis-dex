@@ -272,7 +272,25 @@ export async function getDualTypes(
 export async function getResistantTypes(
   options: ResistantTypeScanOptions = {}
 ): Promise<ResistantTypeResult[]> {
-  const resolvedOptions = resolveResistantTypeScanOptions(options);
+  // Threat weighting is a catalog-path feature and this path scores flat.
+  //
+  // The weights have to be known before the first type is scored, and measuring
+  // them needs a pool with stats on it — stats decide whether a Pokemon would
+  // ever click the coverage move it can learn, which is the whole reason
+  // `coverageMoves.ts` splits the damage classes. Live acquisition does not have
+  // that until `prepare` has fetched every Pokemon, which is after the scoring
+  // it would inform. Measuring without stats would work and would be worse: it
+  // credits Pelipper with the Crunch it will never use, and it would make the
+  // catalog path's measurement worse too, since parity is only worth having
+  // between two paths computing the right thing.
+  //
+  // So this path stays on the flat count, which is what every calibration
+  // constant in the model was measured against and remains a coherent scoring.
+  // The catalog path is the runtime source; this one is acquisition parity.
+  const resolvedOptions = resolveResistantTypeScanOptions({
+    ...options,
+    pokemonFilters: { ...options.pokemonFilters, weightByThreat: false }
+  });
   const processPokemon = async (
     t: PokemonTypeData,
     offensiveChart: OffensiveTypeChart

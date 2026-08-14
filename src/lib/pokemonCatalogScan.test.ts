@@ -6,12 +6,18 @@ import {
   getCatalogResistantTypes,
   getCatalogBaseTypes
 } from './pokemonCatalogScan';
+import { damageFromScoreBounds } from './pokedexScoring';
 import { isResistantTypeResultList } from './pokedexTypes';
+import { UNIFORM_TYPE_THREAT } from './typeThreat';
 import type { PokemonCatalogV1 } from './pokemonCatalog';
 
 const catalog = catalogData as unknown as PokemonCatalogV1;
 const enrichmentOptions = {
   baseScore: 18,
+  // These assertions predate threat weighting and are about the adapter, not
+  // the scoring, so they run on the flat count they were written against.
+  threatWeights: UNIFORM_TYPE_THREAT,
+  damageFromBounds: damageFromScoreBounds(18),
   inPokedex: 'national',
   allowMegas: false,
   includeAbilityImmunities: true,

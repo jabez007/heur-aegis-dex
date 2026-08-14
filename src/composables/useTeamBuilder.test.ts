@@ -379,7 +379,33 @@ describe('useTeamBuilder', () => {
       expect(builder.canTryAnotherRoster.value).toBe(false);
     });
 
-    it('does not cycle into completions more than three points behind the best', () => {
+    /**
+     * The alternatives margin cannot exclude a worthless *sixth* member, and the
+     * number here says why.
+     *
+     * This test used to assert that `mon-7` — one in every stat — never appeared
+     * in a cycled completion. It passed by 0.010 points: the best roster
+     * containing it scored 3.010 behind the best overall, against a
+     * ROSTER_ALTERNATIVE_SCORE_MARGIN of 3. Re-measuring COMPOSITE_BOUNDS for
+     * threat weighting widened the member-quality denominator by 2%, the gap
+     * became 2.950, and the assertion inverted.
+     *
+     * The 2% is not the finding. The finding is that **no fixture can make this
+     * gap exceed 3**, because a roster registers six and brings four: the worst
+     * member is simply never brought, so its quality reaches the score only
+     * through the brings it would spoil. Setting `normalizedDamageFromScore` to
+     * 1 instead of 0 — the worst defensive typing rather than the best — moves
+     * the gap by exactly nothing, which is the proof. Roughly 2.95 points is the
+     * ceiling on what a sixth slot can cost, so a margin of 3 admits any sixth
+     * member whatsoever.
+     *
+     * That is a property of the margin, not of the weighting, and it was true
+     * before this change with 0.010 points to spare. Whether 3 is the right
+     * margin is a product question: it is the only constant in the scoring with
+     * no recorded derivation. This test now pins the measurement so that
+     * answering it is a deliberate act.
+     */
+    it('admits a worthless sixth member, which the margin cannot exclude', () => {
       fillRoster(addPokemon, 3);
       const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel']);
       const weakStats = {
@@ -395,10 +421,18 @@ describe('useTeamBuilder', () => {
         normalizedDamageFromScore: 0
       });
 
+      const offered = new Set<string>();
       for (let option = 0; option < 8; option++) {
         builder.fillRemainingSlots(scan, scan);
-        expect(roster.value.map((member) => member.name)).not.toContain('mon-7');
+        roster.value.forEach((member) => offered.add(member.name));
       }
+
+      expect(offered.has('mon-7')).toBe(true);
+      // The alternatives are still ranked, so it is never the first answer.
+      builder.clearParty();
+      fillRoster(addPokemon, 3);
+      builder.fillRemainingSlots(scan, scan);
+      expect(roster.value.map((member) => member.name)).not.toContain('mon-7');
     });
 
     it('preserves a locked member selected ability across alternatives', () => {

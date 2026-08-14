@@ -12,7 +12,9 @@ import {
   enrichCatalogVariety,
   getCatalogResistantTypes
 } from './pokemonCatalogScan';
+import { damageFromScoreBounds } from './pokedexScoring';
 import { isResistantTypeResultList } from './pokedexTypes';
+import { UNIFORM_TYPE_THREAT } from './typeThreat';
 import type { PokemonCatalogV1 } from './pokemonCatalog';
 
 const mockState = vi.hoisted(() => ({
@@ -513,7 +515,13 @@ const parityOptions = {
     inPokedex: 'national',
     allowMegas: false,
     includeAbilityImmunities: true,
-    includeMoveCoverage: true
+    includeMoveCoverage: true,
+    // Parity is asserted on the scoring both paths can express. The live path
+    // scores flat because it cannot measure a threat pool before it has fetched
+    // one — the reasoning is at the top of `getResistantTypes` in pokedexLive.ts
+    // — so comparing under weighting would compare a measurement against its
+    // absence and tell us nothing about acquisition.
+    weightByThreat: false
   },
   statsFilters: { minimumAttacks: 10, minimumBulk: 10 }
 } as const;
@@ -582,6 +590,10 @@ describe('pokedex.js API integration logic', () => {
       {},
       {
         baseScore: 18,
+        // A parity check between the live and catalog paths, so it wants the
+        // weighting both paths default to rather than a measured one.
+        threatWeights: UNIFORM_TYPE_THREAT,
+        damageFromBounds: damageFromScoreBounds(18),
         inPokedex: 'national',
         allowMegas: false,
         includeAbilityImmunities: true,
@@ -601,8 +613,27 @@ describe('pokedex.js API integration logic', () => {
     expect(fromCatalog).toEqual(live);
   });
 
-  it('keeps live and catalog full scans aligned under default options', async () => {
-    expect(await getCatalogResistantTypes(parityCatalog())).toEqual(await getResistantTypes());
+  it('keeps live and catalog full scans aligned under every shared default', async () => {
+    // Every default except threat weighting, which the live path cannot measure.
+    const unweighted = { pokemonFilters: { weightByThreat: false } } as const;
+
+    expect(await getCatalogResistantTypes(parityCatalog(), unweighted))
+      .toEqual(await getResistantTypes(unweighted));
+  });
+
+  it('scores the catalog path against the metagame and the live path flat', async () => {
+    // The paths diverge by design, and the divergence is the feature: a catalog
+    // scan knows which species are legal and what they can attack with, so it
+    // prices a weakness by how exploitable it actually is. Asserting the gap
+    // exists stops the weighting being switched off by accident.
+    const [weighted, flat] = await Promise.all([
+      getCatalogResistantTypes(parityCatalog()),
+      getResistantTypes()
+    ]);
+
+    expect(weighted).not.toEqual(flat);
+    expect(weighted.map((type) => type.name).sort())
+      .toEqual(flat.map((type) => type.name).sort());
   });
 
   it('getResistantTypes should apply ability immunities by default', async () => {

@@ -55,11 +55,26 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
     // denominator lifts the bulk term for every Pokemon. A 130-HP bear benefits
     // most. Recorded because it is the surprising half — a change to the ability
     // tables reordered a Pokemon with no ability in them.
+    //
+    // Threat weighting then handed the slot back to Excadrill. Both are Ground
+    // types answering the same Electric weakness, and both score worse once each
+    // type counts for what the field can actually bring — but Ursaluna worse, by
+    // 0.067 of normalized defensive score against Excadrill's 0.040. Its
+    // defensive case is two immunities, to Ghost and Electric, and neither is a
+    // common attack; against that it is weak to Fighting, which is the third most
+    // available attacking type in the game. An unweighted count called that even.
+    //
+    // Note what did *not* move. Archaludon, Dragapult, Goodra-hisui and Mamoswine
+    // hold their places, and Goodra-hisui is the one Pokemon here that improves
+    // (0.186 to 0.137): Steel/Dragon is weak only to Fighting and Ground, and
+    // resists a great deal that nobody attacks with. Weighting is meant to be a
+    // correction, not an upheaval, and a shortlist that survived it four-fifths
+    // intact is the evidence for that.
     expect(first.map(({ varietyName }) => varietyName)).toEqual([
       'archaludon',
       'dragapult',
       'goodra-hisui',
-      'ursaluna',
+      'excadrill',
       'mamoswine'
     ]);
     expect(first.every(({ needId, reasons }) =>
