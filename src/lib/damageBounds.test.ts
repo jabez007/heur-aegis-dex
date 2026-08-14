@@ -10,6 +10,7 @@ import type { TypeThreatWeights } from './typeThreat';
 const catalog = catalogData as unknown as PokemonCatalogV1;
 const baseTypes = getCatalogBaseTypes(catalog, DEFAULT_BASE_SCORE);
 const typeNames = baseTypes.map((type) => type.name);
+const coverageTypes = new Set(catalog.types.flatMap((type) => type.damageRelations.doubleDamageFrom));
 
 /**
  * A weighting is only ever handed out frozen and per-pool, and the memo keys on
@@ -62,7 +63,7 @@ describe('weighted damage-from bounds', () => {
     // weights, so the baseline always sits inside the range. That is what makes
     // the maxDamageFromScore filter mean the same thing in every metagame.
     const pool = catalog.varieties.filter((variety) => variety.isDefault).slice(0, 120);
-    const weights = getTypeThreatWeights(pool, typeNames);
+    const weights = getTypeThreatWeights(pool, typeNames, coverageTypes);
     const { min, max } = measureDamageFromBounds(baseTypes, DEFAULT_BASE_SCORE, weights);
 
     expect(min).toBeLessThan(DEFAULT_BASE_SCORE);

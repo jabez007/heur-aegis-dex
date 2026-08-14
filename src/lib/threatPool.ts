@@ -95,7 +95,14 @@ export function getThreatWeights(
   const typeNames = catalog.types
     .filter((type) => type.id <= selection.baseScore)
     .map((type) => type.name);
-  const weights = getTypeThreatWeights(getThreatPool(catalog, selection), typeNames);
+  // A type buys coverage exactly when something is weak to it. Derived from the
+  // chart rather than listed, so it stays correct if the chart ever changes.
+  const coverageTypes = new Set(
+    catalog.types.flatMap((type) => type.damageRelations.doubleDamageFrom)
+  );
+  const weights = getTypeThreatWeights(
+    getThreatPool(catalog, selection), typeNames, coverageTypes
+  );
 
   bySelection.set(key, weights);
   cache.set(catalog, bySelection);

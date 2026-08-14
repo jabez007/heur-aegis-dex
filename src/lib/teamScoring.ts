@@ -424,14 +424,28 @@ export const COMPOSITE_WEIGHTS = {
  * cancel, which is the reason no constant beyond these bounds needed to move.
  *
  * Synergy maxima unchanged for the third time, for the same reason as above.
+ *
+ * ## Re-measured once more the same day, for the coverage-slot rule
+ *
+ * `typeThreat.ts` stopped counting a move type as coverage unless something is
+ * weak to it, which drops Normal from the heaviest attacking type to the
+ * lightest and re-prices every other weight against a new maximum. Quality moved
+ * a little further: doubles 0.1521..0.6024 to 0.1539..0.6104, singles
+ * 0.1314..0.6108 to 0.1343..0.6191. Synergy unchanged for the fourth time.
+ *
+ * `OBSERVED_DAMAGE_FROM` did **not** need re-running, which is worth stating so
+ * nobody re-runs it looking for a change. It is measured with uniform weights
+ * and the coverage rule only moves threat weights, so the unweighted extremes
+ * are untouched at 0.25..26. The threat-weighted range did move, from
+ * 14.96..21.98 to 7.81..24.35, and that one is derived at runtime.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.1521, max: 0.6024 },
+    quality: { min: 0.1539, max: 0.6104 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1314, max: 0.6108 },
+    quality: { min: 0.1343, max: 0.6191 },
     synergy: { min: -1, max: 0.8189 }
   }
 } as const;

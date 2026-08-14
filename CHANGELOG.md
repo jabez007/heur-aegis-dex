@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Normal was the heaviest attacking type in the model, and nothing is weak to
+  it.** Threat weighting counted any learnable move of a type as evidence that
+  type gets brought. Normal is the one type that hits *nothing* super-effectively
+  anywhere on the chart, yet 187 of the 208 legal species can click a qualifying
+  Normal move — Body Slam, Facade, Hyper Voice, the filler everything learns. So
+  Normal took the maximum weight of 1.000, ahead of Dark and Fighting.
+
+  Because nothing is weak to Normal, that weight could only ever be spent on the
+  resistance side. Once a true immunity was worth -4, every Ghost type collected
+  the single largest term in the model for being immune to filler: Annihilape's
+  Normal immunity alone contributed -4.000, more than its four weaknesses
+  combined, and it rose to the best defensive typing in the format.
+
+  A coverage slot is spent to hit something super-effectively, so a move type
+  that buys no coverage no longer competes for one. STAB is unaffected — a
+  Normal-type still clicks its Normal moves. Normal falls from 1.000 to 0.266,
+  the lowest of the eighteen, which is what a STAB-only threat carried by a tenth
+  of the pool should look like; Dark takes the maximum, and since things are weak
+  to Dark, a weakness can now reach a full weight of 1. Annihilape's credit is
+  now dominated by its Fighting immunity at -3.432 with Normal a -1.064 perk,
+  and it sits fifth rather than first.
+
+  The rule is general rather than a Normal special case, derived from the chart
+  so it stays correct if the chart changes. `COMPOSITE_BOUNDS` re-measured;
+  `OBSERVED_DAMAGE_FROM` deliberately not, since it is measured with uniform
+  weights and only the threat weights moved.
+
 ### Added
 
 - **A true immunity is now worth four times a weakness, not the mirror of one.**

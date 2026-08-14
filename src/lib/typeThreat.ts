@@ -50,6 +50,33 @@
  * the probability it brings any particular one. A Pokemon reaching fewer types
  * than it has slots for runs all of them, which the clamp handles.
  *
+ * ## A coverage move has to buy coverage
+ *
+ * "Types it can reach" means types worth reaching. A coverage slot is spent to
+ * hit something super-effectively, so a move type that hits *nothing* super
+ * effectively never competes for one, and counting it as though it did inflates
+ * that type by the size of the entire movepool.
+ *
+ * Exactly one type fails that test, and it is not a corner case. **Normal hits
+ * nothing for double damage anywhere on the chart**, while 187 of the 208 legal
+ * species of Regulation M-B can click a qualifying Normal move — Body Slam,
+ * Facade, Hyper Voice, the filler everything learns. Counting those made Normal
+ * the single most threatening attacking type in the game at a weight of 1.000,
+ * ahead of Dark and Fighting, which is absurd on its face and was worse than
+ * absurd in effect: nothing is weak to Normal, so that weight could only ever be
+ * spent on the resistance side, and every Ghost type collected the largest term
+ * in the model for an immunity to filler. Under `IMMUNITY_VALUE` it was worth
+ * -4.000 on its own, more than Annihilape's four weaknesses combined.
+ *
+ * Restricting coverage to types that buy coverage drops Normal to 0.266, below
+ * every other type, which is what a STAB-only threat carried by a tenth of the
+ * pool should look like. Dark takes the maximum. The rule is stated generally
+ * rather than as a Normal special case, and it happens to bind on one type
+ * today; a chart where some other type stopped hitting anything would bind too.
+ *
+ * STAB is unaffected. A Normal-type still clicks its Normal moves, so its own
+ * typing counts in full as it does for everything else.
+ *
  * Two things push the result in opposite directions and are recorded rather than
  * corrected. It biases **up** by ignoring the non-damaging moves that really do
  * take slots — Protect is close to universal in doubles. It biases **down** by
@@ -123,11 +150,15 @@ export function isUniformTypeThreat(weights: TypeThreatWeights): boolean {
  * @param pool Members of the metagame being prepared against.
  * @param typeNames Every attacking type to report, so types no member can bring
  *   appear as 0 rather than going missing.
+ * @param coverageTypes Types that hit something super-effectively, and so are
+ *   worth a coverage slot. Anything outside this set is counted as a STAB threat
+ *   only — see the module comment, where it is Normal and nothing else.
  * @returns Expected share of the pool bringing a move of each type, in 0..1.
  */
 export function measureTypeThreat(
   pool: readonly ThreatPoolMember[],
-  typeNames: readonly string[]
+  typeNames: readonly string[],
+  coverageTypes: ReadonlySet<string>
 ): Record<string, number> {
   const totals: Record<string, number> = Object.fromEntries(typeNames.map((name) => [name, 0]));
   if (pool.length === 0) return totals;
@@ -135,7 +166,7 @@ export function measureTypeThreat(
   pool.forEach((member) => {
     const own = new Set(member.types);
     const coverage = getCoverageMoveTypes(member.name, member.stats)
-      .filter((typeName) => !own.has(typeName));
+      .filter((typeName) => !own.has(typeName) && coverageTypes.has(typeName));
 
     // Slots left after STAB, shared out over what the Pokemon can reach. A
     // Pokemon reaching nothing new divides by zero, so the empty case exits
@@ -167,15 +198,15 @@ export function measureTypeThreat(
  * score off the `baseScore` neutral line for reasons that have nothing to do
  * with the typing being scored.
  *
- * Note which type sets the maximum on a full roster: Normal, which nearly
- * everything can click and which **nothing is weak to**. It therefore never
- * appears in a weakness bucket and its weight is spent entirely on the
- * resistance side, where Rock, Steel and Ghost earn it. The consequence is that
- * no weakness ever reaches a weight of 1 on an unrestricted pool. That is a
- * scale effect and not a ranking one — a constant factor across all types
- * cannot reorder typings — but it does mean weighted scores sit closer to
- * `baseScore` than unweighted ones, which loosens the `maxDamageFromScore`
- * filter in `resistantTypeScan`.
+ * Normal used to set the maximum here, and the reasoning that made that look
+ * tolerable is worth keeping as a warning. It was recorded as "a scale effect
+ * and not a ranking one — a constant factor across all types cannot reorder
+ * typings", which is true of the normalizing constant and beside the point: what
+ * reorders typings is each type's weight *relative to the others*, and Normal at
+ * 1.000 against Fighting at 0.588 is a ratio, not a constant. The module comment
+ * has the rest, and the type that buys no coverage no longer competes for a
+ * coverage slot. Dark sets the maximum now, and Dark is a type things are weak
+ * to, so a weakness can reach a weight of 1.
  *
  * @param shares Output of `measureTypeThreat`.
  * @returns Weights in 0..1 with a maximum of exactly 1, or the uniform
@@ -196,11 +227,13 @@ export function toTypeThreatWeights(shares: Record<string, number>): TypeThreatW
  *
  * @param pool Members of the metagame being prepared against.
  * @param typeNames Every attacking type to price.
+ * @param coverageTypes Types worth spending a coverage slot on.
  * @returns Threat weights in 0..1.
  */
 export function getTypeThreatWeights(
   pool: readonly ThreatPoolMember[],
-  typeNames: readonly string[]
+  typeNames: readonly string[],
+  coverageTypes: ReadonlySet<string>
 ): TypeThreatWeights {
-  return toTypeThreatWeights(measureTypeThreat(pool, typeNames));
+  return toTypeThreatWeights(measureTypeThreat(pool, typeNames, coverageTypes));
 }
