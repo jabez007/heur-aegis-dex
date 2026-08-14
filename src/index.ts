@@ -144,6 +144,8 @@ export {
   CANDIDATE_WEIGHTS,
   candidatePriority,
   countTypeOverlap,
+  countSharedWeaknesses,
+  DEFAULT_SHARED_WEAKNESS_SLACK,
   generateRosters
 } from './lib/rosterGeneration'
 export type { GenerateRostersOptions, GeneratedRoster } from './lib/rosterGeneration'

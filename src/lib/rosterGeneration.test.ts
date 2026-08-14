@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { BATTLE_FORMATS } from './battleFormats';
-import { candidatePriority, countTypeOverlap, generateRosters } from './rosterGeneration';
+import {
+  candidatePriority,
+  countSharedWeaknesses,
+  countTypeOverlap,
+  DEFAULT_SHARED_WEAKNESS_SLACK,
+  generateRosters
+} from './rosterGeneration';
 import { DEFAULT_BASE_SCORE, normalizeDamageFromScore } from './pokedexScoring';
 import type { PokemonEntry } from './pokemonEntry';
 
@@ -291,66 +297,170 @@ describe('generateRosters', () => {
     expect(rosters[0].members.map((m) => m.name)).not.toContain('archaludon');
   });
 
-  it('does not spend a slot on a type the roster already carries', () => {
+  it('does not spend a slot on a weakness the roster already carries', () => {
     // Reported case: seeding Goodra-Hisui and filling the roster added
     // Excadrill. They are not the same typing, so the rule above does not catch
-    // it — they share only Steel. Across the default pool a shared type predicts
-    // four times the shared weaknesses, and the scorer charges that; it is not
-    // enough to outweigh a quality edge, so the generator states it directly.
-    const seed = [mon('goodra-hisui', { types: ['steel', 'dragon'], typeName: 'steel/dragon' })];
+    // it. What makes it a bad pick is the doubled Fire and Fighting, which is
+    // what this rule reads directly — the shared Steel was only ever a proxy
+    // for it.
+    const seed = [mon('goodra-hisui', {
+      types: ['steel', 'dragon'], typeName: 'steel/dragon',
+      weaknesses: ['fire', 'fighting', 'ground']
+    })];
     const pokemon = [
-      // Shares only Steel, and deliberately the strongest thing in the pool.
+      // Doubles two of the seed's weaknesses, and deliberately the strongest
+      // thing in the pool so quality alone would take it.
       mon('excadrill', {
         types: ['ground', 'steel'],
         typeName: 'ground/steel',
+        weaknesses: ['fire', 'fighting', 'water'],
         stats: { hp: 110, attack: 135, defense: 120, 'special-attack': 50, 'special-defense': 65, speed: 88 },
         normalizedDamageFromScore: 0.2
       }),
-      mon('a', { types: ['water'], typeName: 'water' }),
-      mon('b', { types: ['fire'], typeName: 'fire' }),
-      mon('c', { types: ['grass'], typeName: 'grass' }),
-      mon('d', { types: ['ghost'], typeName: 'ghost' }),
-      mon('e', { types: ['fairy'], typeName: 'fairy' }),
-      mon('f', { types: ['bug'], typeName: 'bug' })
+      mon('a', { types: ['water'], typeName: 'water', weaknesses: ['electric'] }),
+      mon('b', { types: ['fire'], typeName: 'fire', weaknesses: ['water'] }),
+      mon('c', { types: ['grass'], typeName: 'grass', weaknesses: ['bug'] }),
+      mon('d', { types: ['ghost'], typeName: 'ghost', weaknesses: ['dark'] }),
+      mon('e', { types: ['fairy'], typeName: 'fairy', weaknesses: ['poison'] }),
+      mon('f', { types: ['bug'], typeName: 'bug', weaknesses: ['flying'] })
+    ];
+
+    const rosters = generateRosters({ pokemon, format: doubles, seed, sharedWeaknessSlack: 0 });
+
+    expect(rosters.length).toBeGreaterThan(0);
+    expect(countSharedWeaknesses(rosters[0].members)).toBe(0);
+    expect(rosters[0].members.map((m) => m.name)).not.toContain('excadrill');
+  });
+
+  it('spends the default slack on a Pokemon good enough to be worth it', () => {
+    // The other side of the same case, and a deliberate loosening rather than a
+    // regression. Goodra-Hisui and Excadrill share Fire and Fighting — exactly
+    // DEFAULT_SHARED_WEAKNESS_SLACK — so at the default the generator will take
+    // Excadrill when it is the strongest thing available, and the test above
+    // shows slack 0 still refuses it.
+    //
+    // Pinned because it is the behaviour someone will report as a bug, and the
+    // answer is that it was measured: refusing every shared weakness cost 0.91
+    // points in doubles and 1.92 in singles on the real pool.
+    const seed = [mon('goodra-hisui', {
+      types: ['steel', 'dragon'], typeName: 'steel/dragon',
+      weaknesses: ['fire', 'fighting', 'ground']
+    })];
+    const pokemon = [
+      mon('excadrill', {
+        types: ['ground', 'steel'],
+        typeName: 'ground/steel',
+        weaknesses: ['fire', 'fighting', 'water'],
+        stats: { hp: 110, attack: 135, defense: 120, 'special-attack': 50, 'special-defense': 65, speed: 88 },
+        normalizedDamageFromScore: 0.2
+      }),
+      mon('a', { types: ['water'], typeName: 'water', weaknesses: ['electric'] }),
+      mon('b', { types: ['fire'], typeName: 'fire', weaknesses: ['water'] }),
+      mon('c', { types: ['grass'], typeName: 'grass', weaknesses: ['bug'] }),
+      mon('d', { types: ['ghost'], typeName: 'ghost', weaknesses: ['dark'] }),
+      mon('e', { types: ['fairy'], typeName: 'fairy', weaknesses: ['poison'] }),
+      mon('f', { types: ['bug'], typeName: 'bug', weaknesses: ['flying'] })
+    ];
+
+    const rosters = generateRosters({ pokemon, format: doubles, seed });
+
+    expect(rosters[0].members.map((m) => m.name)).toContain('excadrill');
+    expect(countSharedWeaknesses(rosters[0].members))
+      .toBeLessThanOrEqual(DEFAULT_SHARED_WEAKNESS_SLACK);
+  });
+
+  it('allows a shared type when the weaknesses do not actually overlap', () => {
+    // The 10.7% of type-sharing pairs the old proxy refused for no defensive
+    // reason. Both are Steel; the second type undoes the first, so they share no
+    // weakness at all and there is nothing to charge them for.
+    const seed = [mon('goodra-hisui', {
+      types: ['steel', 'dragon'], typeName: 'steel/dragon',
+      weaknesses: ['fire', 'fighting', 'ground']
+    })];
+    const pokemon = [
+      mon('skarmory', {
+        types: ['steel', 'flying'], typeName: 'steel/flying',
+        weaknesses: ['electric'],
+        stats: { hp: 110, attack: 135, defense: 120, 'special-attack': 50, 'special-defense': 65, speed: 88 },
+        normalizedDamageFromScore: 0.2
+      }),
+      mon('a', { types: ['water'], typeName: 'water', weaknesses: ['grass'] }),
+      mon('b', { types: ['fire'], typeName: 'fire', weaknesses: ['water'] }),
+      mon('c', { types: ['grass'], typeName: 'grass', weaknesses: ['bug'] }),
+      mon('d', { types: ['ghost'], typeName: 'ghost', weaknesses: ['dark'] }),
+      mon('e', { types: ['fairy'], typeName: 'fairy', weaknesses: ['poison'] })
     ];
 
     const rosters = generateRosters({ pokemon, format: doubles, seed });
 
     expect(rosters.length).toBeGreaterThan(0);
-    expect(countTypeOverlap(rosters[0].members)).toBe(0);
-    expect(rosters[0].members.map((m) => m.name)).not.toContain('excadrill');
+    expect(rosters[0].members.map((m) => m.name)).toContain('skarmory');
+    // And the roster it produced really does double a type, which is exactly
+    // what the old rule existed to prevent.
+    expect(countTypeOverlap(rosters[0].members)).toBeGreaterThan(0);
   });
 
-  it('spends the fewest repeated types the pool allows', () => {
+  it('spends the fewest shared weaknesses the pool allows', () => {
     // The budget must *loosen*, not switch off. Three strong Pokemon that
-    // pairwise share a type, and four clean but weaker ones. Six members means
-    // taking two of the three, so a zero-overlap roster does not exist — but one
-    // repeat is enough, and the search must stop there rather than taking all
-    // three strong ones and spending three.
+    // pairwise share a weakness, and four clean but weaker ones. Six members
+    // means taking two of the three, so a zero-overlap roster does not exist —
+    // but one repeat is enough, and the search must stop there rather than
+    // taking all three strong ones and spending three.
     const strong = {
       stats: { hp: 110, attack: 135, defense: 120, 'special-attack': 120, 'special-defense': 110, speed: 100 },
       normalizedDamageFromScore: 0.2
     };
     const pokemon = [
-      mon('a', { types: ['steel', 'dragon'], typeName: 'steel/dragon', ...strong }),
-      mon('b', { types: ['steel', 'water'], typeName: 'steel/water', ...strong }),
-      mon('c', { types: ['dragon', 'water'], typeName: 'dragon/water', ...strong }),
-      mon('d', { types: ['grass'], typeName: 'grass' }),
-      mon('e', { types: ['ghost'], typeName: 'ghost' }),
-      mon('f', { types: ['fairy'], typeName: 'fairy' }),
-      mon('g', { types: ['bug'], typeName: 'bug' })
+      mon('a', { types: ['steel'], typeName: 'steel', weaknesses: ['fire', 'ground'], ...strong }),
+      mon('b', { types: ['rock'], typeName: 'rock', weaknesses: ['fire', 'water'], ...strong }),
+      mon('c', { types: ['ice'], typeName: 'ice', weaknesses: ['ground', 'water'], ...strong }),
+      mon('d', { types: ['grass'], typeName: 'grass', weaknesses: ['bug'] }),
+      mon('e', { types: ['ghost'], typeName: 'ghost', weaknesses: ['dark'] }),
+      mon('f', { types: ['fairy'], typeName: 'fairy', weaknesses: ['poison'] }),
+      mon('g', { types: ['bug'], typeName: 'bug', weaknesses: ['flying'] })
     ];
 
-    const constrained = generateRosters({ pokemon, format: doubles });
+    const constrained = generateRosters({ pokemon, format: doubles, sharedWeaknessSlack: 0 });
     const unconstrained = generateRosters({ pokemon, format: doubles, allowDuplicateTypings: true });
 
     expect(constrained.length).toBeGreaterThan(0);
     expect(constrained[0].members).toHaveLength(6);
-    expect(countTypeOverlap(constrained[0].members)).toBe(1);
+    expect(countSharedWeaknesses(constrained[0].members)).toBe(1);
     // Non-vacuous: left alone the search takes all three strong ones and pays
     // three repeats for them.
-    expect(countTypeOverlap(unconstrained[0].members))
-      .toBeGreaterThan(countTypeOverlap(constrained[0].members));
+    expect(countSharedWeaknesses(unconstrained[0].members))
+      .toBeGreaterThan(countSharedWeaknesses(constrained[0].members));
+  });
+
+  it('finds the true minimum rather than the first budget it tries', () => {
+    // The bisection replaced a scan from zero, and bisection is only correct
+    // because feasibility is monotone in the budget. If it ever returned a
+    // roster at B when one exists at B-1, this is what would catch it.
+    const pokemon = [
+      mon('a', { types: ['steel'], weaknesses: ['fire', 'ground'] }),
+      mon('b', { types: ['rock'], weaknesses: ['fire', 'water'] }),
+      mon('c', { types: ['ice'], weaknesses: ['ground', 'water'] }),
+      mon('d', { types: ['grass'], weaknesses: ['bug'] }),
+      mon('e', { types: ['ghost'], weaknesses: ['dark'] }),
+      mon('f', { types: ['fairy'], weaknesses: ['poison'] }),
+      mon('g', { types: ['bug'], weaknesses: ['flying'] })
+    ];
+
+    const best = generateRosters({ pokemon, format: doubles, sharedWeaknessSlack: 0 });
+    const achieved = countSharedWeaknesses(best[0].members);
+
+    // Every six-member combination of this pool, checked exhaustively.
+    let trueMinimum = Infinity;
+    const combos = (start: number, picked: typeof pokemon): void => {
+      if (picked.length === 6) {
+        trueMinimum = Math.min(trueMinimum, countSharedWeaknesses(picked));
+        return;
+      }
+      for (let i = start; i < pokemon.length; i++) combos(i + 1, [...picked, pokemon[i]]);
+    };
+    combos(0, []);
+
+    expect(achieved).toBe(trueMinimum);
   });
 
   it('returns a roster rather than failing when every type must repeat', () => {
