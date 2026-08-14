@@ -4,6 +4,41 @@
 
 ### Added
 
+- **A true immunity is now worth four times a weakness, not the mirror of one.**
+  Every bucket in the defensive score was priced at `multiplier - 1`, which reads
+  as damage taken: 2x adds one type's worth, and 0x removes one. That made a
+  weakness and an immunity exact opposites, so Normal — weak to Fighting, immune
+  to Ghost — netted to precisely the neutral line. Correct about damage, wrong
+  about value: an immunity is a threshold, not a quantity. The matchup becomes
+  free rather than cheap, a stronger attacker cannot break it, and the switch it
+  enables costs nothing.
+
+  `IMMUNITY_VALUE` is -4, borrowed from the hits-survived reading where the
+  coefficient is `log2(multiplier)`: the lowest non-zero multiplier reachable
+  anywhere in the ability × typing cross product is 0.125, so immunity sits one
+  rung below it. Only the immunity coefficient moved. Adopting the full log scale
+  would also have doubled every resistance and softened a 4x weakness from +3 to
+  +2 — a rank correlation of 0.797 against the old scale where this is 0.831 —
+  and none of that was the question being asked.
+
+  Normal now scores 15 rather than 18, and 105 of the 171 typings move while the
+  other 66 have no immunity and are untouched. Ghost-typed combinations gain most,
+  since Normal and Fighting are both common attacks they ignore outright.
+
+  Three consequences, measured. `OBSERVED_DAMAGE_FROM` widened from 11.25..26 to
+  0.25..26, the floor set by Ghost/Steel with Earth Eater and its four
+  immunities. That did **not** compress the model — the p01..p99 span of
+  normalized defensive scores across the M-B pool grew from 0.649 to 0.735, and
+  the realized swing of the defensive-typing term held at 7.3 points against 7.5,
+  so `TYPE_MODULATION` needed no retuning. `COMPOSITE_BOUNDS` was re-measured.
+  And 24 of 24 competitive judgements in the scoring fixture still pass.
+
+  The visible cost is the default scan filter. `maxDamageFromScore` admits
+  typings at or under the neutral line, and that is now 104 of 171 where it was
+  56. The filter is still the line rather than a tuned threshold, but it is a far
+  weaker filter, and whether the default scan wants one that admits 61% of
+  typings is left open.
+
 - **A weakness now costs what the metagame can actually charge for it.** Every
   type weakness was priced identically, so a Pokemon weak only to Fighting scored
   the same whether or not anything in the format could click a Fighting move.

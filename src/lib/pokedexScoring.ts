@@ -10,6 +10,48 @@ import type { TypeThreatWeights } from './typeThreat';
 export const DEFAULT_BASE_SCORE = 18;
 
 /**
+ * What a true immunity is worth, and the one place this score stops being
+ * expected damage.
+ *
+ * Every other bucket is priced at `multiplier - 1`, so the score reads as damage
+ * taken relative to neutral: 2x adds one type's worth, 0.5x removes half of one.
+ * On that arithmetic 0x is worth exactly -1, because removing all of something
+ * is all you can remove — and that made a weakness and an immunity exact
+ * mirrors. Normal, weak to Fighting and immune to Ghost, netted to precisely
+ * `baseScore`.
+ *
+ * That is right about damage and wrong about value. An immunity is not a
+ * quantity of damage avoided, it is a **threshold**: the matchup becomes free
+ * rather than cheap, a stronger attacker cannot break through it, and the switch
+ * it enables costs nothing. Expected damage is linear and none of that is.
+ *
+ * ## Where -4 comes from
+ *
+ * Not from this scale, which cannot express a threshold at all. It comes from
+ * the standard alternative — reading each multiplier as hits survived, where the
+ * coefficient is `log2(multiplier)` and 0x is negative infinity. That reading
+ * needs a cap, and the cap is measurable: the lowest non-zero incoming
+ * multiplier reachable anywhere in the ability × typing cross product is 0.125,
+ * a quarter-resist halved again by Thick Fat. `log2(0.125)` is -3, so immunity
+ * sits one rung below the worst finite damage the model can produce, at -4.
+ *
+ * So the number is borrowed rather than derived in place, and that is the soft
+ * spot, stated rather than buried: it is the value the *other* metric assigns,
+ * imported into this one. It is reasoned against a metric, not validated against
+ * match outcomes — the same standing as `MEMBER_WEIGHTS` and `TYPE_MODULATION`,
+ * and unlike `STATUS_THREAT`, which is measured.
+ *
+ * ## What it changed
+ *
+ * Only the 105 of 171 typings that have an immunity; the other 66 are untouched.
+ * Adopting the full log scale instead would have moved everything — resistances
+ * would double in value and a 4x weakness would soften from +3 to +2 — and the
+ * rank correlation against the old scale was 0.797 where this is 0.831. The
+ * larger change was never the one being asked for, so it was not taken.
+ */
+export const IMMUNITY_VALUE = -4;
+
+/**
  * Scores how much a typing suffers on defence. Lower is better.
  *
  * **`baseScore` is the neutral line, and that is load-bearing.** A typing with
@@ -17,15 +59,24 @@ export const DEFAULT_BASE_SCORE = 18;
  * 1x from all eighteen types — scores exactly `baseScore`, because every term
  * below adds or subtracts from it and all of them are zero. So the number is not
  * an arbitrary baseline: it is "takes neutral damage from everything", and a
- * score reads as the distance from that in weakness-weights.
+ * score reads as the distance from that.
  *
- * Real typings land on it too, by cancellation rather than by having empty
- * buckets. Normal is the clean case: one weakness to Fighting against one
- * immunity to Ghost, netting to exactly `baseScore`. Fourteen of the 171
- * combinations sit on the line, 42 beat it and 115 fall short.
+ * **Typings no longer land on it by cancellation.** They used to: Normal's
+ * Fighting weakness at +1 against its Ghost immunity at -1 netted exactly to
+ * `baseScore`, and that tidiness was the clearest symptom of pricing an immunity
+ * as a quantity of damage. With `IMMUNITY_VALUE` at -4 Normal scores 15, and the
+ * distribution moves with it: 11 of the 171 combinations sit on the line against
+ * 14 before, 93 beat it against 42, and 67 fall short against 115.
  *
- * This is what makes `maxDamageFromScore` in `getResistantTypes` a principled
- * filter rather than a tuned threshold — see the comment at that call site.
+ * That last shift reaches `maxDamageFromScore` in `getResistantTypes`, which
+ * admits typings at or under the line. It now passes 104 of 171 where it passed
+ * 56. The filter is still the neutral line rather than a tuned threshold — a
+ * typing with empty buckets still scores exactly `baseScore`, so "at least as
+ * good as taking neutral damage from everything" means what it says — but it is
+ * a markedly weaker filter, because on this valuation far more typings clear it.
+ * Whether the default scan wants a filter that admits 61% of typings is a
+ * separate question from whether an immunity is worth -4, and it is not answered
+ * here.
  *
  * ## Threat weighting
  *
@@ -37,15 +88,16 @@ export const DEFAULT_BASE_SCORE = 18;
  * `typeThreat.ts` for what the weights measure and why it is availability of
  * the attack rather than prevalence of the typing.
  *
- * **The weights apply to resistances and immunities too, not only weaknesses,**
- * and that is not optional. The neutral line above survives only because the
- * terms cancel: Normal is weak to Fighting and immune to Ghost, and those are
- * +1 and -1 today. Weight the weakness at 0.588 while leaving the immunity at 1
- * and Normal scores *better* than "takes neutral damage from everything" for no
- * reason at all. Weighting both sides keeps every cancellation exact, and the
- * score keeps a plain reading: `baseScore` plus the threat-weighted sum of
- * `multiplier - 1` over every type, which is expected damage taken across the
- * distribution of attacks the pool can actually make.
+ * **The weights apply to resistances and immunities too, not only weaknesses.**
+ * A resistance to a type nothing brings is worth as little as a weakness to one,
+ * and an immunity to it is worth less still now that immunity carries four times
+ * the weight — leaving that term unweighted would let a Ghost immunity collect
+ * its full -4 in a metagame with no Ghost attackers, which is the original bug
+ * wearing a different hat.
+ *
+ * The reading is `baseScore` plus the threat-weighted sum over every type of
+ * what that matchup is worth: `multiplier - 1` for the four buckets that are
+ * quantities of damage, and `IMMUNITY_VALUE` for the one that is a threshold.
  *
  * @param dr Damage relations to score.
  * @param baseScore Baseline, which is also the number of types in play.
@@ -56,20 +108,24 @@ export const calculateDamageFromScore = (
   baseScore: number,
   weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
 ): number => {
-  // The coefficients are `multiplier - 1`, the identity DAMAGE_FROM_BUCKETS in
-  // pokedexAbilities.ts depends on. Keep them in step with that table.
   const weighted = (bucket: NamedResource[] | undefined, coefficient: number): number =>
     (bucket || []).reduce(
       (sum, { name }) => sum + (coefficient * typeThreatWeight(weights, name)),
       0
     );
 
+  // The first four coefficients are `multiplier - 1`, the identity
+  // DAMAGE_FROM_BUCKETS in pokedexAbilities.ts depends on; keep them in step
+  // with that table. The fifth deliberately breaks it — see IMMUNITY_VALUE. The
+  // identity survives where it is actually load-bearing, because a reduction
+  // ability can only ever land a type *between* buckets and 0x is the floor:
+  // nothing multiplies down to a residual against it.
   return baseScore
     + weighted(dr.quadruple_damage_from, 3)
     + weighted(dr.double_damage_from, 1)
     + weighted(dr.half_damage_from, -0.5)
     + weighted(dr.quarter_damage_from, -0.75)
-    + weighted(dr.no_damage_from, -1);
+    + weighted(dr.no_damage_from, IMMUNITY_VALUE);
 };
 
 export const calculateDamageToScore = (dr: DamageRelations, baseScore: number): number => {
@@ -124,8 +180,24 @@ const MEASURED_AT_BASE_SCORE = 18;
  * abilities moved into `pokedexAbilities.ts`, and **neither bound moved**. Thick
  * Fat on Steel/Fairy reaches 11.25 exactly, tying Earth Eater rather than beating
  * it: halving an existing 0.5x resistance is worth a quarter of a weakness-weight,
- * and the two paths to the floor happen to meet. The numbers below are unchanged
- * from the 2026-07-28 measurement, confirmed rather than superseded.
+ * and the two paths to the floor happen to meet.
+ *
+ * ## Re-measured 2026-08-14, for IMMUNITY_VALUE
+ *
+ * The floor fell from 11.25 to 0.25 and the ceiling did not move. Both follow
+ * directly from what changed: only typings with immunities are affected, so the
+ * ceiling — Rock/Ice, which has none — is untouched, while the floor is set by
+ * the profile holding the most immunities and now collects four times as much
+ * for each. Ghost/Steel with Earth Eater is immune to Normal, Fighting, Poison
+ * and Ground, and takes -16 where it used to take -4.
+ *
+ * The range therefore widens from 14.75 to 25.75, which *compresses* every
+ * typing's normalized score — the direction this whole comment warns against.
+ * It is accepted here rather than corrected because the compression is not
+ * spurious: the extra range is occupied by real profiles, and the raw spread
+ * between typings grew by more than the denominator did, since an immunity is
+ * now the single largest term any bucket can contribute. The realized swing is
+ * the number that settles it, and it is measured under `TYPE_MODULATION`.
  *
  * ## Scaling, and its limit
  *
@@ -135,7 +207,7 @@ const MEASURED_AT_BASE_SCORE = 18;
  * scan run with fewer types is a different chart whose real extremes nobody has
  * checked. Values outside the bounds clamp, as they do for `STAT_CEILINGS`.
  */
-const OBSERVED_DAMAGE_FROM = { min: 11.25, max: 26 } as const;
+const OBSERVED_DAMAGE_FROM = { min: 0.25, max: 26 } as const;
 const OBSERVED_DAMAGE_TO = { min: 16, max: 27 } as const;
 
 /**

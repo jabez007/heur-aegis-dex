@@ -87,11 +87,21 @@ const ABILITY_DAMAGE_TAKEN: Record<string, DamageTakenRule> = {
 /**
  * The damage multiplier each bucket represents.
  *
- * `calculateDamageFromScore` weights these at exactly `multiplier - 1` — 4x
- * scores +3, 2x scores +1, 0.5x scores -0.5, 0.25x scores -0.75, 0x scores -1.
- * That identity is what lets a reduction be applied as arithmetic rather than as
- * a bucket shuffle, and it is why Solid Rock's 0.75x can be modelled at all: it
+ * `calculateDamageFromScore` weights the first four at exactly `multiplier - 1`
+ * — 4x scores +3, 2x scores +1, 0.5x scores -0.5, 0.25x scores -0.75. That
+ * identity is what lets a reduction be applied as arithmetic rather than as a
+ * bucket shuffle, and it is why Solid Rock's 0.75x can be modelled at all: it
  * lands between buckets, and the residual below carries it exactly.
+ *
+ * **0x is the exception**: it scores `IMMUNITY_VALUE`, currently -4 rather than
+ * the -1 the identity would give, because an immunity is a threshold and not a
+ * quantity of damage. The exception is safe precisely here, and the reason is
+ * worth stating rather than trusting. A reduction rule multiplies an existing
+ * multiplier down, so it can only produce a residual when the result lands
+ * between two buckets — and 0x is the floor, reachable only from 0x itself,
+ * where `before` and `after` are both zero and no residual is emitted. No
+ * arithmetic in this file ever crosses the 0x coefficient, so breaking the
+ * identity there costs nothing that depends on it.
  */
 const DAMAGE_FROM_BUCKETS = [
   { key: 'quadruple_damage_from', multiplier: 4 },

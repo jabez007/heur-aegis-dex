@@ -12,8 +12,11 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * 2: threat weighting. `damage_from_score` is now scaled by how much of the
  * regulation's pool can attack with each type, so every cached score predates a
  * different formula and normalizes against a different range.
+ *
+ * 3: IMMUNITY_VALUE. A true immunity scores -4 rather than -1, which moves both
+ * the scores and the range they normalize against.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 2 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 3 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [

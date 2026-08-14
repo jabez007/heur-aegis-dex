@@ -290,9 +290,24 @@ describe('scoring validation — member ranking', () => {
     // handed most of it back, which is the correct outcome and worth recording:
     // the ordering had been resting on an arithmetic error rather than on
     // anything the model believed.
-    expect(Math.abs(
+    //
+    // The gap is now measured against a spread the model treats as decisive
+    // rather than against a fixed 0.01. That absolute stopped meaning "close"
+    // when IMMUNITY_VALUE moved to -4: Azumarill's Fairy half carries a Dragon
+    // immunity that Blastoise has no equivalent of, and the pair drifted from
+    // 0.0098 apart to 0.0125. The drift is small only because Dragon is the
+    // rarest attacking type in the format and threat weighting discounts the
+    // immunity to about a quarter of its face value — an immunity to something
+    // common would have separated them properly, and should.
+    //
+    // Anchoring to the Dragonite gap keeps the judgement ordinal, as the header
+    // of this file asks, and survives the next revaluation without a number
+    // needing to be re-tuned by hand.
+    const gap = Math.abs(
       scoreMemberQuality(mon('azumarill')) - scoreMemberQuality(mon('blastoise'))
-    )).toBeLessThan(0.01);
+    );
+    const decisive = scoreMemberQuality(mon('dragonite')) - scoreMemberQuality(mon('azumarill'));
+    expect(gap).toBeLessThan(decisive / 8);
     expect(Math.abs(
       candidatePriority(mon('azumarill')) - candidatePriority(mon('blastoise'))
     )).toBeLessThan(2);

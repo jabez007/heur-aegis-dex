@@ -56,27 +56,37 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
     // most. Recorded because it is the surprising half — a change to the ability
     // tables reordered a Pokemon with no ability in them.
     //
-    // Threat weighting then handed the slot back to Excadrill. Both are Ground
-    // types answering the same Electric weakness, and both score worse once each
-    // type counts for what the field can actually bring — but Ursaluna worse, by
-    // 0.067 of normalized defensive score against Excadrill's 0.040. Its
-    // defensive case is two immunities, to Ghost and Electric, and neither is a
-    // common attack; against that it is weak to Fighting, which is the third most
-    // available attacking type in the game. An unweighted count called that even.
+    // Threat weighting then handed the slot to Excadrill, and pricing a true
+    // immunity at -4 handed it straight back. **That slot is a tiebreak, not a
+    // ranking**, which is the thing actually worth knowing here: all five of
+    // these candidates score an identical `improvement` of 0.01389, because each
+    // answers the same shared 4x Electric weakness and the measure cannot tell
+    // them apart. Their order comes entirely from the secondary keys in
+    // `compareRecommendations`.
     //
-    // Note what did *not* move. Archaludon, Dragapult, Goodra-hisui and Mamoswine
-    // hold their places, and Goodra-hisui is the one Pokemon here that improves
-    // (0.186 to 0.137): Steel/Dragon is weak only to Fighting and Ground, and
-    // resists a great deal that nobody attacks with. Weighting is meant to be a
-    // correction, not an upheaval, and a shortlist that survived it four-fifths
-    // intact is the evidence for that.
+    // It is not the `quality` key. Ursaluna leads Excadrill on member quality
+    // both before the change and after — 0.56082 against 0.53633, then 0.55340
+    // against 0.52032 — so the flip happens on `primaryTradeoff.delta`, which is
+    // compared first. Two revaluations have now moved this one slot in opposite
+    // directions without either of them saying anything about which Pokemon is
+    // better.
+    //
+    // The other four hold their places through both changes, which is the real
+    // signal. Goodra-hisui is again the one that improves outright, 0.186 to
+    // 0.137 to 0.341 normalized: Steel/Dragon is weak only to Fighting and
+    // Ground, and its Poison and Grass immunities are now worth four times what
+    // they were.
     expect(first.map(({ varietyName }) => varietyName)).toEqual([
       'archaludon',
       'dragapult',
       'goodra-hisui',
-      'excadrill',
+      'ursaluna',
       'mamoswine'
     ]);
+    // Pin the tie itself, so a change that makes these five genuinely separable
+    // shows up as this assertion failing rather than as a reshuffled list whose
+    // reshuffling means something entirely different.
+    expect(new Set(first.map(({ improvement }) => improvement.toFixed(5))).size).toBe(1);
     expect(first.every(({ needId, reasons }) =>
       needId === 'shared-quadruple-weakness' &&
       reasons.some(({ dimension, delta }) => dimension === 'electric' && delta < 0)

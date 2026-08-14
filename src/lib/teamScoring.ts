@@ -405,14 +405,33 @@ export const COMPOSITE_WEIGHTS = {
  * weaknesses without weighting them, so it *should* be invariant here. If a
  * later change teaches the coverage analysis about threat weights, these two
  * numbers move and this paragraph stops being true.
+ *
+ * ## Re-measured again 2026-08-14, for IMMUNITY_VALUE
+ *
+ * Pricing a true immunity at -4 rather than -1 changes `damage_from_score` for
+ * every typing that has one, so it changes what `scoreMemberQuality` produces
+ * and these bounds had to be taken again. Quality fell at both ends — doubles
+ * 0.1559..0.6249 to 0.1521..0.6024, singles 0.1367..0.6338 to 0.1314..0.6108 —
+ * because `OBSERVED_DAMAGE_FROM` widened from 11.25..26 to 0.25..26 and a
+ * normalized defensive score is a smaller share of a bigger range.
+ *
+ * The narrowing is real but small, and it is not the compression this file warns
+ * about. The realized swing of the defensive-typing term across the M-B pool
+ * went from 7.5 points of final ranking to 7.3, so `TYPE_MODULATION` still puts
+ * typing where it was deliberately placed: a peer of the stats, able to decide
+ * between Pokemon whose stats are close and unable to overturn a large stat gap.
+ * The bigger raw spread between typings and the bigger denominator very nearly
+ * cancel, which is the reason no constant beyond these bounds needed to move.
+ *
+ * Synergy maxima unchanged for the third time, for the same reason as above.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.1559, max: 0.6249 },
+    quality: { min: 0.1521, max: 0.6024 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1367, max: 0.6338 },
+    quality: { min: 0.1314, max: 0.6108 },
     synergy: { min: -1, max: 0.8189 }
   }
 } as const;
