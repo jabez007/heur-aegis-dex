@@ -2,10 +2,13 @@
 // which is the actual Pokemon Champions movepool rather than a union across
 // games. Keyed by PokeAPI *variety* name, matching what the app already holds.
 //
-// Also emits the status-move table, from the same fetch. Coverage asks what a
-// Pokemon can hit; status asks what it can inflict, and the second question was
-// unanswerable until this ran — which is why every status-facing ability in the
-// model was a hand-picked constant. See STATUS_THREAT in statusThreat.ts.
+// Two more tables come out of the same fetch, because the expensive part is the
+// crawl and all three read different fields off it. Coverage asks what a Pokemon
+// can hit; status asks what it can inflict, which was unanswerable until this ran
+// and is why every status-facing ability in the model was a hand-picked constant
+// (see STATUS_THREAT in statusThreat.ts); STAB power asks how hard it hits with
+// what it already has, which nothing in the model had a number for at all (see
+// UNUSABLE_MOVES below, and stabPower.ts).
 //
 // ## The roster is the game's, not the regulation's
 //
@@ -101,8 +104,9 @@ const varietyLists = await mapLimit(species, CONCURRENCY, async (name) => {
 const varieties = [...new Set(varietyLists.flat())].filter((v) => !unbreedable.has(v)).sort();
 console.log(`varieties: ${varieties.length}`);
 
-// 2. variety -> champions-legal move names
+// 2. variety -> champions-legal move names, and its own types for STAB
 const varietyMoves = new Map();
+const varietyTypes = new Map();
 await mapLimit(varieties, CONCURRENCY, async (variety) => {
   const data = await getJson(`https://pokeapi.co/api/v2/pokemon/${variety}/`);
   if (!data) return;
@@ -110,6 +114,7 @@ await mapLimit(varieties, CONCURRENCY, async (variety) => {
     .filter((m) => m.version_group_details.some((d) => d.version_group.name === VERSION_GROUP))
     .map((m) => m.move.name);
   varietyMoves.set(variety, names);
+  varietyTypes.set(variety, (data.types || []).map((t) => t.type.name));
 });
 
 const withMoves = [...varietyMoves.values()].filter((m) => m.length > 0).length;
@@ -128,7 +133,9 @@ await mapLimit(allMoves, CONCURRENCY, async (move) => {
     damageClass: data.damage_class?.name,
     ailment: data.meta?.ailment?.name,
     ailmentChance: data.meta?.ailment_chance,
-    accuracy: data.accuracy
+    accuracy: data.accuracy,
+    minHits: data.meta?.min_hits,
+    maxHits: data.meta?.max_hits
   });
 });
 
@@ -199,6 +206,188 @@ for (const [variety, moves] of varietyMoves) {
   if (ailments.size > 0) statusTable[variety] = [...ailments].sort();
 }
 
+// ## Best usable STAB power
+//
+// The coverage table answers *which* types a Pokemon can reach. This answers
+// *how hard* it hits with the types it already has, which the model has never
+// had a number for: every offensive score in the app is built from base stats
+// and type charts, as though a 60-power move and a 120-power move were the same
+// tool.
+//
+// ### Why STAB only, and why "usable"
+//
+// The obvious design — highest base power in the whole movepool — is measurably
+// wrong, and wrong in a way this codebase has hit before. An argmax over every
+// move picks the filler that everything learns: Snorlax's best move comes out as
+// Self-Destruct, Corviknight's and Skarmory's as Giga Impact. Correlated against
+// the existing offensive score across the M-B pool it scores **-0.117**, so it
+// carries no information about how hard anything actually hits. This is the same
+// failure as counting Normal as coverage: a universally-learnable move wins any
+// unfiltered maximum.
+//
+// Two restrictions fix it, measured on the same pool:
+//
+// | rule                              | corr. with effectiveOffense |
+// | --------------------------------- | --------------------------- |
+// | highest power, any move           | -0.117                      |
+// | + accuracy discount               |  0.007                      |
+// | + unusable moves dropped          |  0.195                      |
+// | STAB only, all moves usable       |  0.141                      |
+// | **STAB only + unusable dropped**  | **0.189**                   |
+//
+// STAB is the right restriction because it is the move a Pokemon actually leads
+// with — the one its typing already pays for — and because every variety in this
+// roster has at least one, so there is no fallback case to invent. The STAB
+// multiplier itself is deliberately *not* applied: it is 1.5x for every entry, so
+// it would scale the whole column and change nothing.
+//
+// ### What makes a move unusable
+//
+// A move is excluded when its listed power is not power the Pokemon can bring on
+// demand. That is the rule; the list below enumerates it, because PokeAPI flags
+// almost none of these structurally — Steel Beam halves the user's own HP and is
+// recorded with `drain: 0`, indistinguishable from Flash Cannon.
+//
+// Deliberately *kept*, because the cost does not stop the move working and these
+// are moves people genuinely lead with: recoil (Brave Bird, Flare Blitz, Head
+// Smash), crash risk (High Jump Kick), lock-in (Outrage, Thrash — a locked
+// attacker is still attacking), and low accuracy, which is priced below rather
+// than excluded.
+//
+// Stat-drop nukes are the closest call and are kept. Overheat repeated is much
+// weaker than Overheat once, so it does not strictly sustain — but the drop
+// resets on a switch, and 130 is honestly what a Fire-type brings the turn it
+// comes in. The line is drawn at costs that survive switching.
+//
+// Entries whose listed power is too low to ever win a maximum today are still
+// listed, so the set stays an expression of the rule rather than a patch over
+// whatever currently happens to win.
+const UNUSABLE_MOVES = new Map([
+  // Self-KO: the attacker is gone, so this is never a repeatable attack.
+  ['explosion', 'self-KO'],
+  ['self-destruct', 'self-KO'],
+  ['misty-explosion', 'self-KO'],
+  ['final-gambit', 'self-KO'],
+  // Recharge: the following turn is spent doing nothing.
+  ['hyper-beam', 'recharge'],
+  ['giga-impact', 'recharge'],
+  ['blast-burn', 'recharge'],
+  ['frenzy-plant', 'recharge'],
+  ['hydro-cannon', 'recharge'],
+  ['rock-wrecker', 'recharge'],
+  // Two-turn: this turn is spent doing nothing. Weather and Power Herb can
+  // remove the charge, which is a condition, not the default.
+  ['solar-beam', 'two-turn'],
+  ['solar-blade', 'two-turn'],
+  ['sky-attack', 'two-turn'],
+  ['meteor-beam', 'two-turn'],
+  ['electro-shot', 'two-turn'],
+  ['dig', 'two-turn'],
+  ['dive', 'two-turn'],
+  ['fly', 'two-turn'],
+  ['bounce', 'two-turn'],
+  ['phantom-force', 'two-turn'],
+  ['focus-punch', 'two-turn'],
+  ['beak-blast', 'two-turn'],
+  // Delayed: the damage does not land on the turn it is spent.
+  ['future-sight', 'delayed'],
+  // Typing loss: using it removes the very STAB being measured.
+  ['burn-up', 'typing-loss'],
+  // Half the user's own HP, which is a once-per-game nuke rather than a move it
+  // brings turn after turn. This one was found by measurement, not by reading
+  // the list: Steel Beam was setting the 133 that seven of the ten hardest
+  // hitters read, and it is special, so it was doing it to Steel-types that are
+  // physical attackers and would never click it.
+  ['steel-beam', 'self-halving'],
+  // Cannot be used on consecutive turns, so the listed power is what it brings
+  // every other turn rather than what it sustains — the same objection as the
+  // HP-scaling moves below, in the frequency dimension instead of the magnitude
+  // one. Tinkaton was the single highest value in the table on the strength of it.
+  ['gigaton-hammer', 'alternating'],
+  // HP-scaling: the listed power is the full-health best case, not the typical
+  // one, so reading it as a flat number overstates every use after the first.
+  ['eruption', 'hp-scaling'],
+  ['water-spout', 'hp-scaling'],
+  // Conditional: needs setup that is not a given on the turn it is wanted.
+  ['last-resort', 'conditional'],
+  ['steel-roller', 'conditional'],
+  ['belch', 'conditional'],
+  ['beat-up', 'conditional'],
+  ['stored-power', 'conditional'],
+  ['power-trip', 'conditional'],
+  ['rage-fist', 'conditional'],
+  ['last-respects', 'conditional'],
+  ['hard-press', 'conditional'],
+  ['payback', 'conditional'],
+  ['avalanche', 'conditional'],
+  ['temper-flare', 'conditional'],
+  ['sucker-punch', 'conditional'],
+  ['upper-hand', 'conditional'],
+  ['comeuppance', 'conditional'],
+  ['counter', 'conditional'],
+  ['mirror-coat', 'conditional'],
+  ['metal-burst', 'conditional'],
+  ['snore', 'conditional'],
+  ['fake-out', 'conditional'],
+  ['first-impression', 'conditional']
+]);
+
+// Average hits for a multi-hit move. The 2-5 spread is not uniform — the game
+// rolls two and three hits at 35% each and four and five at 15% each, giving
+// 3.0 — and a flat mean would read 3.5 and overstate Icicle Spear and friends.
+// Fixed-count moves (Dragon Darts, Triple Axel) just multiply.
+const expectedHits = ({ minHits, maxHits }) => {
+  if (!minHits || !maxHits || maxHits <= 1) return 1;
+  if (minHits === maxHits) return minHits;
+  if (minHits === 2 && maxHits === 5) return 3;
+  return (minHits + maxHits) / 2;
+};
+
+// Expected power: base power, discounted by accuracy, times expected hits.
+//
+// Accuracy enters linearly, as plain expected value. It earns its place — across
+// the pool it changes *which* move is picked for 30 of 147 Pokemon (Rotom-Wash
+// from Hydro Pump to Thunderbolt, Primarina from Hydro Pump to Moonblast) while
+// leaving 32 correctly on a sub-100% move that is still their best. A null
+// accuracy means the move never misses, which is 100, not unknown.
+//
+// The argument that a miss costs more than linearly — it can lose a game outright,
+// so players discount 80% harder than 0.8 — is real and is deliberately not
+// applied, because nothing here measures how much harder. Recorded so its absence
+// is a choice rather than an oversight, the standing of MIXED_ATTACKER_RATIO.
+const expectedPower = (meta) => {
+  if (typeof meta.power !== 'number' || meta.power <= 0) return 0;
+  const accuracy = typeof meta.accuracy === 'number' ? meta.accuracy / 100 : 1;
+  return meta.power * accuracy * expectedHits(meta);
+};
+
+// Variable-power moves (Gyro Ball, Grass Knot, Heavy Slam, Weather Ball and 19
+// others) carry `power: null` because their power depends on battle state the
+// table cannot see. They fall out through the `typeof power` check above rather
+// than being listed as unusable — they are perfectly good moves whose power is
+// simply not a constant.
+const stabTable = {};
+for (const [variety, moves] of varietyMoves) {
+  const own = new Set(varietyTypes.get(variety) || []);
+  if (own.size === 0) continue;
+  let physical = 0;
+  let special = 0;
+
+  for (const move of moves) {
+    const meta = moveMeta.get(move);
+    if (!meta || meta.damageClass === 'status' || UNUSABLE_MOVES.has(move)) continue;
+    if (!own.has(meta.type)) continue;
+    const power = expectedPower(meta);
+    const adaptive = ADAPTIVE_MOVES.has(move);
+    if (adaptive || meta.damageClass === 'physical') physical = Math.max(physical, power);
+    if (adaptive || meta.damageClass === 'special') special = Math.max(special, power);
+  }
+
+  if (physical > 0 || special > 0) {
+    stabTable[variety] = { physical: Math.round(physical), special: Math.round(special) };
+  }
+}
+
 const summarize = (pick) => {
   const counts = Object.values(table).map((entry) => pick(entry).length).sort((a, b) => a - b);
   const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
@@ -229,6 +418,29 @@ const statusLines = Object.keys(statusTable).sort().map((variety) =>
 );
 writeFileSync('status-table.txt', statusLines.join(',\n') + '\n');
 
+const stabLines = Object.keys(stabTable).sort().map((variety) => {
+  const { physical, special } = stabTable[variety];
+  return `  '${variety}': { physical: ${physical}, special: ${special} }`;
+});
+writeFileSync('stab-power-table.txt', stabLines.join(',\n') + '\n');
+
+// The number that decides whether this can carry weight downstream. A column
+// with a narrow spread cannot modulate anything; one with a wide spread has to
+// be folded in carefully or it swamps the terms already there.
+const bestOf = (entry) => Math.max(entry.physical, entry.special);
+const stabValues = Object.values(stabTable).map(bestOf).sort((a, b) => a - b);
+const noStab = varieties.filter((v) => varietyMoves.has(v) && !stabTable[v]);
+console.log(`\nstab power entries: ${Object.keys(stabTable).length}/${varieties.length}`);
+console.log(`  min ${stabValues[0]}, median ${stabValues[Math.floor(stabValues.length / 2)]}, max ${stabValues[stabValues.length - 1]}`);
+console.log(`  spread ${(stabValues[stabValues.length - 1] / stabValues[0]).toFixed(2)}x`);
+console.log(`  no usable STAB: ${noStab.length}${noStab.length ? ` (${noStab.join(', ')})` : ''}`);
+const unusableSeen = new Set([...UNUSABLE_MOVES.keys()].filter((m) => moveMeta.has(m)));
+console.log(`  unusable moves in this pool: ${unusableSeen.size}/${UNUSABLE_MOVES.size}`);
+for (const check of ['corviknight', 'dragapult', 'rotom-wash', 'snorlax', 'annihilape', 'cloyster']) {
+  const entry = stabTable[check];
+  if (entry) console.log(`  ${check.padEnd(12)} P:${String(entry.physical).padStart(3)} S:${String(entry.special).padStart(3)}`);
+}
+
 // Frequency across the pool, which is the number the ability model needs. Each
 // ailment is counted per variety that can inflict it at all.
 const ailmentCounts = {};
@@ -248,9 +460,15 @@ writeFileSync('coverage-stats.json', JSON.stringify({
   varieties: varieties.length,
   distinctMoves: allMoves.length,
   statusEntries: Object.keys(statusTable).length,
+  stabPowerEntries: Object.keys(stabTable).length,
+  stabPower: {
+    min: stabValues[0],
+    median: stabValues[Math.floor(stabValues.length / 2)],
+    max: stabValues[stabValues.length - 1]
+  },
   ailmentCounts,
   ailmentShare: Object.fromEntries(
     Object.entries(ailmentCounts).map(([a, c]) => [a, c / varietyCount])
   )
 }, null, 2));
-console.log('\nwrote coverage-table.txt and status-table.txt');
+console.log('\nwrote coverage-table.txt, status-table.txt and stab-power-table.txt');
