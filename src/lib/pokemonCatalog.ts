@@ -23,8 +23,11 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * 5: IMMUNITY_VALUE corrected from -4 to -2, a unit error in its derivation.
  *
  * 6: maxDamageFromScore off by default, so a scan returns every typing.
+ *
+ * 7: coverage slots allocated by what they buy rather than evenly, which
+ * re-prices every threat weight and moves the maximum from Dark to Fighting.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 6 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 7 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [

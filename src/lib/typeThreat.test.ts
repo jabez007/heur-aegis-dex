@@ -8,16 +8,21 @@ import {
   getTypeThreatWeights,
   isUniformTypeThreat,
   measureTypeThreat,
+  toTypeThreatWeights,
+  typeMultiplier,
   typeThreatWeight
 } from './typeThreat';
+import { getCoverageMoveTypes } from './coverageMoves';
 import type { PokemonCatalogV1 } from './pokemonCatalog';
-import type { ThreatPoolMember } from './typeThreat';
+import type { ThreatPoolMember, ThreatTypeChart } from './typeThreat';
 
 const catalog = catalogData as unknown as PokemonCatalogV1;
 const TYPES = catalog.types.filter((type) => type.id <= 18).map((type) => type.name);
 
-/** Types something is weak to, and so worth spending a coverage slot on. */
-const COVERAGE = new Set(catalog.types.flatMap((type) => type.damageRelations.doubleDamageFrom));
+/** The type chart, as `measureTypeThreat` wants it. */
+const CHART: ThreatTypeChart = Object.fromEntries(
+  catalog.types.map((type) => [type.name, type.damageRelations])
+);
 
 /** A pool member the coverage table knows nothing about, so only STAB counts. */
 const stabOnly = (name: string, types: string[]): ThreatPoolMember => ({ name, types });
@@ -30,41 +35,48 @@ describe('type threat weights', () => {
   });
 
   it('counts a pool member’s own types in full', () => {
-    const shares = measureTypeThreat([stabOnly('unknown-a', ['fire']), stabOnly('unknown-b', ['water'])], TYPES, COVERAGE);
+    const shares = measureTypeThreat([stabOnly('unknown-a', ['fire']), stabOnly('unknown-b', ['water'])], TYPES, CHART);
 
     expect(shares.fire).toBeCloseTo(0.5, 10);
     expect(shares.water).toBeCloseTo(0.5, 10);
     expect(shares.dragon).toBe(0);
   });
 
-  it('splits the moveslots left after STAB across the types a Pokemon can reach', () => {
-    // Garchomp is Ground/Dragon, so two of four slots are STAB and the rest are
-    // shared out over everything else it can reach. The exact denominator is its
-    // own coverage list, which is why this asserts the relationship rather than
-    // a number: the table is generated and will move.
-    const [garchomp] = getThreatPool(catalog, { baseScore: 18 })
-      .filter((variety) => variety.name === 'garchomp');
-    const shares = measureTypeThreat([garchomp], TYPES, COVERAGE);
+  it('never lets the field bring more moves than it has slots for', () => {
+    // The moveslot arithmetic is the whole discount, so the invariant it exists
+    // to enforce is asserted directly: summed across every type, the expected
+    // moves per pool member cannot exceed four. Asserted over the real pool
+    // rather than a contrived one because the allocation is measured against the
+    // field a Pokemon faces, and a field of one is not a measurement.
+    const pool = getThreatPool(catalog, { regulation: getRegulation('M-B'), baseScore: 18 });
+    const shares = measureTypeThreat(pool, TYPES, CHART);
+    const movesPerMember = TYPES.reduce((sum, type) => sum + shares[type], 0);
+    const ownTypesPerMember = pool.reduce((sum, m) => sum + m.types.length, 0) / pool.length;
 
-    expect(shares.ground).toBe(1);
-    expect(shares.dragon).toBe(1);
-
-    const coverageTotal = TYPES
-      .filter((type) => type !== 'ground' && type !== 'dragon')
-      .reduce((sum, type) => sum + shares[type], 0);
-    // Every coverage slot is spent, so the shares outside STAB sum to the slots.
-    expect(coverageTotal).toBeCloseTo(MOVESLOTS - 2, 10);
+    expect(movesPerMember).toBeLessThanOrEqual(MOVESLOTS);
+    // STAB is never discounted, so it sets the floor, and coverage is real, so
+    // the field brings strictly more than its own typing.
+    expect(movesPerMember).toBeGreaterThan(ownTypesPerMember);
   });
 
   it('never lets a Pokemon run more coverage than it can reach', () => {
-    // One type reachable, three slots free: it runs that one, not three of it.
-    const shares = measureTypeThreat([{ name: 'garchomp', types: ['ground'] }], TYPES, COVERAGE);
+    // Pelipper is Water/Flying, so it has two free slots, and against a field of
+    // Dragons the only thing it can reach that they are weak to is Ice. Nothing
+    // stops proportional allocation handing it both slots, so the clamp does:
+    // it runs Ice Beam once, and the forfeited slot goes nowhere.
+    const [pelipper] = getThreatPool(catalog, { baseScore: 18 })
+      .filter((variety) => variety.name === 'pelipper');
+    const pool = [pelipper, stabOnly('dragon-a', ['dragon']), stabOnly('dragon-b', ['dragon'])];
+    const shares = measureTypeThreat(pool, TYPES, CHART);
 
-    expect(Math.max(...Object.values(shares))).toBe(1);
+    expect(getCoverageMoveTypes(pelipper.name, pelipper.stats)).toContain('ice');
+    expect(shares.ice * pool.length).toBe(1);
+    // Two slots free, one of them spent.
+    expect(MOVESLOTS - pelipper.types.length).toBe(2);
   });
 
   it('normalizes so the most available attacking type weighs exactly 1', () => {
-    const weights = getTypeThreatWeights(getThreatPool(catalog, { baseScore: 18 }), TYPES, COVERAGE);
+    const weights = getTypeThreatWeights(getThreatPool(catalog, { baseScore: 18 }), TYPES, CHART);
     const values = Object.values(weights);
 
     expect(Math.max(...values)).toBe(1);
@@ -73,7 +85,7 @@ describe('type threat weights', () => {
   });
 
   it('falls back to uniform when nothing in the pool can attack', () => {
-    expect(getTypeThreatWeights([], TYPES, COVERAGE)).toBe(UNIFORM_TYPE_THREAT);
+    expect(getTypeThreatWeights([], TYPES, CHART)).toBe(UNIFORM_TYPE_THREAT);
   });
 
   it('prices a weakness by what the pool can bring, not by what it is', () => {
@@ -85,8 +97,8 @@ describe('type threat weights', () => {
     const pool = getThreatPool(catalog, { regulation, baseScore: 18 });
     const withoutFightingTypes = pool.filter((variety) => !variety.types.includes('fighting'));
 
-    const shares = measureTypeThreat(withoutFightingTypes, TYPES, COVERAGE);
-    const weights = getTypeThreatWeights(withoutFightingTypes, TYPES, COVERAGE);
+    const shares = measureTypeThreat(withoutFightingTypes, TYPES, CHART);
+    const weights = getTypeThreatWeights(withoutFightingTypes, TYPES, CHART);
 
     expect(withoutFightingTypes.every((variety) => !variety.types.includes('fighting'))).toBe(true);
     expect(shares.fighting).toBeGreaterThan(0.1);
@@ -95,45 +107,93 @@ describe('type threat weights', () => {
     expect(weights.fighting).toBeGreaterThan(weights.fairy);
   });
 
-  it('does not spend a coverage slot on a type that buys no coverage', () => {
+  it('gives no coverage slot to a type that buys no coverage', () => {
     // Normal is the only attacking type nothing is weak to, and 187 of the 208
-    // legal species can click a qualifying Normal move. Counting that filler as
-    // coverage made Normal the most threatening type in the game at a weight of
-    // 1.000, ahead of Dark and Fighting — and since nothing is weak to Normal,
-    // the entire weight was spent on the resistance side, handing every Ghost
-    // type the single largest term in the model for an immunity to Body Slam.
-    expect(COVERAGE.has('normal')).toBe(false);
-    expect([...TYPES].every((type) => type === 'normal' || COVERAGE.has(type))).toBe(true);
+    // legal species can click a qualifying Normal move. Splitting slots evenly
+    // made Normal the most threatening type in the game at a weight of 1.000,
+    // ahead of Dark and Fighting — and since nothing is weak to Normal, the
+    // entire weight was spent on the resistance side, handing every Ghost type
+    // the single largest term in the model for an immunity to Body Slam.
+    //
+    // That needed an explicit filter once. It does not now: a type with no
+    // marginal value takes no share of a proportional allocation. The guarantee
+    // is asserted here precisely because it is a consequence rather than a rule,
+    // and a consequence is the kind of thing a refactor loses quietly.
+    expect(TYPES.every((type) => typeMultiplier(CHART, 'normal', [type]) < 2)).toBe(true);
 
     const regulation = getRegulation('M-B')!;
     const pool = getThreatPool(catalog, { regulation, baseScore: 18 });
-    const weights = getTypeThreatWeights(pool, TYPES, COVERAGE);
+    const weights = getTypeThreatWeights(pool, TYPES, CHART);
 
     // A STAB-only threat carried by a tenth of the pool should be the smallest
     // on the board, not the largest.
     expect(weights.normal).toBe(Math.min(...Object.values(weights)));
-    expect(weights.dark).toBe(1);
+    // And its whole weight is STAB: 9.6% of the pool is Normal-type, and the
+    // heaviest type is on 30.4% of it, so no coverage credit survives.
+    expect(weights.normal).toBeCloseTo(0.266, 2);
+  });
 
-    // Counting it as coverage is what inverts that, so the bug stays pinned.
-    const unrestricted = getTypeThreatWeights(pool, TYPES, new Set(TYPES));
-    expect(unrestricted.normal).toBe(1);
+  it('splits slots by what they buy rather than evenly, which inverted the board', () => {
+    // The even split ranked Psychic third at 14.9% of the pool hit
+    // super-effectively, and Ice fourteenth at 23.6%. Reconstructed here so the
+    // reading being corrected stays legible, and so that a change which quietly
+    // restored it fails rather than passing with different numbers.
+    const regulation = getRegulation('M-B')!;
+    const pool = getThreatPool(catalog, { regulation, baseScore: 18 });
+
+    const evenShares: Record<string, number> = Object.fromEntries(TYPES.map((type) => [type, 0]));
+    pool.forEach((member) => {
+      const own = new Set<string>(member.types);
+      const coverage = getCoverageMoveTypes(member.name, member.stats)
+        .filter((type) => !own.has(type) && type in evenShares);
+      const slots = Math.max(0, MOVESLOTS - own.size);
+      const per = coverage.length > 0 ? Math.min(1, slots / coverage.length) : 0;
+      own.forEach((type) => { if (type in evenShares) evenShares[type] += 1; });
+      coverage.forEach((type) => { evenShares[type] += per; });
+    });
+    TYPES.forEach((type) => { evenShares[type] /= pool.length; });
+    const even = toTypeThreatWeights(evenShares);
+    const weights = getTypeThreatWeights(pool, TYPES, CHART);
+
+    // Filler outranked everything under the even split, and is last now.
+    expect(even.normal).toBe(1);
+    expect(weights.normal).toBe(Math.min(...Object.values(weights)));
+
+    // Psychic outranked Ground, which hits twice as much of the pool.
+    expect(even.psychic).toBeGreaterThan(even.ground);
+    expect(weights.ground).toBeGreaterThan(weights.psychic);
   });
 
   it('lets a real weakness reach the maximum weight', () => {
     // With Normal no longer setting the ceiling, the type that does is one
     // things are actually weak to, so a weakness can cost a full weight.
     const weights = getTypeThreatWeights(
-      getThreatPool(catalog, { regulation: getRegulation('M-B'), baseScore: 18 }), TYPES, COVERAGE
+      getThreatPool(catalog, { regulation: getRegulation('M-B'), baseScore: 18 }), TYPES, CHART
     );
     const heaviest = Object.entries(weights).find(([, weight]) => weight === 1)![0];
 
-    expect(COVERAGE.has(heaviest)).toBe(true);
+    expect(TYPES.some((type) => typeMultiplier(CHART, heaviest, [type]) >= 2)).toBe(true);
+  });
+
+  it('prices a coverage move against the gap its user’s STAB leaves', () => {
+    // Coverage fills holes. Ice against a pool of Dragons is the textbook
+    // coverage move — except in the hands of a Dragon, whose STAB already
+    // answers every one of them, so the slot goes elsewhere.
+    const dragons = [
+      stabOnly('unknown-a', ['dragon']),
+      stabOnly('unknown-b', ['dragon']),
+      { name: 'garchomp', types: ['dragon', 'ground'] }
+    ];
+    const shares = measureTypeThreat(dragons, TYPES, CHART);
+
+    expect(typeMultiplier(CHART, 'ice', ['dragon'])).toBe(2);
+    expect(shares.ice).toBe(0);
   });
 
   it('does drop a type nothing in the pool can attack with', () => {
     // The other half of the claim: availability is measured, not assumed. A pool
     // of two Pokemon the coverage table does not know reaches only its own types.
-    const weights = getTypeThreatWeights([stabOnly('unknown-a', ['fire']), stabOnly('unknown-b', ['water'])], TYPES, COVERAGE);
+    const weights = getTypeThreatWeights([stabOnly('unknown-a', ['fire']), stabOnly('unknown-b', ['water'])], TYPES, CHART);
 
     expect(weights.fighting).toBe(0);
     expect(weights.fire).toBe(1);

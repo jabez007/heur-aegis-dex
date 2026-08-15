@@ -28,12 +28,28 @@
  * Memoized on that same key, which matters twice over: `damageBounds.ts` keys
  * its cross product on weight-object identity, so handing out a fresh equal
  * object each call would silently recompute 3,078 profiles per Pokemon.
+ *
+ * ## Without a regulation, this measures the wrong thing
+ *
+ * `coverageMoveData.ts` is generated over the legal species of Regulation M-A
+ * and M-B, so it knows the movepool of **206 of the 208** members of an M-B
+ * pool and **206 of the 1,025** members of an unrestricted one. A pool without a
+ * regulation is therefore 80% Pokemon that contribute their own typing and no
+ * moves at all, which collapses the weighting back onto typing prevalence — the
+ * exact reading `typeThreat.ts` opens by rejecting. Water reads 1.000 there, and
+ * it is the most common typing in the game rather than a common attack.
+ *
+ * Not fixed, because fixing it means regenerating the coverage table over every
+ * species rather than the legal ones, and not urgent, because `useWorkspaceState`
+ * opens on `getActiveRegulation()` and the unrestricted pool is reachable only by
+ * clearing the selection. Named because the failure is silent: the weights look
+ * ordinary, and nothing about them says a fifth of the pool answered the question.
  */
 
 import { getTypeThreatWeights } from './typeThreat';
 import type { CatalogVarietyV1, PokemonCatalogV1 } from './pokemonCatalog';
 import type { Regulation } from './regulations';
-import type { TypeThreatWeights } from './typeThreat';
+import type { TypeDefenseRelations, TypeThreatWeights } from './typeThreat';
 
 /** Cup selections are a set of types; the empty selection means the whole pool. */
 export interface ThreatPoolSelection {
@@ -95,14 +111,13 @@ export function getThreatWeights(
   const typeNames = catalog.types
     .filter((type) => type.id <= selection.baseScore)
     .map((type) => type.name);
-  // A type buys coverage exactly when something is weak to it. Derived from the
-  // chart rather than listed, so it stays correct if the chart ever changes.
-  const coverageTypes = new Set(
-    catalog.types.flatMap((type) => type.damageRelations.doubleDamageFrom)
+  // The whole chart, not a derived summary of it: the measurement needs to know
+  // what each attacking type would buy its user against this specific pool, and
+  // that question is not answerable from a list of types.
+  const chart: Record<string, TypeDefenseRelations> = Object.fromEntries(
+    catalog.types.map((type) => [type.name, type.damageRelations])
   );
-  const weights = getTypeThreatWeights(
-    getThreatPool(catalog, selection), typeNames, coverageTypes
-  );
+  const weights = getTypeThreatWeights(getThreatPool(catalog, selection), typeNames, chart);
 
   bySelection.set(key, weights);
   cache.set(catalog, bySelection);

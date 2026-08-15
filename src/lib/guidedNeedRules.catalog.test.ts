@@ -67,10 +67,13 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
     // It is not the `quality` key. Ursaluna leads Excadrill on member quality
     // both before the change and after — 0.56082 against 0.53633, then 0.55340
     // against 0.52032 — so the flip happens on `primaryTradeoff.delta`, which is
-    // compared first. Three revaluations have now shuffled the tail of this list
+    // compared first. Four revaluations have now shuffled the tail of this list
     // without any of them saying anything about which Pokemon is better:
-    // Excadrill in, Ursaluna back, and correcting IMMUNITY_VALUE from -4 to -2
-    // dropping Mamoswine for Excadrill at the fifth slot.
+    // Excadrill in, Ursaluna back, correcting IMMUNITY_VALUE from -4 to -2
+    // dropping Mamoswine for Excadrill at the fifth slot, and allocating
+    // coverage slots by what they buy putting Mamoswine back. The fifth slot has
+    // now been Mamoswine, Excadrill, Mamoswine — which is the clearest statement
+    // available that the list is four long and the tie-break is noise.
     //
     // The top three hold their places through all of it, which is the real
     // signal. Goodra-hisui is the one that improves outright at every step —
@@ -82,7 +85,7 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
       'dragapult',
       'goodra-hisui',
       'ursaluna',
-      'excadrill'
+      'mamoswine'
     ]);
     // Pin the tie itself, so a change that makes these five genuinely separable
     // shows up as this assertion failing rather than as a reshuffled list whose

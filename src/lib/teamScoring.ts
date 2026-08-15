@@ -446,16 +446,33 @@ export const COMPOSITE_WEIGHTS = {
  * `OBSERVED_DAMAGE_FROM` needed re-running for the immunity value and **not**
  * for the coverage rule, which is worth stating so nobody goes looking. It is
  * measured with uniform weights, so a change to the threat weights cannot move
- * it; a change to a bucket coefficient can. The threat-weighted range, derived
- * at runtime, is 12.42..24.35.
+ * it; a change to a bucket coefficient can.
+ *
+ * ## Re-measured for the coverage allocation
+ *
+ * `typeThreat.ts` now shares a Pokemon's free moveslots out in proportion to
+ * what each coverage type would buy it, rather than evenly. That widens the
+ * threat-weighted damage-from range from 12.42..24.35 to **12.17..24.72**,
+ * because weight concentrates on fewer types instead of spreading thin.
+ *
+ * Quality barely moved — doubles 0.1558..0.6221 to 0.1556..0.6225, singles
+ * 0.1368..0.6330 to 0.1365..0.6331 — which is the expected shape: the typing
+ * term is one modulated input among three stats.
+ *
+ * Both synergy maxima are unchanged again, for the same reason as the last two
+ * reruns and with the same caveat. Doubles sampled 0.7770 against the recorded
+ * 0.8124 and keeps it under the widen-only rule; singles hit 0.8189 exactly for
+ * the third time. `analyzeTeamCoverage` still counts weaknesses without
+ * weighting them, so an allocation change inside `typeThreat.ts` cannot reach
+ * it, and the invariance is evidence the two are as separate as claimed.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.1558, max: 0.6221 },
+    quality: { min: 0.1556, max: 0.6225 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1368, max: 0.6330 },
+    quality: { min: 0.1365, max: 0.6331 },
     synergy: { min: -1, max: 0.8189 }
   }
 } as const;

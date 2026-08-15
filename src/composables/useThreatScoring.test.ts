@@ -58,9 +58,16 @@ describe('useThreatScoring', () => {
     const boulder = scoring.value!;
 
     expect(boulder.weights).not.toBe(openFormat.weights);
-    // A cup made of Fighting and Ground raises exactly those.
-    expect(boulder.weights!.fighting).toBeGreaterThan(openFormat.weights!.fighting);
+    // A cup of Rock, Ground, Steel and Fighting is made of the types Ground
+    // answers, and it raises Ground to the ceiling. Fighting is already there in
+    // the open format and cannot rise further, which is why this asserts against
+    // Ground rather than the type the cup most obviously contains.
     expect(boulder.weights!.ground).toBeGreaterThan(openFormat.weights!.ground);
+    expect(boulder.weights!.ground).toBeCloseTo(1, 3);
+    expect(boulder.weights!.fighting).toBe(1);
+    // And it strips out what that cup cannot bring. Nothing in it carries a
+    // Fairy move worth a slot.
+    expect(boulder.weights!.fairy).toBeLessThan(openFormat.weights!.fairy / 3);
 
     selectedTypes.value = [...ALL_TYPES];
     await nextTick();

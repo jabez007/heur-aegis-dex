@@ -380,7 +380,7 @@ describe('useTeamBuilder', () => {
     });
 
     /**
-     * This assertion used to be a coin flip and is now decided by 0.84 points.
+     * This assertion used to be a coin flip and is now decided by 0.33 points.
      *
      * `mon-7` is one in every stat. The best roster containing it scored, across
      * four consecutive recalibrations, **3.010** points behind the best, then
@@ -396,9 +396,13 @@ describe('useTeamBuilder', () => {
      * slot can cost, so a margin of 3 could never exclude one.
      *
      * The margin is now derived rather than assumed: one member's worth of
-     * roster quality, measured at 2.13. That is 0.84 clear of the lowest gap the
-     * four calibrations produced, about seven times the drift any of them
-     * caused, so the exclusion holds for a stated reason instead of by luck.
+     * roster quality, re-measured at 2.63 as the candidate pool grew. The gap
+     * here measures 2.963 today, inside the same band as all four earlier
+     * readings, so the exclusion holds for a stated reason instead of by luck —
+     * but by 0.33 rather than the 0.84 it had at 2.13. The two quantities are
+     * converging, and why that is expected is argued on
+     * ROSTER_ALTERNATIVE_SCORE_MARGIN. If this test starts flipping again, that
+     * docblock is the thing to read, not this one.
      */
     it('does not cycle into completions a member downgrade behind the best', () => {
       fillRoster(addPokemon, 3);

@@ -210,7 +210,7 @@ describe('App scan and storage orchestration', () => {
     await vi.waitFor(() => expect(mounted!.element.textContent).toContain('Pokedex Database Ready'));
     expect(mocks.getResistantTypes).toHaveBeenCalledOnce();
     expect(mocks.cacheSet).toHaveBeenCalledWith(
-      expect.stringMatching(/^heur_aegis_dex_v21_scan-6_ab1cd34ca0fc4fd13481ea610dbb7ddb4bdd890dbe21525c556dffebe41ee1f0_d7526351fb644511b27bc142e2e6a43f045a7fd2580ce2f9e28ec3fb21e7e09d_types_/),
+      expect.stringMatching(/^heur_aegis_dex_v21_scan-7_ab1cd34ca0fc4fd13481ea610dbb7ddb4bdd890dbe21525c556dffebe41ee1f0_d7526351fb644511b27bc142e2e6a43f045a7fd2580ce2f9e28ec3fb21e7e09d_types_/),
       scanResult,
       60 * 24
     );

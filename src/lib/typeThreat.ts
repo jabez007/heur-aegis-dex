@@ -46,47 +46,83 @@
  *
  * The discount is the moveslot arithmetic rather than a tuned constant. Four
  * moves, minus the STAB slots the Pokemon will spend on its own types, leaves
- * the slots available for coverage; spread over the types it can reach, that is
- * the probability it brings any particular one. A Pokemon reaching fewer types
- * than it has slots for runs all of them, which the clamp handles.
+ * the slots available for coverage. A Pokemon reaching fewer types than it has
+ * slots for runs all of them, which the clamp handles.
  *
- * ## A coverage move has to buy coverage
+ * ## Can learn is not would run
  *
- * "Types it can reach" means types worth reaching. A coverage slot is spent to
- * hit something super-effectively, so a move type that hits *nothing* super
- * effectively never competes for one, and counting it as though it did inflates
- * that type by the size of the entire movepool.
+ * What remains is how those slots get shared out, and sharing them evenly is
+ * wrong in a way that shows up plainly in the result. Measured over Regulation
+ * M-B, an even split ranked **Psychic third** among attacking types while
+ * Psychic hits 14.9% of the pool super-effectively, and ranked **Ice and Flying
+ * fourteenth and fifteenth** while both hit 23.6%. Psychic and Grass are on
+ * everything's TM list; nobody spends a slot on them, because there is nothing
+ * to point them at. The even split cannot see that, so it prices a Psychic
+ * weakness above a Ground weakness.
  *
- * Exactly one type fails that test, and it is not a corner case. **Normal hits
- * nothing for double damage anywhere on the chart**, while 187 of the 208 legal
- * species of Regulation M-B can click a qualifying Normal move — Body Slam,
- * Facade, Hyper Voice, the filler everything learns. Counting those made Normal
- * the single most threatening attacking type in the game at a weight of 1.000,
- * ahead of Dark and Fighting, which is absurd on its face and was worse than
- * absurd in effect: nothing is weak to Normal, so that weight could only ever be
- * spent on the resistance side, and every Ghost type collected the largest term
- * in the model for an immunity to filler. Under `IMMUNITY_VALUE` it was worth
- * -4.000 on its own, more than Annihilape's four weaknesses combined.
+ * The fix is that a coverage slot is spent to hit something, so the share a type
+ * gets is proportional to how much it hits — specifically, to the fraction of
+ * the pool it catches super-effectively that this Pokemon's own STAB does not
+ * already catch. Marginal, because coverage exists to fill the gaps STAB leaves:
+ * a Dragon/Ground Garchomp gets little from Ice, since Ground already answers
+ * most of what Ice would.
  *
- * Restricting coverage to types that buy coverage drops Normal to 0.266, below
- * every other type, which is what a STAB-only threat carried by a tenth of the
- * pool should look like. Dark takes the maximum. The rule is stated generally
- * rather than as a Normal special case, and it happens to bind on one type
- * today; a chart where some other type stopped hitting anything would bind too.
+ * This is a generalization of the even split, not a replacement for it. When
+ * every reachable type is worth the same, proportional allocation *is* the even
+ * split; the two only diverge where the movepool contains types the Pokemon
+ * would never click.
  *
- * STAB is unaffected. A Normal-type still clicks its Normal moves, so its own
- * typing counts in full as it does for everything else.
+ * ## Normal, which used to need a rule of its own
  *
- * Two things push the result in opposite directions and are recorded rather than
- * corrected. It biases **up** by ignoring the non-damaging moves that really do
- * take slots — Protect is close to universal in doubles. It biases **down** by
- * treating a Pokemon's coverage types as interchangeable when in practice the
- * strongest one gets picked far more often than the median one. Neither has a
- * measurement behind it, so neither is applied.
+ * The old even split needed an exception, and it is worth recording because the
+ * new rule absorbs it. **Normal hits nothing for double damage anywhere on the
+ * chart**, while 187 of the 208 legal species of Regulation M-B can click a
+ * qualifying Normal move — Body Slam, Facade, Hyper Voice, the filler everything
+ * learns. Counted as coverage, that made Normal the single most threatening
+ * attacking type in the game at a weight of 1.000, ahead of Dark and Fighting.
+ * That was worse than absurd in effect: nothing is weak to Normal, so the weight
+ * could only ever be spent on the resistance side, and every Ghost type
+ * collected the largest term in the model for an immunity to filler.
+ *
+ * The fix then was to filter coverage down to types something is weak to. Under
+ * proportional allocation no filter is needed: a type that hits nothing has no
+ * marginal value, so it takes no share of the slots. Normal comes out at 0.266
+ * either way — verified identical across all 18 types — which is what a
+ * STAB-only threat carried by a tenth of the pool should look like. The filter
+ * is gone and the guarantee is a test, since a special case that has become a
+ * consequence is exactly the kind of thing a later refactor reintroduces.
+ *
+ * STAB is unaffected throughout. A Normal-type still clicks its Normal moves, so
+ * its own typing counts in full as it does for everything else.
+ *
+ * ## What is still not modelled
+ *
+ * It biases **up** by ignoring the non-damaging moves that really do take slots
+ * — Protect is close to universal in doubles. It biases **down** by spreading
+ * slots proportionally rather than assuming best play: a Pokemon that plainly
+ * runs one particular coverage move still contributes a fraction to each of its
+ * alternatives. Assuming best play was measured — allocate every slot to the
+ * highest-value types and nothing to the rest — and rejected: it ranks the types
+ * at a Spearman of only 0.63 against the proportional reading, and puts Electric
+ * at 0.165 and Dragon at 0.157, which says a Thunderbolt weakness is worth about
+ * a sixth of a Close Combat one. Argmax collapses the fact that different builds
+ * make different choices from the same movepool.
+ *
+ * Neither bias has a measurement behind it, so neither is applied.
  */
 
 import { getCoverageMoveTypes } from './coverageMoves';
 import type { PokemonStats } from './pokedexTypes';
+
+/** What a defending type takes from each attacking type, as the catalog holds it. */
+export interface TypeDefenseRelations {
+  readonly doubleDamageFrom: readonly string[];
+  readonly halfDamageFrom: readonly string[];
+  readonly noDamageFrom: readonly string[];
+}
+
+/** Defending type name to its damage relations. */
+export type ThreatTypeChart = Readonly<Record<string, TypeDefenseRelations>>;
 
 /**
  * Attacking type name to its threat weight in 0..1, where the most available
@@ -140,6 +176,52 @@ export function isUniformTypeThreat(weights: TypeThreatWeights): boolean {
 }
 
 /**
+ * Damage an attacking type deals to a defending typing, as a multiplier.
+ *
+ * @param chart Damage relations by defending type name.
+ * @param attackType Attacking type.
+ * @param defendTypes The defender's own types.
+ * @returns The product of the per-type multipliers, so 0 through 4.
+ */
+export function typeMultiplier(
+  chart: ThreatTypeChart,
+  attackType: string,
+  defendTypes: readonly string[]
+): number {
+  return defendTypes.reduce((product, defendType) => {
+    const relations = chart[defendType];
+    if (!relations) return product;
+    if (relations.noDamageFrom.includes(attackType)) return 0;
+    if (relations.doubleDamageFrom.includes(attackType)) return product * 2;
+    if (relations.halfDamageFrom.includes(attackType)) return product * 0.5;
+    return product;
+  }, 1);
+}
+
+/**
+ * Which pool members each attacking type catches super-effectively.
+ *
+ * Computed once per measurement and read many times: the allocation below asks
+ * this question for every attacker against every type it can reach, which is
+ * quadratic in the pool if the chart is walked each time.
+ *
+ * @param pool Members of the metagame.
+ * @param typeNames Attacking types to profile.
+ * @param chart Damage relations by defending type name.
+ * @returns Attacking type to a mask over `pool`, true where it hits for 2x or more.
+ */
+function superEffectiveMasks(
+  pool: readonly ThreatPoolMember[],
+  typeNames: readonly string[],
+  chart: ThreatTypeChart
+): Record<string, boolean[]> {
+  return Object.fromEntries(typeNames.map((typeName) => [
+    typeName,
+    pool.map((member) => typeMultiplier(chart, typeName, member.types) >= 2)
+  ]));
+}
+
+/**
  * Measures the share of a pool that can attack with each type.
  *
  * The result is a probability-like share rather than a weight: it is what the
@@ -150,37 +232,48 @@ export function isUniformTypeThreat(weights: TypeThreatWeights): boolean {
  * @param pool Members of the metagame being prepared against.
  * @param typeNames Every attacking type to report, so types no member can bring
  *   appear as 0 rather than going missing.
- * @param coverageTypes Types that hit something super-effectively, and so are
- *   worth a coverage slot. Anything outside this set is counted as a STAB threat
- *   only — see the module comment, where it is Normal and nothing else.
+ * @param chart Damage relations by defending type name, used to work out what a
+ *   coverage move would actually buy its user — see the module comment.
  * @returns Expected share of the pool bringing a move of each type, in 0..1.
  */
 export function measureTypeThreat(
   pool: readonly ThreatPoolMember[],
   typeNames: readonly string[],
-  coverageTypes: ReadonlySet<string>
+  chart: ThreatTypeChart
 ): Record<string, number> {
   const totals: Record<string, number> = Object.fromEntries(typeNames.map((name) => [name, 0]));
   if (pool.length === 0) return totals;
 
+  const hits = superEffectiveMasks(pool, typeNames, chart);
+
   pool.forEach((member) => {
     const own = new Set(member.types);
-    const coverage = getCoverageMoveTypes(member.name, member.stats)
-      .filter((typeName) => !own.has(typeName) && coverageTypes.has(typeName));
-
-    // Slots left after STAB, shared out over what the Pokemon can reach. A
-    // Pokemon reaching nothing new divides by zero, so the empty case exits
-    // before the ratio is taken.
-    const coverageSlots = Math.max(0, MOVESLOTS - own.size);
-    const perCoverageType = coverage.length > 0
-      ? Math.min(1, coverageSlots / coverage.length)
-      : 0;
-
     own.forEach((typeName) => {
       if (typeName in totals) totals[typeName] += 1;
     });
-    coverage.forEach((typeName) => {
-      if (typeName in totals) totals[typeName] += perCoverageType;
+
+    const coverage = getCoverageMoveTypes(member.name, member.stats)
+      .filter((typeName) => !own.has(typeName) && typeName in totals);
+    const coverageSlots = Math.max(0, MOVESLOTS - own.size);
+    if (coverage.length === 0 || coverageSlots === 0) return;
+
+    // What this attacker already answers off STAB. Coverage is priced against
+    // the gap that leaves, not against the field as a whole.
+    const answered = pool.map((_, index) => [...own].some((typeName) => hits[typeName]?.[index]));
+    const value = coverage.map((typeName) =>
+      hits[typeName].reduce((count, hit, index) => count + (hit && !answered[index] ? 1 : 0), 0));
+
+    // A movepool that buys nothing new gets no slots — the Normal case, and the
+    // handful of attackers whose STAB already covers everything they can reach.
+    // Exiting here also keeps the ratio below from dividing by zero.
+    const totalValue = value.reduce((sum, entry) => sum + entry, 0);
+    if (totalValue === 0) return;
+
+    coverage.forEach((typeName, index) => {
+      // Clamped because a slot cannot be spent twice on the same move. The lost
+      // share is real and not redistributed: a Pelipper with two free slots and
+      // one type worth reaching runs Ice Beam once, not twice.
+      totals[typeName] += Math.min(1, coverageSlots * value[index] / totalValue);
     });
   });
 
@@ -204,9 +297,9 @@ export function measureTypeThreat(
  * typings", which is true of the normalizing constant and beside the point: what
  * reorders typings is each type's weight *relative to the others*, and Normal at
  * 1.000 against Fighting at 0.588 is a ratio, not a constant. The module comment
- * has the rest, and the type that buys no coverage no longer competes for a
- * coverage slot. Dark sets the maximum now, and Dark is a type things are weak
- * to, so a weakness can reach a weight of 1.
+ * has the rest, and a type that buys no coverage now takes no coverage slot.
+ * Fighting sets the maximum, which is a type things are weak to, so a weakness
+ * can reach a weight of 1.
  *
  * @param shares Output of `measureTypeThreat`.
  * @returns Weights in 0..1 with a maximum of exactly 1, or the uniform
@@ -227,13 +320,13 @@ export function toTypeThreatWeights(shares: Record<string, number>): TypeThreatW
  *
  * @param pool Members of the metagame being prepared against.
  * @param typeNames Every attacking type to price.
- * @param coverageTypes Types worth spending a coverage slot on.
+ * @param chart Damage relations by defending type name.
  * @returns Threat weights in 0..1.
  */
 export function getTypeThreatWeights(
   pool: readonly ThreatPoolMember[],
   typeNames: readonly string[],
-  coverageTypes: ReadonlySet<string>
+  chart: ThreatTypeChart
 ): TypeThreatWeights {
-  return toTypeThreatWeights(measureTypeThreat(pool, typeNames, coverageTypes));
+  return toTypeThreatWeights(measureTypeThreat(pool, typeNames, chart));
 }
