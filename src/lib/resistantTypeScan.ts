@@ -26,6 +26,29 @@ export const DEFAULT_STATS_FILTERS = {
 export interface ResistantTypeScanOptions {
   baseScore?: number;
   typeFilters?: {
+    /**
+     * Drop typings scoring worse than the `baseScore` neutral line. **Off by
+     * default, and the reason is that its justification expired.**
+     *
+     * It was a principled filter for as long as the neutral line was somewhere
+     * typings actually landed. Unweighted, every defensive score is a multiple
+     * of 0.25 and 14 of the 171 combinations sat exactly on `baseScore`, so the
+     * cut fell on a plateau and the `<=` swept up everything tied there.
+     *
+     * Threat weighting made the score continuous, and **no typing lands on the
+     * line any more** — 0 of 171, against 60 sitting within 0.6 of it. The same
+     * cut now slices a dense band at a point nothing distinguishes: pure Water
+     * scores 18.069 and is dropped, Ghost/Grass scores 17.782 and is kept, and
+     * 0.29 of separation in a band that crowded is not a judgement worth acting
+     * on. In practice it removed every mono-Water and mono-Fire Pokemon from the
+     * browser — Palafin, Blastoise, Vaporeon, Arcanine — and admitted Gourgeist,
+     * Trevenant and Runerigus in their place.
+     *
+     * Ranking already expresses what this was approximating, and expresses it
+     * without a cliff: a poor defensive typing sinks in the order rather than
+     * vanishing. The option stays for callers that want the old behaviour, but
+     * nothing turns it on by default.
+     */
     maxDamageFromScore?: boolean;
     allowQuadrupleDamage?: boolean;
     limitQuadrupleDamage?: boolean;
@@ -86,7 +109,7 @@ export function resolveResistantTypeScanOptions(
 ): ResolvedResistantTypeScanOptions {
   const baseScore = options.baseScore === undefined ? DEFAULT_BASE_SCORE : options.baseScore;
   const typeFilters = {
-    maxDamageFromScore: true,
+    maxDamageFromScore: false,
     allowQuadrupleDamage: true,
     limitQuadrupleDamage: true,
     ...options.typeFilters

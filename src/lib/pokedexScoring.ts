@@ -86,14 +86,20 @@ export const IMMUNITY_VALUE = -2;
  * distribution moves with it: 13 of the 171 combinations sit on the line against
  * 14 before, 69 beat it against 42, and 89 fall short against 115.
  *
- * That last shift reaches `maxDamageFromScore` in `getResistantTypes`, which
- * admits typings at or under the line. It now passes 82 of 171 where it passed
- * 56. The filter is still the neutral line rather than a tuned threshold — a
- * typing with empty buckets still scores exactly `baseScore`, so "at least as
- * good as taking neutral damage from everything" means what it says — but it is
- * a looser filter, because on this valuation more typings clear it. Whether the
- * default scan wants one that admits 48% of typings is a separate question from
- * whether an immunity is worth -2, and it is not answered here.
+ * ## The neutral line is still a line, and no longer a plateau
+ *
+ * `maxDamageFromScore` used to lean on this comment: the line was principled
+ * *and* it was somewhere typings actually landed, so admitting everything at or
+ * under it swept up a natural tie group. Threat weighting ended the second half.
+ * Scores are continuous now, **no typing scores exactly `baseScore`** — 0 of 171
+ * against 14 unweighted — and 60 sit within 0.6 of it. Cutting there separates
+ * pure Water at 18.069 from Ghost/Grass at 17.782 and calls the difference
+ * meaningful, which at that density it is not.
+ *
+ * The definition is untouched: a typing with empty buckets still scores exactly
+ * `baseScore`, and the score still reads as distance from taking neutral damage.
+ * What expired is the filter's claim to be principled rather than tuned, so the
+ * filter is off by default. See its documentation in `resistantTypeScan.ts`.
  *
  * ## Threat weighting
  *

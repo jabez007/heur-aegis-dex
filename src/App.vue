@@ -396,7 +396,11 @@ const fetchTypes = async (): Promise<boolean> => {
   }
 
   const filters = {
-    maxDamageFromScore: true,
+    // Off: the neutral line stopped being a place typings land once the
+    // defensive score became continuous, so the cut is arbitrary. Ranking says
+    // the same thing without dropping Pokemon off the list. See the option's
+    // documentation in resistantTypeScan.ts.
+    maxDamageFromScore: false,
     allowQuadrupleDamage: true,
     limitQuadrupleDamage: true,
   };

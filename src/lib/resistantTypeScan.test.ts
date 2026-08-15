@@ -57,7 +57,9 @@ describe('resistant type scan core', () => {
     expect(defaults).toMatchObject({
       baseScore: 18,
       typeFilters: {
-        maxDamageFromScore: true,
+        // Off by default: the neutral line stopped being a place typings land
+        // once threat weighting made the score continuous.
+        maxDamageFromScore: false,
         allowQuadrupleDamage: true,
         limitQuadrupleDamage: true
       },
@@ -220,7 +222,9 @@ describe('resistant type scan core', () => {
     const enriched: string[] = [];
     const results = await runResistantTypeScan(
       [typeFixture('filtered', 19)],
-      resolveResistantTypeScanOptions(),
+      // maxDamageFromScore is off by default now, so the filter it is testing
+      // has to be asked for explicitly.
+      resolveResistantTypeScanOptions({ typeFilters: { maxDamageFromScore: true } }),
       {
         prepare: async (types) => {
           prepared.push(...types.map((type) => type.name));

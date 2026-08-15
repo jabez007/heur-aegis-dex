@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Changed
+
+- **The browser shows every typing, ranked, instead of filtering on the neutral
+  line.** `maxDamageFromScore` dropped typings scoring worse than `baseScore`,
+  and its justification was that the line is principled rather than tuned. That
+  held while the defensive score was quantised: every score was a multiple of
+  0.25, 14 of the 171 combinations sat exactly on the line, and the cut fell on a
+  natural plateau.
+
+  Threat weighting made the score continuous and **no typing lands on the line
+  any more** — 0 of 171, with 60 sitting within 0.6 of it. The same cut now
+  slices a dense band at a point nothing distinguishes: pure Water scores 18.069
+  and was dropped, Ghost/Grass scores 17.782 and was kept. In practice that
+  removed every mono-Water and mono-Fire Pokemon from the browser — Palafin at
+  650 base stats, Blastoise, Vaporeon, Arcanine, Milotic — and admitted
+  Gourgeist, Trevenant and Runerigus in their place, which is what made weak
+  Ghost types look like they had climbed.
+
+  Ranking already expresses what the filter approximated, and expresses it
+  without a cliff: a poor defensive typing sinks in the order rather than
+  vanishing. The browser goes from 72 candidates to 147 under Regulation M-B,
+  Palafin returns to first, Gourgeist sits at 125th and Cofagrigus at 145th. The
+  best generated roster improves from 86.45 to 87.63, since the search was being
+  denied genuinely good options. The option remains for callers that want the old
+  behaviour; nothing turns it on by default.
+
 ### Fixed
 
 - **The alternatives margin is derived instead of assumed.**
