@@ -17,6 +17,7 @@ import { effectiveOffense, hpAdjustedBulk } from './statMetrics';
 import type { TeamCoverageAnalysis } from './teamCoverage';
 import { getApplicableRoles, type AbilityRole, type TeamRoleAnalysis } from './abilityRoles';
 import { getQualityMultipliers } from './abilityEffects';
+import { getAttackerBias } from './coverageMoves';
 import { BATTLE_FORMATS, DEFAULT_BATTLE_FORMAT, type BattleFormat } from './battleFormats';
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
@@ -268,7 +269,39 @@ export const SYNERGY_PENALTY_WEIGHTS = {
    * because it is a build error rather than a missed bonus: the abilities
    * actively overwrite each other every time either switches in.
    */
-  fieldConflict: 0.4
+  fieldConflict: 0.4,
+  /**
+   * A team with no credible threat off one of the two attacking stats.
+   *
+   * Every other term here is defensive: which types hit you, and how many of you
+   * at once. This is the same failure on the offensive axis — one opposing
+   * commitment blanking several members at once — and until it existed the model
+   * could not see it at all. The case that surfaced it scored 88.77 in singles
+   * with **zero shared weaknesses**, a defensively perfect triangle of
+   * Annihilape, Mamoswine and Corviknight whose Special Attack stats are 50, 70
+   * and 53. The model had found exactly what it was built to find and paid
+   * nothing for the fact that a single Will-O-Wisp halves the whole team.
+   *
+   * Weighted at `sharedWeakness`, and for the same reason rather than by
+   * analogy: both price one opposing choice reaching multiple members. Measured
+   * against the legal pool, 22% of species can inflict burn and 7% carry
+   * Intimidate — **27% can cut an all-physical team's offense unilaterally**,
+   * which is comparable to how often a shared weakness is exploitable. Setting
+   * it above that would make offensive shape outrank the defensive typing this
+   * tool is built on; below it, the term does not survive the composite rescale.
+   *
+   * **The exposure is asymmetric and this term is not, deliberately.** Burn cuts
+   * Attack and nothing in the game cuts Special Attack — the ailment table holds
+   * burn, paralysis, poison and sleep, and only burn touches an attacking stat.
+   * So an all-physical team is genuinely more punished than an all-special one,
+   * by roughly the 22% that burn adds. Recorded and not applied: an all-special
+   * team is still walled by special walls, that half has not been measured, and
+   * a one-sided constant would be asserting a ratio nobody has derived.
+   *
+   * Reasoned against a measured exposure rather than validated against match
+   * outcomes — the standing of MEMBER_WEIGHTS and TYPE_MODULATION.
+   */
+  monochromeOffense: 0.5
 } as const;
 
 /**
@@ -465,6 +498,29 @@ export const COMPOSITE_WEIGHTS = {
  * the third time. `analyzeTeamCoverage` still counts weaknesses without
  * weighting them, so an allocation change inside `typeThreat.ts` cannot reach
  * it, and the invariance is evidence the two are as separate as claimed.
+ *
+ * ## Re-measured for `monochromeOffense`, and nothing moved
+ *
+ * Adding a synergy penalty is exactly the kind of change these bounds exist to
+ * absorb, so the rerun was mandatory. **Every one of the four numbers below is
+ * unchanged.** Quality does not touch synergy, so its exact bounds could not
+ * move. Singles synergy hit 0.8189 for the fourth time; doubles sampled 0.7576,
+ * below the recorded 0.8124, and keeps it under the widen-only rule.
+ *
+ * A maximum is the wrong place to look for this term's effect, and that is worth
+ * saying rather than reading the stability as "no effect". `monochromeOffense`
+ * is a penalty, so it can only push the *bottom* of the distribution down, and
+ * the best teams — the ones setting the maximum — are balanced already. What
+ * moved is the low end: doubles p01 went from -0.5483 to -0.7351 and singles
+ * from -0.5256 to -0.7150.
+ *
+ * That has a cost, recorded and not corrected. Synergy's residual influence
+ * against nominal rises from 1.85:1 to **2.15:1** in doubles and 1.68:1 to
+ * 1.95:1 in singles, because a wider penalty side means synergy occupies more of
+ * its fixed -1..1 range while quality occupies the same slice of its own. The
+ * same argument that has always applied applies here: closing it means changing
+ * `scoreTeamSynergy`'s clamp, not these constants. It is now a third again over
+ * nominal rather than a half again.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
@@ -544,6 +600,20 @@ export interface SynergyInput {
   format?: BattleFormat;
   /** Ability-derived support roles. Omit when abilities are unknown. */
   roles?: TeamRoleAnalysis;
+  /**
+   * Base stats per member, in roster order, for the offensive-class term.
+   *
+   * Stats rather than a pre-computed classification, so callers cannot disagree
+   * about where the physical/special line falls — `getAttackerBias` draws it
+   * once. A member whose stats are unknown resolves to `mixed` there and so
+   * counts as a threat either way, which is the same refusal-to-guess the
+   * coverage table makes.
+   *
+   * Omitted, or of the wrong length, scores the term at zero rather than
+   * penalizing a team it cannot see. It is the one penalty that needs data
+   * outside the coverage analysis, so it is the one that can go missing.
+   */
+  memberStats?: readonly (PokemonStats | null | undefined)[];
   /** Distinct elemental types across the team. */
   typesTotal: number;
   teamSize: number;
@@ -565,7 +635,8 @@ export type SynergyPenaltyTermId =
   | 'quadrupleWeakness'
   | 'sharedQuadrupleWeakness'
   | 'spreadConflict'
-  | 'fieldConflict';
+  | 'fieldConflict'
+  | 'monochromeOffense';
 
 export interface SynergyContribution<Id extends string = string> {
   readonly id: Id;
@@ -649,6 +720,29 @@ function evaluateTeamSynergy(
   const sharedQuadrupleValue = sharedQuadrupleNumerator / teamSize;
   const spreadConflictValue = clamp01(coverage.spreadConflicts.length / maxDistinctTypes);
   const fieldConflictValue = clamp01((roles?.fieldConflicts.length ?? 0) / applicableRoleCount);
+
+  // How thin the team's minority attacking stat is. Mixed attackers count on
+  // both sides, so a team of them is maximally flexible and scores zero here —
+  // the reason this counts threats rather than a majority, which would have
+  // called an all-mixed team monochrome.
+  //
+  // The denominator is what a balanced team of this size would hold, which for a
+  // singles bring of three is one: with three slots, a single off-stat threat is
+  // enough to deny an opponent a free defensive commitment. That makes the term
+  // effectively binary in singles and graded in doubles, and the cliff is in the
+  // format rather than in the measure — with three members you either have a
+  // second angle of attack or you do not.
+  const memberStats = input.memberStats;
+  const offensiveClasses = memberStats?.length === teamSize
+    ? memberStats.map((stats) => getAttackerBias(stats))
+    : null;
+  const physicalThreats = offensiveClasses?.filter((bias) => bias !== 'special').length ?? 0;
+  const specialThreats = offensiveClasses?.filter((bias) => bias !== 'physical').length ?? 0;
+  const minorityThreats = Math.min(physicalThreats, specialThreats);
+  const balancedMinority = Math.floor(teamSize / 2);
+  const monochromeOffenseValue = offensiveClasses && balancedMinority > 0
+    ? clamp01(1 - (minorityThreats / balancedMinority))
+    : 0;
   const uncoveredWeakness = SYNERGY_PENALTY_WEIGHTS.uncoveredWeakness * uncoveredWeaknessValue;
   const uncoveredQuadrupleWeakness =
     SYNERGY_PENALTY_WEIGHTS.uncoveredQuadrupleWeakness * uncoveredQuadrupleValue;
@@ -658,8 +752,10 @@ function evaluateTeamSynergy(
     SYNERGY_PENALTY_WEIGHTS.sharedQuadrupleWeakness * sharedQuadrupleValue;
   const spreadConflict = spreadConflictWeight * spreadConflictValue;
   const fieldConflict = SYNERGY_PENALTY_WEIGHTS.fieldConflict * fieldConflictValue;
+  const monochromeOffense = SYNERGY_PENALTY_WEIGHTS.monochromeOffense * monochromeOffenseValue;
   const penalty = uncoveredWeakness + uncoveredQuadrupleWeakness + sharedWeakness +
-    quadrupleWeakness + sharedQuadrupleWeakness + spreadConflict + fieldConflict;
+    quadrupleWeakness + sharedQuadrupleWeakness + spreadConflict + fieldConflict +
+    monochromeOffense;
   const unclampedScore = bonus - penalty;
   const score = Math.min(1, Math.max(-1, unclampedScore));
 
@@ -724,7 +820,10 @@ function evaluateTeamSynergy(
           maxDistinctTypes, spreadConflictValue, spreadConflict, [...coverage.spreadConflicts].sort()),
         penaltyTerm('fieldConflict', SYNERGY_PENALTY_WEIGHTS.fieldConflict,
           roles?.fieldConflicts.length ?? 0, applicableRoleCount, fieldConflictValue, fieldConflict,
-          [...(roles?.fieldConflicts ?? [])].sort())
+          [...(roles?.fieldConflicts ?? [])].sort()),
+        penaltyTerm('monochromeOffense', SYNERGY_PENALTY_WEIGHTS.monochromeOffense,
+          minorityThreats, balancedMinority, monochromeOffenseValue, monochromeOffense,
+          offensiveClasses ? [...offensiveClasses].sort() : [])
       ],
       bonus,
       penalty,

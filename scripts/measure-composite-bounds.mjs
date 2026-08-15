@@ -173,7 +173,11 @@ const halves = (members, format) => {
       format,
       typesTotal: new Set(members.flatMap((member) => member.types)).size,
       teamSize: members.length,
-      typeCount: BASE
+      typeCount: BASE,
+      // Measured under the term the app actually runs. Omitting this would bound
+      // a synergy formula nothing uses — the same mistake OBSERVED_DAMAGE_FROM
+      // records one level down.
+      memberStats: members.map((member) => member.stats)
     })
   };
 };

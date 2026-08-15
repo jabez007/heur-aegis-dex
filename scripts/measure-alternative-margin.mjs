@@ -22,10 +22,27 @@
 //
 // The natural unit is already in the model — what a single member contributes.
 // Measured here as the score cost of taking the best roster a pool produces and
-// replacing exactly one of its members with the pool's median candidate. Set the
-// margin to that, and an alternative swapping two or more members may still only
-// give up what one member is worth, so the swaps are close to lateral. Set it
-// higher and "alternative" starts meaning "worse roster".
+// replacing exactly one of its members with the best candidate not already on
+// it. Set the margin to that, and an alternative swapping two or more members
+// may still only give up what one member is worth, so the swaps are close to
+// lateral. Set it higher and "alternative" starts meaning "worse roster".
+//
+// ## Why the best off-roster candidate, and not the pool median
+//
+// It used to be the pool's median candidate, and that measured the wrong thing
+// in a way that only showed up once the pool grew. An alternative roster is
+// built by the same beam search from the same top of the pool; it never reaches
+// down to the 74th-best of 147. So the median counterfactual described a
+// downgrade no alternative makes, and — worse — its size tracked the size of the
+// pool, because a bigger pool has a worse middle. Dropping the
+// `maxDamageFromScore` filter took M-B from 72 candidates to 147 and pushed the
+// derived margin from 2.13 to 2.94, straight through the exclusion ceiling
+// below, without anything having changed about what an alternative is.
+//
+// The best off-roster candidate is what the next alternative actually swaps in,
+// and it moves the right way: a bigger pool has a *better* next-best candidate,
+// so the swap costs less. The measure is anchored to the top of the pool, which
+// is the only part of it the portfolio ever uses.
 //
 // Two independent checks are reported alongside, and neither is the derivation:
 //
@@ -35,9 +52,10 @@
 //   * The exclusion ceiling. A roster registers six and brings four, so its
 //     worst member is never brought and reaches the score only through the
 //     brings it would spoil. That caps what a wasted slot can cost at about
-//     three points, and a margin at or above the cap provably cannot exclude
-//     anything a sixth slot does. The margin must sit clear of it, with room for
-//     the drift recalibration causes.
+//     three points — 2.963 in doubles and 2.786 in singles as last measured —
+//     and a margin at or above the cap provably cannot exclude anything a sixth
+//     slot does. The margin must sit clear of it, with room for the drift
+//     recalibration causes.
 
 import { readFileSync } from 'node:fs';
 import { BATTLE_FORMATS } from '../src/lib/battleFormats.ts';
@@ -131,18 +149,19 @@ for (const scenario of scenarios) {
   }
 
   // What one member is worth: replace each member of the best roster in turn
-  // with the pool's median candidate and take the score it costs.
+  // with the best candidate not already on it — the swap the next alternative
+  // would make — and take the score it costs.
   const best = rosters[0];
   const ranked = [...scenario.pool].sort((left, right) =>
     candidatePriority(right, { hasAlly: scenario.format.hasAlly })
     - candidatePriority(left, { hasAlly: scenario.format.hasAlly }));
-  const median = ranked[Math.floor(ranked.length / 2)];
-  if (best.members.some((member) => member.name === median.name)) continue;
+  const nextBest = ranked.find((entry) => !best.members.some((m) => m.name === entry.name));
+  if (!nextBest) continue;
 
   best.members.forEach((member, index) => {
     // A seeded member is locked and cannot be the one swapped out.
     if (scenario.seed.some((locked) => locked.name === member.name)) return;
-    const swapped = best.members.map((entry, position) => (position === index ? median : entry));
+    const swapped = best.members.map((entry, position) => (position === index ? nextBest : entry));
     const cost = best.score - evaluateRoster(swapped, { format: scenario.format }).score;
     if (cost > 0) memberWorth.push(cost);
   });
@@ -150,7 +169,7 @@ for (const scenario of scenarios) {
 
 process.stdout.write(`\n${scenarios.length} scenarios across ${CUPS.length} pools and both formats\n`);
 
-process.stdout.write(`\nwhat one member is worth — ${memberWorth.length} single-member downgrades to the pool median:\n`);
+process.stdout.write(`\nwhat one member is worth — ${memberWorth.length} single-member downgrades to the best off-roster candidate:\n`);
 for (const p of [0.1, 0.25, 0.5, 0.75, 0.9]) {
   process.stdout.write(`  p${String(p * 100).padStart(2)}  ${percentile(memberWorth, p).toFixed(4)}\n`);
 }

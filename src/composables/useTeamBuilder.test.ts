@@ -380,7 +380,7 @@ describe('useTeamBuilder', () => {
     });
 
     /**
-     * This assertion used to be a coin flip and is now decided by 0.33 points.
+     * This assertion used to be a coin flip and is now decided by 0.97 points.
      *
      * `mon-7` is one in every stat. The best roster containing it scored, across
      * four consecutive recalibrations, **3.010** points behind the best, then
@@ -396,26 +396,36 @@ describe('useTeamBuilder', () => {
      * slot can cost, so a margin of 3 could never exclude one.
      *
      * The margin is now derived rather than assumed: one member's worth of
-     * roster quality, re-measured at 2.63 as the candidate pool grew. The gap
-     * here measures 2.963 today, inside the same band as all four earlier
-     * readings, so the exclusion holds for a stated reason instead of by luck —
-     * but by 0.33 rather than the 0.84 it had at 2.13. The two quantities are
-     * converging, and why that is expected is argued on
-     * ROSTER_ALTERNATIVE_SCORE_MARGIN. If this test starts flipping again, that
-     * docblock is the thing to read, not this one.
+     * roster quality, at 1.99. The gap here measures 2.963 today, inside the
+     * same band as all four earlier readings, so the exclusion holds for a
+     * stated reason instead of by luck.
+     *
+     * It briefly stopped holding. A recalibration took the margin to 2.94, which
+     * is past the singles gap of 2.786 and 0.02 short of this one, and the fix
+     * was to correct what the derivation measured rather than to nudge the
+     * constant — ROSTER_ALTERNATIVE_SCORE_MARGIN has the argument. If this test
+     * starts flipping again, that docblock is the thing to read, not this one.
      */
     it('does not cycle into completions a member downgrade behind the best', () => {
       fillRoster(addPokemon, 3);
       const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel']);
+      // Special-biased like the rest of this fixture, which every entry is at
+      // 84 Attack against 109 Special Attack. With all six stats equal `mon-7`
+      // reads as a *mixed* attacker, and once `monochromeOffense` existed that
+      // made the worthless member the only thing giving these otherwise
+      // all-special lines a second angle of attack — so the roster wanted it,
+      // and this test failed for a reason that was entirely an artifact of the
+      // fixture. The stats are still one and two: it is as bad as it ever was,
+      // and now it is bad without also being the team's only physical option.
       const weakStats = {
-        hp: 1, attack: 1, defense: 1, 'special-attack': 1, 'special-defense': 1, speed: 1
+        hp: 1, attack: 1, defense: 1, 'special-attack': 2, 'special-defense': 1, speed: 1
       };
       scan[7] = pokemon('mon-7', {
         typeName: 'steel',
         types: ['steel'],
         stats: weakStats,
         baseStats: weakStats,
-        statsTotal: 6,
+        statsTotal: 7,
         normalizedDamageToScore: 0,
         normalizedDamageFromScore: 0
       });

@@ -254,7 +254,11 @@ export function scoreBring(members: RosterMember[], options: RosterScoringOption
     format,
     typesTotal,
     teamSize: members.length,
-    typeCount
+    typeCount,
+    // In roster order and including the members without stats, so the lengths
+    // agree and `monochromeOffense` scores rather than opting out. A member the
+    // scoring cannot see resolves to `mixed` and counts as a threat either way.
+    memberStats: members.map((member) => member.stats)
   });
 
   return composeTeamScore(memberQualities, synergy, format);

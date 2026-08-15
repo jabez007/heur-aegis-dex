@@ -91,6 +91,91 @@ describe('scoreTeamSynergy', () => {
       typeCount: 18
     });
 
+  describe('monochromeOffense', () => {
+    // Deliberately past MIXED_ATTACKER_RATIO in both directions, so these are
+    // classified rather than borderline.
+    const physical = { hp: 80, attack: 130, defense: 80, 'special-attack': 50, 'special-defense': 80, speed: 80 };
+    const special = { hp: 80, attack: 50, defense: 80, 'special-attack': 130, 'special-defense': 80, speed: 80 };
+    const mixed = { hp: 80, attack: 100, defense: 80, 'special-attack': 100, 'special-defense': 80, speed: 80 };
+    const member = { weaknesses: [], resistances: ['fire'], coverages: ['rock'] };
+
+    const scoreWith = (memberStats: (typeof physical)[], format = BATTLE_FORMATS.singles) => {
+      const members = memberStats.map(() => member);
+      return scoreTeamSynergy({
+        coverage: analyzeTeamCoverage(members),
+        format,
+        typesTotal: members.length * 2,
+        teamSize: members.length,
+        typeCount: 18,
+        memberStats
+      });
+    };
+
+    it('penalizes a team with no threat off one attacking stat', () => {
+      // The case this exists for. Annihilape, Mamoswine and Corviknight share
+      // zero weaknesses — a defensively perfect singles bring — and have Special
+      // Attack stats of 50, 70 and 53, so one Will-O-Wisp halves all of it.
+      // Every other penalty here is defensive and none of them could see it.
+      expect(scoreWith([physical, physical, physical]))
+        .toBeLessThan(scoreWith([physical, physical, special]));
+      expect(scoreWith([special, special, special]))
+        .toBeLessThan(scoreWith([physical, physical, special]));
+    });
+
+    it('leaves a team with one off-stat threat alone', () => {
+      // Identical teams but for the third member's stat spread, so the whole
+      // difference is this term: with three brings, one second angle is enough.
+      expect(scoreWith([physical, physical, special]))
+        .toBe(scoreWith([physical, physical, mixed]));
+      expect(scoreWith([physical, special, special]))
+        .toBe(scoreWith([physical, physical, special]));
+    });
+
+    it('counts a mixed attacker on both sides, so an all-mixed team is not monochrome', () => {
+      // The reason the term counts threats rather than taking a majority. Every
+      // member of an all-mixed team is on the majority side of both classes at
+      // once, so a majority reading would call the most flexible possible team
+      // the most one-dimensional.
+      expect(scoreWith([mixed, mixed, mixed])).toBe(scoreWith([physical, physical, special]));
+    });
+
+    it('grades in doubles, where a bring of four can be half committed', () => {
+      const none = scoreWith([physical, physical, physical, physical], BATTLE_FORMATS.doubles);
+      const one = scoreWith([physical, physical, physical, special], BATTLE_FORMATS.doubles);
+      const two = scoreWith([physical, physical, special, special], BATTLE_FORMATS.doubles);
+
+      expect(none).toBeLessThan(one);
+      expect(one).toBeLessThan(two);
+      // Halfway, because a balanced bring of four holds two of each: the
+      // denominator is the team's own size and not a constant.
+      expect(one - none).toBeCloseTo(two - one, 10);
+    });
+
+    it('scores nothing rather than guessing when the stats are not supplied', () => {
+      // It is the one penalty needing data from outside the coverage analysis,
+      // so it is the one that can be missing. A caller that cannot supply stats
+      // must not have its team read as maximally monochrome — which is what a
+      // bare `filter` over an empty list would have produced.
+      const members = [member, member, member];
+      const base = {
+        coverage: analyzeTeamCoverage(members),
+        format: BATTLE_FORMATS.singles,
+        typesTotal: 6,
+        teamSize: 3,
+        typeCount: 18
+      };
+      const unpenalized = scoreWith([physical, physical, special]);
+
+      expect(scoreTeamSynergy(base)).toBe(unpenalized);
+      // A length that disagrees with the team is treated the same way, rather
+      // than scoring the members it happens to have been given.
+      expect(scoreTeamSynergy({ ...base, memberStats: [physical] })).toBe(unpenalized);
+      // Which is the point: those same three, supplied in full, are penalized.
+      expect(scoreTeamSynergy({ ...base, memberStats: [physical, physical, physical] }))
+        .toBeLessThan(unpenalized);
+    });
+  });
+
   it('rewards broad coverage and resistance over narrow', () => {
     const broad = synergyFor([
       { weaknesses: [], resistances: ['fire', 'water', 'grass'], coverages: ['rock', 'ice', 'steel'] },
@@ -249,7 +334,8 @@ describe('scoreTeamSynergy', () => {
       'quadrupleWeakness',
       'sharedQuadrupleWeakness',
       'spreadConflict',
-      'fieldConflict'
+      'fieldConflict',
+      'monochromeOffense'
     ]);
     expect(breakdown.unclampedScore).toBe(breakdown.bonus - breakdown.penalty);
     expect(breakdown.bonusTerms.find((term) => term.id === 'supportRoles')?.facts)

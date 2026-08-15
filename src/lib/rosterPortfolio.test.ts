@@ -19,21 +19,20 @@ describe('ROSTER_ALTERNATIVE_SCORE_MARGIN', () => {
     const lowestMeasuredWastedSlot = 2.786;
 
     expect(ROSTER_ALTERNATIVE_SCORE_MARGIN).toBeLessThan(lowestMeasuredWastedSlot);
-    // Headroom was 0.84 when the margin was derived at 2.13 and is 0.16 now, so
-    // this no longer asserts comfort — it asserts the constraint. The narrowing
-    // is the finding, and it is argued on the constant: the two numbers are both
-    // roughly one roster slot's worth of score, measured on different pools, so
-    // they were always going to converge as the candidate pool grew. Read the
-    // docblock before widening this to make a failure go away.
-    expect(lowestMeasuredWastedSlot - ROSTER_ALTERNATIVE_SCORE_MARGIN).toBeGreaterThan(0.1);
+    // This assertion has already earned its keep once. A recalibration walked
+    // the margin to 2.94 — past the singles gap and 0.02 short of the doubles
+    // one — and that is how the derivation's counterfactual was found to be
+    // measuring a downgrade no alternative makes. See the constant. The right
+    // response was to fix what was measured, not to widen this line.
+    expect(lowestMeasuredWastedSlot - ROSTER_ALTERNATIVE_SCORE_MARGIN).toBeGreaterThan(0.5);
   });
 
   it('is large enough to be worth filtering with', () => {
-    // The other side of the trade, and no longer the tight one. Below roughly
-    // one point the portfolio runs out of candidates and falls back to
-    // near-duplicate rosters, which defeats the feature — measured at 64% of
-    // scenarios offering two or more diverse options at a margin of 1, against
-    // at least 98% at 2.63.
+    // The other side of the trade. Below roughly one point the portfolio runs
+    // out of candidates and falls back to near-duplicate rosters, which defeats
+    // the feature — measured at 83% of scenarios offering two or more diverse
+    // options at a margin of 1 and 60% offering three, against at least 95% and
+    // 86% at 1.99.
     expect(ROSTER_ALTERNATIVE_SCORE_MARGIN).toBeGreaterThan(1);
   });
 });
@@ -42,7 +41,7 @@ describe('selectRosterPortfolio', () => {
   it('keeps the best roster first and excludes options outside the score margin', () => {
     // Straddling ROSTER_ALTERNATIVE_SCORE_MARGIN, which is one member's worth of
     // roster quality — see the derivation on the constant. Written against the
-    // constant rather than against 2.13 so a re-measurement moves the fixture
+    // constant rather than against a literal so a re-measurement moves the fixture
     // with it instead of failing on a number nobody chose.
     const best = roster(['a', 'b', 'c'], 90);
     const near = roster(['a', 'd', 'e'], 90 - ROSTER_ALTERNATIVE_SCORE_MARGIN + 0.01);
@@ -61,18 +60,22 @@ describe('selectRosterPortfolio', () => {
   });
 
   it('falls back to the strongest closer option when no distinct choice remains', () => {
+    // Spread across the margin rather than across fixed points, so a
+    // re-measurement moves the fixture with it. All three are inside it.
+    const step = ROSTER_ALTERNATIVE_SCORE_MARGIN / 3;
     const best = roster(['a', 'b', 'c'], 90);
-    const first = roster(['a', 'b', 'd'], 89);
-    const second = roster(['a', 'b', 'e'], 88);
+    const first = roster(['a', 'b', 'd'], 90 - step);
+    const second = roster(['a', 'b', 'e'], 90 - (2 * step));
 
     expect(selectRosterPortfolio([best, first, second])).toEqual([best, first, second]);
   });
 
   it('maximizes distance from the closest roster already selected', () => {
+    const step = ROSTER_ALTERNATIVE_SCORE_MARGIN / 4;
     const best = roster(['a', 'b', 'c', 'd'], 90);
-    const second = roster(['a', 'b', 'e', 'f'], 89);
-    const closeToSecond = roster(['a', 'b', 'e', 'g'], 88.5);
-    const spread = roster(['c', 'd', 'g', 'h'], 88);
+    const second = roster(['a', 'b', 'e', 'f'], 90 - step);
+    const closeToSecond = roster(['a', 'b', 'e', 'g'], 90 - (2 * step));
+    const spread = roster(['c', 'd', 'g', 'h'], 90 - (3 * step));
 
     expect(selectRosterPortfolio([best, second, closeToSecond, spread], { limit: 3 }))
       .toEqual([best, second, spread]);
