@@ -81,6 +81,20 @@ export function getAttackerBias(stats?: PokemonStats | null): AttackerBias {
 /** PokeAPI version group the table was generated from. */
 export const COVERAGE_MOVE_VERSION_GROUP = 'champions';
 
+/**
+ * PokeAPI Pokedex holding the roster of that version group — the species that
+ * exist in the game at all.
+ *
+ * Paired with the version group above and stated rather than inferred, because
+ * the two happen to share a name here and will not always. Everything outside
+ * this Pokedex has an empty movepool for the unexciting reason that it is not in
+ * the game, so anything reasoning about *opponents* has to filter on it: 208
+ * species are in Champions and the catalog carries all 1,025 of the National
+ * Dex. `getThreatPool` is the caller that needs this, and the failure it avoids
+ * is described there.
+ */
+export const COVERAGE_MOVE_POKEDEX = 'champions';
+
 /** Attacking type name to the defending types it hits for double damage. */
 export type OffensiveTypeChart = Readonly<Record<string, readonly string[]>>;
 

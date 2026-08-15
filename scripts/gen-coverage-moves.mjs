@@ -6,20 +6,65 @@
 // Pokemon can hit; status asks what it can inflict, and the second question was
 // unanswerable until this ran — which is why every status-facing ability in the
 // model was a hand-picked constant. See STATUS_THREAT in statusThreat.ts.
+//
+// ## The roster is the game's, not the regulation's
+//
+// This used to read its species list out of regulations.ts, which conflated two
+// different things: what exists in Champions, and what a regulation currently
+// permits. They coincide exactly today — the Champions Pokedex holds 208 species
+// and Regulation M-B legalizes the same 208 — and that coincidence is precisely
+// why the conflation went unnoticed and why it is worth removing before a later
+// regulation narrows legality and silently deletes movepools for Pokemon that
+// still exist.
+//
+// It also settles a question that looks like it needs a bigger crawl. Species
+// outside this Pokedex have no `champions` learnset at all, so widening the run
+// to the full 1,025-species National Dex fetches several thousand pages and
+// emits nothing: 20 species sampled across the dex from outside the roster
+// returned zero champions moves between them. The table is complete when it
+// covers this Pokedex. What the National Dex does affect is the *threat pool* —
+// see COVERAGE_MOVE_POKEDEX in coverageMoves.ts.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const MIN_POWER = 60;
 const CONCURRENCY = 12;
 const VERSION_GROUP = 'champions';
+const POKEDEX = 'champions';
 
+const getJson = async (url) => {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const res = await fetch(url);
+    if (res.ok) return res.json();
+    if (res.status === 404) return null;
+    await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+  }
+  throw new Error(`failed: ${url}`);
+};
+
+const pokedex = await getJson(`https://pokeapi.co/api/v2/pokedex/${POKEDEX}/`);
+const species = (pokedex?.pokemon_entries || []).map((e) => e.pokemon_species.name).sort();
+if (species.length === 0) {
+  throw new Error(`the ${POKEDEX} pokedex returned no entries — refusing to emit an empty table`);
+}
+console.log(`${POKEDEX} pokedex species: ${species.length}`);
+
+// The regulation is no longer the source, so report the difference rather than
+// assuming it stays zero. A species legal in a regulation but absent from the
+// game is a data error worth seeing; the reverse is just a narrow regulation.
 const regs = readFileSync(new URL('../src/lib/regulations.ts', import.meta.url), 'utf8');
 const grab = (label) => {
   const block = regs.split(`const ${label} = [`)[1].split('] as const;')[0];
   return [...block.matchAll(/'([^']+)'/g)].map((m) => m[1]);
 };
-const species = [...new Set([...grab('M_A_SPECIES'), ...grab('M_B_ADDITIONS')])].sort();
-console.log(`legal species: ${species.length}`);
+const legal = new Set([...grab('M_A_SPECIES'), ...grab('M_B_ADDITIONS')]);
+const legalNotInGame = [...legal].filter((name) => !species.includes(name)).sort();
+const inGameNotLegal = species.filter((name) => !legal.has(name));
+console.log(`regulation legal species: ${legal.size}`);
+console.log(`  in the game but not legal: ${inGameNotLegal.length}`);
+if (legalNotInGame.length > 0) {
+  console.log(`  LEGAL BUT NOT IN THE GAME: ${legalNotInGame.join(', ')}`);
+}
 
 // Varieties the scan drops for being unbreedable. Emitting rows for them would
 // be harmless — the table is looked up by name and a row nothing asks for costs
@@ -46,16 +91,6 @@ const mapLimit = async (items, limit, fn) => {
     }
   }));
   return out;
-};
-
-const getJson = async (url) => {
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const res = await fetch(url);
-    if (res.ok) return res.json();
-    if (res.status === 404) return null;
-    await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
-  }
-  throw new Error(`failed: ${url}`);
 };
 
 // 1. species -> varieties

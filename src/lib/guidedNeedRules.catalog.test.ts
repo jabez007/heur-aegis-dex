@@ -75,17 +75,30 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
     // now been Mamoswine, Excadrill, Mamoswine — which is the clearest statement
     // available that the list is four long and the tie-break is noise.
     //
-    // The top three hold their places through all of it, which is the real
-    // signal. Goodra-hisui is the one that improves outright at every step —
-    // 0.186 to 0.137 to 0.341 to 0.220 normalized — because Steel/Dragon is weak
-    // only to Fighting and Ground and its Poison and Grass immunities now count
-    // double.
+    // The top two have held their places through all of it. The third did too,
+    // until restricting the threat pool to species that exist in the game moved
+    // Goodra-hisui from third to last — and that one is not tie-break noise, it
+    // is the change working.
+    //
+    // This scan passes no regulation, so its weights came from an unregulated
+    // pool: 1,025 species of which 817 have no movepool, which collapsed
+    // availability into typing prevalence. The pool is now the game's 208, and
+    // its weights are byte-identical to Regulation M-B's. Under the collapsed
+    // reading Fighting and Ground were middling; under the real one they are the
+    // two heaviest attacking types at 1.000 and 0.961.
+    //
+    // Goodra-hisui is Steel/Dragon, weak to exactly Fighting and Ground and
+    // nothing else. So the typing whose whole case was that its two weaknesses
+    // were cheap is the typing that moves when the price of those two weaknesses
+    // is corrected. It was rising at every prior step — 0.186 to 0.137 to 0.341
+    // to 0.220 normalized — on weights that were understating what it is weak
+    // to.
     expect(first.map(({ varietyName }) => varietyName)).toEqual([
       'archaludon',
       'dragapult',
-      'goodra-hisui',
       'ursaluna',
-      'mamoswine'
+      'mamoswine',
+      'goodra-hisui'
     ]);
     // Pin the tie itself, so a change that makes these five genuinely separable
     // shows up as this assertion failing rather than as a reshuffled list whose

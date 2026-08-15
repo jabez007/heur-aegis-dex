@@ -12,7 +12,7 @@ import {
   typeMultiplier,
   typeThreatWeight
 } from './typeThreat';
-import { getCoverageMoveTypes } from './coverageMoves';
+import { COVERAGE_MOVE_POKEDEX, getCoverageMoveTypes, hasCoverageMoveData } from './coverageMoves';
 import type { PokemonCatalogV1 } from './pokemonCatalog';
 import type { ThreatPoolMember, ThreatTypeChart } from './typeThreat';
 
@@ -206,6 +206,29 @@ describe('threat pools', () => {
 
     expect(pool.every((variety) => variety.isDefault)).toBe(true);
     expect(new Set(pool.map((variety) => variety.speciesName)).size).toBe(pool.length);
+  });
+
+  it('restricts the pool to species that exist in the game, regulation or not', () => {
+    // The catalog is the National Dex and the game is 208 of it. Without this,
+    // an unregulated pool was 817 Pokemon with no movepool and 208 with one, and
+    // a measure of what the field *can attack with* silently became a measure of
+    // which typings are common — Water read 1.000 for being the most common
+    // typing rather than a common attack.
+    const roster = catalog.species.filter((s) => s.pokedexes.includes(COVERAGE_MOVE_POKEDEX));
+    const pool = getThreatPool(catalog, { baseScore: 18 });
+
+    expect(catalog.species.length).toBeGreaterThan(1000);
+    expect(roster.length).toBe(208);
+    expect(pool.length).toBe(roster.length);
+
+    // And the filter has to keep biting. An empty roster would leave the pool
+    // empty, `getTypeThreatWeights` would hand back the uniform weighting, and
+    // the whole model would quietly revert to counting weaknesses — so assert
+    // the pool can attack rather than merely that it is the right size.
+    const weights = getThreatWeights(catalog, { baseScore: 18 });
+    expect(isUniformTypeThreat(weights)).toBe(false);
+    expect(pool.filter((variety) => hasCoverageMoveData(variety.name)).length / pool.length)
+      .toBeGreaterThan(0.95);
   });
 
   it('restricts the pool to the regulation, since that is who you face', () => {

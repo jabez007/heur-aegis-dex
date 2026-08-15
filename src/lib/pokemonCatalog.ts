@@ -26,8 +26,13 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  *
  * 7: coverage slots allocated by what they buy rather than evenly, which
  * re-prices every threat weight and moves the maximum from Dark to Fighting.
+ *
+ * 8: the threat pool is the game's roster rather than the National Dex. No
+ * effect on a scan under a regulation, where the two already agree; an
+ * unregulated scan was weighting against 817 species that have no movepool
+ * because they are not in the game, and its cached scores are not recoverable.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 7 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 8 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [

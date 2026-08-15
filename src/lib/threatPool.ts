@@ -29,23 +29,34 @@
  * its cross product on weight-object identity, so handing out a fresh equal
  * object each call would silently recompute 3,078 profiles per Pokemon.
  *
- * ## Without a regulation, this measures the wrong thing
+ * ## An opponent has to exist in the game
  *
- * `coverageMoveData.ts` is generated over the legal species of Regulation M-A
- * and M-B, so it knows the movepool of **206 of the 208** members of an M-B
- * pool and **206 of the 1,025** members of an unrestricted one. A pool without a
- * regulation is therefore 80% Pokemon that contribute their own typing and no
- * moves at all, which collapses the weighting back onto typing prevalence — the
- * exact reading `typeThreat.ts` opens by rejecting. Water reads 1.000 there, and
- * it is the most common typing in the game rather than a common attack.
+ * The catalog carries all 1,025 species of the National Dex. Champions has 208,
+ * and `COVERAGE_MOVE_POKEDEX` names the Pokedex that says which. Everything else
+ * is unreachable — nobody registers a Bulbasaur in a game Bulbasaur is not in —
+ * so the roster filter is a precondition of the rule above rather than a rule of
+ * its own, and it applies whether or not a regulation is selected.
  *
- * Not fixed, because fixing it means regenerating the coverage table over every
- * species rather than the legal ones, and not urgent, because `useWorkspaceState`
- * opens on `getActiveRegulation()` and the unrestricted pool is reachable only by
- * clearing the selection. Named because the failure is silent: the weights look
- * ordinary, and nothing about them says a fifth of the pool answered the question.
+ * It is worth stating what went wrong without it, because the failure was
+ * silent. An unregulated pool was 1,025 species of which 817 had no movepool,
+ * contributing their own typing and no moves at all. That is not a small
+ * distortion: with 80% of the pool unable to attack, availability collapses back
+ * onto typing prevalence — the exact reading `typeThreat.ts` opens by rejecting —
+ * and Water came out at 1.000 for being the most common typing in the game
+ * rather than a common attack. The weights looked entirely ordinary. Nothing
+ * about them said four fifths of the pool had abstained.
+ *
+ * The diagnosis that got here was also wrong the first time, and is recorded so
+ * the next person does not repeat it. This was written up as a gap in the
+ * generated table, to be closed by regenerating it over every species. It could
+ * not have been: species outside the Pokedex have no `champions` learnset at
+ * all, so a full-National-Dex crawl emits nothing — 20 sampled from outside the
+ * roster returned zero moves between them. Missing movepool data and a Pokemon
+ * that does not exist look identical from inside the table, and only one of them
+ * is fixable by fetching more.
  */
 
+import { COVERAGE_MOVE_POKEDEX } from './coverageMoves';
 import { getTypeThreatWeights } from './typeThreat';
 import type { CatalogVarietyV1, PokemonCatalogV1 } from './pokemonCatalog';
 import type { Regulation } from './regulations';
@@ -68,6 +79,27 @@ const keyFor = (selection: ThreatPoolSelection): string => JSON.stringify([
 
 const cache = new WeakMap<PokemonCatalogV1, Map<string, TypeThreatWeights>>();
 
+const rosters = new WeakMap<PokemonCatalogV1, ReadonlySet<string>>();
+
+/**
+ * Species that exist in the game the movepool table was generated from.
+ *
+ * @param catalog Verified catalog.
+ * @returns Species names in `COVERAGE_MOVE_POKEDEX`, memoized per catalog.
+ */
+function getRoster(catalog: PokemonCatalogV1): ReadonlySet<string> {
+  const cached = rosters.get(catalog);
+  if (cached) return cached;
+
+  const roster = new Set(
+    catalog.species
+      .filter((species) => species.pokedexes.includes(COVERAGE_MOVE_POKEDEX))
+      .map((species) => species.name)
+  );
+  rosters.set(catalog, roster);
+  return roster;
+}
+
 /**
  * Members of the metagame a selection describes.
  *
@@ -80,8 +112,12 @@ export function getThreatPool(
   selection: ThreatPoolSelection
 ): readonly CatalogVarietyV1[] {
   const cupTypes = selection.cupTypes ?? [];
+  const roster = getRoster(catalog);
   return catalog.varieties.filter((variety) => {
     if (!variety.isDefault) return false;
+    // Unconditional, and before the regulation: a regulation narrows who you may
+    // register, and this decides who could be registered at all.
+    if (!roster.has(variety.speciesName)) return false;
     if (selection.regulation && !selection.regulation.legalSpecies.has(variety.speciesName)) {
       return false;
     }

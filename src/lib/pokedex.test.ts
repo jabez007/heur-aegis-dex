@@ -15,6 +15,7 @@ import {
 import { damageFromScoreBounds } from './pokedexScoring';
 import { isResistantTypeResultList } from './pokedexTypes';
 import { UNIFORM_TYPE_THREAT } from './typeThreat';
+import { COVERAGE_MOVE_POKEDEX } from './coverageMoves';
 import type { PokemonCatalogV1 } from './pokemonCatalog';
 
 const mockState = vi.hoisted(() => ({
@@ -446,7 +447,9 @@ const parityCatalog = () => ({
       isLegendary: false,
       isMythical: false,
       eggGroups: ['monster'],
-      pokedexes: ['national'],
+      // In the game's Pokedex, or `getThreatPool` excludes them as unfaceable
+      // and the weighting this fixture exists to exercise falls back to uniform.
+      pokedexes: ['national', COVERAGE_MOVE_POKEDEX],
       varietyNames: ['charmander']
     },
     {
@@ -455,7 +458,7 @@ const parityCatalog = () => ({
       isLegendary: false,
       isMythical: false,
       eggGroups: ['monster'],
-      pokedexes: ['national'],
+      pokedexes: ['national', COVERAGE_MOVE_POKEDEX],
       varietyNames: ['squirtle']
     }
   ],
