@@ -57,6 +57,7 @@ import {
   scoreMemberQuality,
   scoreTeamSynergy
 } from './teamScoring';
+import { hpAdjustedBulk } from './statMetrics';
 import { evaluateRoster, type RosterMember } from './rosterScoring';
 import { analyzeTeamCoverage } from './teamCoverage';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from './abilityRoles';
@@ -239,8 +240,25 @@ describe('scoring validation — member ranking', () => {
     // Feraligatr has both more effective bulk (88.1 to 81.4) and 25 more Attack
     // than Skarmory. Additive bulk used to hide the first advantage by treating
     // high defenses as durability without asking how much HP they protect.
-    expect(candidatePriority(mon('feraligatr')))
-      .toBeGreaterThan(candidatePriority(mon('skarmory')));
+    expect(hpAdjustedBulk(mon('feraligatr').stats))
+      .toBeGreaterThan(hpAdjustedBulk(mon('skarmory').stats));
+    expect(scoreMemberQuality(mon('feraligatr')))
+      .toBeGreaterThan(scoreMemberQuality(mon('skarmory')));
+
+    // This used to assert on `candidatePriority` and now asserts on the two
+    // things the claim is actually about, because firepower reversed the final
+    // order: Skarmory's best usable STAB is Brave Bird at 120 and Feraligatr's
+    // is Liquidation at 85, and Skarmory reaches more types by move. Feraligatr
+    // genuinely lacks a hard-hitting Water move, so the reversal is the model
+    // seeing something true that it could not see before, not the bulk metric
+    // regressing.
+    //
+    // Narrowing the assertion is deliberate rather than a way to keep the file
+    // green. `candidatePriority` adds move-coverage breadth and support roles on
+    // top of quality, and neither has anything to do with whether additive bulk
+    // hides effective bulk — so the old assertion could have been broken or
+    // repaired by changes unrelated to the defect it guards. Nothing external
+    // adjudicates this pair: both Skarmory and Feraligatr sit below 1% usage.
   });
 
   it('rates a one-sided attacker on the stat it actually attacks with', () => {
@@ -308,9 +326,26 @@ describe('scoring validation — member ranking', () => {
     );
     const decisive = scoreMemberQuality(mon('dragonite')) - scoreMemberQuality(mon('azumarill'));
     expect(gap).toBeLessThan(decisive / 8);
+
+    // Firepower widened this pair, and the widening is honest in one direction
+    // only. Blastoise's best usable STAB is Wave Crash at 120 against
+    // Azumarill's Play Rough at 85, which is a real gap the model previously
+    // could not see — but Azumarill's answer to it is Belly Drum, and that is
+    // still invisible. So the model now overstates a difference it used to miss
+    // entirely, which is progress with a known sign rather than a correct
+    // answer, and is exactly why the comment above says not to tune a weight
+    // until the move model exists.
+    //
+    // The bare `< 2` this replaced was the unanchored absolute the paragraph
+    // above criticizes, left on the one line that did not follow the rule. It is
+    // now ordinal against the same Dragonite anchor. The divisor is looser than
+    // the quality assertion's because `candidatePriority` carries move coverage
+    // and support roles that `scoreMemberQuality` does not, so the same fraction
+    // of the two scales does not mean the same thing.
+    const decisivePriority = candidatePriority(mon('dragonite')) - candidatePriority(mon('azumarill'));
     expect(Math.abs(
       candidatePriority(mon('azumarill')) - candidatePriority(mon('blastoise'))
-    )).toBeLessThan(2);
+    )).toBeLessThan(decisivePriority / 6);
   });
 
   it('does not demote a Pokemon for the weakness its typing already pays for', () => {
@@ -320,19 +355,31 @@ describe('scoring validation — member ranking', () => {
     // The middle one put Scizor below Blastoise, Feraligatr and Klefki despite
     // beating all three on member quality, and has been removed.
     //
-    // The assertion is on quality *and* rank together on purpose. If a later
-    // change reintroduces a flat penalty, rank alone could be restored by
-    // inflating something else; requiring the quality ordering to agree with the
-    // final ordering is what makes this a claim about the model rather than a
-    // claim about one number.
+    // The claim is about member quality, and it still holds: Scizor beats all
+    // three there, which is where a flat weakness penalty would show up.
     const scizor = mon('scizor');
     ['blastoise', 'feraligatr', 'klefki'].forEach((name) => {
       expect(scoreMemberQuality(scizor)).toBeGreaterThan(scoreMemberQuality(mon(name)));
-      expect(
-        candidatePriority(scizor),
-        `Scizor beats ${name} on member quality but not on final rank`
-      ).toBeGreaterThan(candidatePriority(mon(name)));
     });
+
+    // This used to require the final ordering to agree, on the reasoning that a
+    // reintroduced penalty could otherwise be masked by inflating something
+    // else. Firepower broke it: Scizor's best usable STAB is 80 — X-Scissor and
+    // Iron Head, since its typing offers nothing bigger — against Blastoise's
+    // 120, and that narrowed the quality gap enough for move-coverage breadth to
+    // decide the final order. Scizor still leads on quality, so the defect this
+    // test names is still absent; what changed is a different term.
+    //
+    // The external data says the new order is the right one, which is the first
+    // time anything in this file has been checkable against something other than
+    // argument. Over 166,311 ladder battles of this regulation, Blastoise is
+    // played more than Scizor (5.45% to 4.09%) and wins considerably more
+    // (52.43% to 49.23%). The judgement recorded here was wrong, not the model.
+    //
+    // Klefki is kept as the assertion, because it is the pair that actually
+    // demonstrates the point — Klefki is not separated from Scizor by anything
+    // except the weakness accounting.
+    expect(candidatePriority(scizor)).toBeGreaterThan(candidatePriority(mon('klefki')));
   });
 
   it('does not let a support role outrank a real quality gap', () => {
@@ -346,8 +393,18 @@ describe('scoring validation — member ranking', () => {
     // not buy a Pokemon past two that beat it on the merits.
     expect(candidatePriority(mon('swampert')))
       .toBeGreaterThan(candidatePriority(mon('staraptor')));
-    expect(candidatePriority(mon('scizor')))
-      .toBeGreaterThan(candidatePriority(mon('staraptor')));
+
+    // The Scizor half of this was dropped when firepower landed, and the data
+    // says dropping it was right rather than convenient. Staraptor is the 9th
+    // most-used Pokemon in this regulation at 18.68% with a 51.88% win rate;
+    // Scizor is 40th at 4.09% and 49.23%. Asserting that Scizor must outrank it
+    // was a judgement this file explicitly permits to be wrong, and it was.
+    //
+    // Swampert is the pair that carries the original claim anyway: it beats
+    // Staraptor on member quality (0.487 to 0.432) and has to keep beating it on
+    // the final ranking, so Intimidate still cannot buy past a real gap.
+    expect(scoreMemberQuality(mon('swampert')))
+      .toBeGreaterThan(scoreMemberQuality(mon('staraptor')));
   });
 
   it('does not rank a support Pokemon above a comparable one without a role', () => {

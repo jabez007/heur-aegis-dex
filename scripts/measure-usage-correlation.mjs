@@ -64,33 +64,39 @@ const ALIASES = {
   'pyroar': 'pyroar-male'
 };
 
-// Two entries in the data have no counterpart in the app at all, and neither is
-// a naming problem. Aliasing them to a near neighbour would hide a real gap, so
-// they stay unmatched and are named here instead.
+// Two entries in the data have no counterpart in the app, and both are excluded
+// on purpose: this tool is for players who breed what they play, so a Pokemon
+// that cannot be bred is not a Pokemon they can bring. Aliasing them to a near
+// neighbour would launder a deliberate product decision into a data error, so
+// they stay unmatched and are named here with the reason.
 //
-// - `Floette-Eternal` is the Eternal Flower, which UNBREEDABLE_FORMS excludes on
-//   purpose. It is 8.00% of this metagame, so that exclusion has a cost.
-// - `Gholdengo` is legal in M-B and present in both generated move tables, but
-//   absent from the scanned catalog. That is a catalog gap, not a policy, and it
-//   hides the 16th most-used Pokemon in the format.
+// The cost is real and worth stating in one place rather than rediscovering: the
+// two of them are 17.6% of this metagame between them. That is the price of the
+// policy, not an argument against it.
 const KNOWN_GAPS = {
-  'floette-eternal': 'excluded by UNBREEDABLE_FORMS',
-  'gholdengo': 'legal and in the move tables, but missing from the catalog'
+  'floette-eternal': 'the Eternal Flower, excluded by UNBREEDABLE_FORMS',
+  'gholdengo': 'unbreedable by egg group, so the species-level breedable rule drops it'
 };
 
-// ## The validation pool is deliberately unfiltered
+// ## Scoring runs on the whole regulation; the view is filtered separately
 //
-// The scan's defaults are *user preferences* — `minimumAttacks: 80`,
-// `minimumBulk: 70`, `limitQuadrupleDamage: true` — and validating inside them
-// would ask a much weaker question than the one that matters: not "does the
-// model rank the format correctly" but "does it rank correctly among Pokemon it
-// has already decided to show". Worse, the filters select on the same stats
-// several terms are built from, so restricting range there quietly deflates
-// exactly the correlations being measured.
+// The scan's defaults — `minimumAttacks: 80`, `minimumBulk: 70`,
+// `limitQuadrupleDamage: true`, breedable-only — are deliberate product choices
+// about what to *show*. They are not claims about what exists, and the metagame
+// does not respect them: a team still has to beat the Kingambit and Garchomp the
+// browser declines to display.
 //
-// So the scoring pool is every legal species with the filters opened up. What
-// the default view holds is reported separately below, because the gap between
-// the two turned out to be the most actionable thing this script found.
+// So the two questions are kept apart, and this is the rule for every
+// calibration script here. **Scoring and calibration run against every Pokemon
+// the regulation permits**, because that is the field being played into.
+// **Filtering is a view concern**, applied after. Validating inside the filters
+// would ask the much weaker question of whether the model ranks well among
+// Pokemon it already chose to show, and worse, those filters select on the same
+// stats several terms are built from — restricting range there quietly deflates
+// the very correlations being measured.
+//
+// What the default view holds is reported separately at the end, as the cost of
+// the policy rather than an argument against it.
 const catalog = await loadPokemonCatalog();
 const openOptions = {
   pokemonFilters: { regulation: 'M-B' },
@@ -109,6 +115,16 @@ const scored = pool.map((entry) => ({
   name: entry.name,
   priority: candidatePriority(entry, { hasAlly: format === 'doubles' }),
   quality: scoreMemberQuality({
+    stats: entry.stats,
+    normalizedDamageToScore: entry.normalizedDamageToScore,
+    normalizedDamageFromScore: entry.normalizedDamageFromScore,
+    abilityName: entry.abilityName,
+    varietyName: entry.name
+  }),
+  // The same score with the firepower term switched off, which is what the depth
+  // sweep below has to modulate. Sweeping the live quality would apply firepower
+  // twice and report the second application as though it were the first.
+  qualityWithoutFirepower: scoreMemberQuality({
     stats: entry.stats,
     normalizedDamageToScore: entry.normalizedDamageToScore,
     normalizedDamageFromScore: entry.normalizedDamageFromScore,
@@ -249,6 +265,40 @@ console.log(`    ${show([...residuals].sort((a, b) => a.error - b.error).slice(0
 
 const mae = residuals.reduce((sum, r) => sum + Math.abs(r.error), 0) / residuals.length;
 console.log(`\n  mean absolute rank error: ${mae.toFixed(1)} of ${matched.length} places`);
+
+// ## Calibrating the firepower term
+//
+// Two things a constant needs and reasoning alone cannot supply: the range the
+// term actually occupies, and whether folding it in makes the ranking better or
+// worse against something outside this codebase.
+const stabValues = scored.map((row) => row.stab).filter((value) => value > 0);
+const stabMin = Math.min(...stabValues);
+const stabMax = Math.max(...stabValues);
+console.log(`\n=== firepower calibration ===`);
+console.log(`  reachable range over the whole regulation: ${stabMin}..${stabMax} (n=${stabValues.length}/${scored.length})`);
+console.log(`  entries with no usable STAB at all: ${scored.length - stabValues.length}`);
+
+// The sweep. Firepower enters as a third factor on the offence axis, beside the
+// attacking stat and the offensive typing, so it takes the same shape as
+// TYPE_MODULATION: it scales the term between (1 - depth) and 1 rather than
+// multiplying it outright.
+//
+// Depth 0 is the model before this term existed, so the row for it is the
+// baseline every other row has to beat, and FIREPOWER_MODULATION's row is the
+// one now shipping. Reported against both targets because they disagree about what
+// the model is for, and a depth that helps one while hurting the other is a
+// choice rather than a measurement.
+const normalizedStab = (value) =>
+  value <= 0 ? 1 : Math.min(1, Math.max(0, (value - stabMin) / (stabMax - stabMin)));
+console.log(`\n  depth   usage    win rate   (Spearman of the modulated quality term)`);
+for (const depth of [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]) {
+  const modulated = matched.map((row) =>
+    row.qualityWithoutFirepower * ((1 - depth) + (depth * normalizedStab(row.stab))));
+  const vsUsage = spearman(modulated, matched.map((row) => row.usage));
+  const vsWin = spearman(modulated, matched.map((row) => row.winRate));
+  console.log(`   ${depth.toFixed(1)}   ${vsUsage >= 0 ? ' ' : ''}${vsUsage.toFixed(3)}${mark(vsUsage, matched.length)}` +
+    `  ${vsWin >= 0 ? ' ' : ''}${vsWin.toFixed(3)}${mark(vsWin, matched.length)}`);
+}
 
 // ## Does the default view contain the metagame?
 //

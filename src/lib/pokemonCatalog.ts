@@ -35,8 +35,14 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * 9: `damage_to_score` is measured against the typings the regulation fields
  * rather than counted off the chart, so every cached offensive score predates a
  * different formula and a different range.
+ *
+ * 10: firepower. Member quality gained a third factor on its offence axis — how
+ * hard the best STAB move actually hits — and that factor reaches the default
+ * ability choice, because an ability moving an attacking stat can flip which
+ * damage class the Pokemon reads its best move from. So `selected_ability_name`
+ * and everything derived from it can differ from what a cache holds.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 9 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 10 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [

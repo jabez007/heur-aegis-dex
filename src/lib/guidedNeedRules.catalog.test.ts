@@ -98,12 +98,18 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
     // worth recording because it is not obvious: Steel/Dragon is a poor
     // attacking pair against M-B and the census says so, but every candidate on
     // this list lost offensive credit and the order between them survived it.
+    // Mamoswine and Goodra-Hisui swapped when firepower entered member quality,
+    // which is a tie-break reshuffle and not a change of opinion: the assertion
+    // below pins all five to the same improvement, and that is still true.
+    // Mamoswine's best usable STAB is 100 against Goodra-Hisui's 120, so the
+    // ordering within the tie now reflects a real difference even though the
+    // improvement they offer this core does not.
     expect(first.map(({ varietyName }) => varietyName)).toEqual([
       'archaludon',
       'dragapult',
       'ursaluna',
-      'mamoswine',
-      'goodra-hisui'
+      'goodra-hisui',
+      'mamoswine'
     ]);
     // Pin the tie itself, so a change that makes these five genuinely separable
     // shows up as this assertion failing rather than as a reshuffled list whose

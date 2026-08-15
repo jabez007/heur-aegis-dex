@@ -18,6 +18,7 @@ import type { TeamCoverageAnalysis } from './teamCoverage';
 import { getApplicableRoles, type AbilityRole, type TeamRoleAnalysis } from './abilityRoles';
 import { getQualityMultipliers } from './abilityEffects';
 import { getAttackerBias } from './coverageMoves';
+import { getStabPower } from './stabPower';
 import { BATTLE_FORMATS, DEFAULT_BATTLE_FORMAT, type BattleFormat } from './battleFormats';
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
@@ -173,6 +174,75 @@ export const OBSERVED_STAT_TERMS = {
   bulk: { min: 0.2642, max: 0.7849 },
   speed: { min: 0.1333, max: 1 }
 } as const;
+
+/**
+ * Expected power of the best STAB move in the pool, at both extremes.
+ *
+ * Measured by `npm run measure:usage-correlation` over every variety Regulation
+ * M-B permits, not over the browser's filtered view — the filters are a choice
+ * about what to display and the metagame does not respect them. 232 of 236
+ * varieties have a usable STAB move; the four without are handled below.
+ *
+ * The range is narrow, 77..120 for a ratio of 1.56, and that is the honest shape
+ * of the thing rather than a defect. A third of the pool sits at exactly 120,
+ * because 120 is what a good STAB move is worth and a great many Pokemon have
+ * one. What this term separates is the bottom: Beartic at 77 and Pinsir, Scizor
+ * and Lycanroc at 80 against everything with a real move.
+ *
+ * See `stabPower.ts` for what "usable" excludes and why an unrestricted maximum
+ * over the movepool is the wrong measure.
+ */
+export const OBSERVED_STAB_POWER = { min: 77, max: 120 } as const;
+
+/**
+ * How strongly firepower modulates the attacking stat it applies to.
+ *
+ * ## Why the offence axis has three factors and not two
+ *
+ * Damage in the actual game is a stat, a type matchup and a move. This model had
+ * the first two — `effectiveOffense` measures the stat, `normalizedDamageToScore`
+ * measures the typing — and nothing at all for the third, so two Pokemon with the
+ * same Attack and the same typing scored identically even when one leads with
+ * Close Combat and the other has nothing above Brick Break. Firepower is that
+ * missing factor, and it enters the same way typing does: scaling the term
+ * between (1 - modulation) and 1 rather than multiplying it outright, so a weak
+ * best move discounts a big attacking stat instead of erasing it.
+ *
+ * ## Why 0.4, and the first constant here with outside support
+ *
+ * Set to match `TYPE_MODULATION` because it is the same kind of thing in the
+ * same place: a property of what the attack *does*, modifying the stat that
+ * throws it. Two peers on one axis should not be weighted differently without a
+ * reason, and there is no reason.
+ *
+ * What is new is that the choice was checked against data from outside this
+ * codebase — 166,311 ladder battles of this regulation, via
+ * `npm run measure:usage-correlation`. Sweeping the depth against how much each
+ * Pokemon actually wins:
+ *
+ * | depth   | vs usage | vs win rate |
+ * | ------- | -------- | ----------- |
+ * | 0.0     | 0.213    | 0.196       |
+ * | 0.1     | 0.228    | 0.217       |
+ * | 0.2     | 0.227    | 0.246       |
+ * | 0.3     | 0.229    | 0.264       |
+ * | **0.4** | **0.221**| **0.271**   |
+ * | 0.5     | 0.222    | 0.272       |
+ * | 0.6     | 0.217    | 0.264       |
+ *
+ * Depth 0 is the model as it stood, and it is the worst row. Win rate is not
+ * significantly correlated at all until this term is switched on, and the
+ * optimum is a plateau across 0.4..0.5 — so the value picked by analogy landed
+ * inside the range picked by measurement, which is the outcome worth having.
+ * Taking the argmax instead would be fitting a constant to 91 data points.
+ *
+ * Two limits on how much that supports. The sample is one format (doubles), one
+ * ladder, one fortnight, and 91 matched Pokemon; and the correlation it improves
+ * is still weak in absolute terms — 0.271 is a better ranking, not a good one.
+ * This raises the term from "reasoned" to "reasoned and not contradicted", which
+ * is a lower bar than it sounds and still more than any other constant here has.
+ */
+export const FIREPOWER_MODULATION = 0.4;
 
 /**
  * How strongly a typing modulates the raw stats it applies to.
@@ -563,14 +633,36 @@ export const COMPOSITE_WEIGHTS = {
  * same argument that has always applied applies here: closing it means changing
  * `scoreTeamSynergy`'s clamp, not these constants. It is now a third again over
  * nominal rather than a half again.
+ *
+ * ## Re-measured for firepower
+ *
+ * `FIREPOWER_MODULATION` added a third factor to the offence axis, so quality
+ * had to be taken again. Both formats move down at both ends — doubles
+ * 0.1557..0.6155 to **0.1511..0.6130**, singles 0.1367..0.6264 to
+ * **0.1346..0.6245** — and moving down at *both* ends is the shape this
+ * particular term must produce. Firepower is a multiplier that never exceeds 1,
+ * so it can only subtract; the ceiling barely moves because the best Pokemon
+ * mostly have a 120-power STAB and keep the full multiplier, while the floor
+ * falls further because the Pokemon already at the bottom tend to be the ones
+ * with nothing to click.
+ *
+ * The narrowing is smaller than the offensive-census rerun above and for the
+ * same underlying reason: a third of the pool sits at the top of the firepower
+ * range, so the term reprices the tail rather than the whole distribution.
+ * `OBSERVED_STAT_TERMS` is untouched and could not have moved — firepower
+ * multiplies the offence term after it is rescaled, rather than entering it.
+ *
+ * Both synergy maxima unchanged for the sixth consecutive rerun, and necessarily
+ * so: quality does not read synergy. Doubles sampled 0.7863 against its recorded
+ * 0.8124 and keeps it; singles hit 0.8247 exactly.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.1557, max: 0.6155 },
+    quality: { min: 0.1511, max: 0.613 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1367, max: 0.6264 },
+    quality: { min: 0.1346, max: 0.6245 },
     synergy: { min: -1, max: 0.8247 }
   }
 } as const;
@@ -587,6 +679,16 @@ export interface MemberQualityInput {
    * scores the Pokemon as though its ability does nothing.
    */
   abilityName?: string;
+  /**
+   * PokeAPI variety name, used to look up how hard its best STAB move hits.
+   *
+   * Omitting it, or passing a name the table has never heard of, scores the
+   * Pokemon at full firepower rather than none. Absence here means the table
+   * does not know, and a model that penalized what it has not been told would
+   * make missing data look like weakness — the four varieties in the pool with
+   * no usable STAB move at all are handled the same way, and deliberately.
+   */
+  varietyName?: string;
 }
 
 /**
@@ -629,8 +731,18 @@ export function scoreMemberQuality(member: MemberQualityInput): number {
   const offensiveTyping = modulate(normalizedDamageToScore);
   const defensiveTyping = modulate(1 - normalizedDamageFromScore);
 
+  // The third factor on the offence axis, beside the stat and the typing: how
+  // hard the move it would actually click hits. Unknown scores as full credit
+  // rather than none — see `varietyName`.
+  const stabPower = getStabPower(member.varietyName, stats);
+  const firepower = stabPower === null || stabPower <= 0
+    ? 1
+    : (1 - FIREPOWER_MODULATION) + (FIREPOWER_MODULATION * clamp01(
+      (stabPower - OBSERVED_STAB_POWER.min) / (OBSERVED_STAB_POWER.max - OBSERVED_STAB_POWER.min)
+    ));
+
   return clamp01(
-    (MEMBER_WEIGHTS.offense * offense * offensiveTyping) +
+    (MEMBER_WEIGHTS.offense * offense * offensiveTyping * firepower) +
     (MEMBER_WEIGHTS.bulk * bulk * defensiveTyping) +
     (MEMBER_WEIGHTS.speed * speed)
   );

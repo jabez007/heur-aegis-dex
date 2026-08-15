@@ -124,11 +124,16 @@ for (const [index, name] of species.entries()) {
   const profile = chooseDefaultAbility(
     abilityProfiles.map((p) => ({ ...p, stats: getEffectiveStats(baseStats, [p.ability_name]) })),
     BASE,
-    fromBounds
+    fromBounds,
+    undefined,
+    poke.name
   );
 
   pool.push({
     name,
+    // The STAB table is keyed by variety, and a dozen species differ from their
+    // variety name — Aegislash, Palafin and Basculegion only exist suffixed.
+    varietyName: poke.name,
     types,
     abilityName: profile.ability_name,
     stats: profile.stats,
@@ -174,7 +179,8 @@ const halves = (members, format) => {
     stats: member.stats,
     normalizedDamageToScore: member.normalizedDamageToScore,
     normalizedDamageFromScore: member.normalizedDamageFromScore,
-    abilityName: member.abilityName
+    abilityName: member.abilityName,
+    varietyName: member.varietyName
   }));
 
   return {
@@ -269,7 +275,8 @@ for (const format of BATTLE_FORMAT_LIST) {
     stats: member.stats,
     normalizedDamageToScore: member.normalizedDamageToScore,
     normalizedDamageFromScore: member.normalizedDamageFromScore,
-    abilityName: member.abilityName
+    abilityName: member.abilityName,
+    varietyName: member.varietyName
   })).sort((a, b) => a - b);
   const mean = (values) => values.reduce((total, v) => total + v, 0) / values.length;
   const exactMin = mean(solo.slice(0, format.broughtToBattle));

@@ -11,7 +11,7 @@
  * Each entry's ability is *derived* by the scan's own rule rather than pinned:
  * a fixture that picks abilities its own way cannot see a defect in the picking.
  *
- * Regenerate with scripts/gen-scoring-fixture.mjs. Generated 2026-08-14.
+ * Regenerate with scripts/gen-scoring-fixture.mjs. Generated 2026-08-15.
  */
 
 import type { PokemonEntry } from './pokemonEntry';

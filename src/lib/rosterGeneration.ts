@@ -609,7 +609,8 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
     stats: entry.stats,
     normalizedDamageToScore: entry.normalizedDamageToScore,
     normalizedDamageFromScore: entry.normalizedDamageFromScore,
-    abilityName: entry.abilityName
+    abilityName: entry.abilityName,
+    varietyName: entry.name
   });
 
   return (quality * w.quality) +

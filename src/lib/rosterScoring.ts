@@ -251,7 +251,8 @@ export function scoreBring(members: RosterMember[], options: RosterScoringOption
       stats: member.stats,
       normalizedDamageToScore: member.normalizedDamageToScore ?? 0.5,
       normalizedDamageFromScore: member.normalizedDamageFromScore ?? 0.5,
-      abilityName: member.abilityName
+      abilityName: member.abilityName,
+      varietyName: member.name
     })
     : 0);
 

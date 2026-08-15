@@ -93,12 +93,19 @@ export interface PokemonEnrichmentOptions {
  * @param baseScore Baseline the scores were calculated with.
  * @param bounds Extremes to normalize the defensive score against. Defaults to
  *   the unweighted measurement, which is correct only for unweighted profiles.
+ * @param varietyName PokeAPI variety name, so the firepower term reaches this
+ *   choice too. It is not constant across profiles even though the movepool is:
+ *   an ability that moves an attacking stat can flip which damage class the
+ *   Pokemon reads its best STAB from, and Huge Power is the plain case. Omitting
+ *   it scores every profile at full firepower, which ranks them against a
+ *   different function than `scoreMemberQuality` computes.
  */
 export function chooseDefaultAbility<T extends AbilityProfile & { stats: PokemonStats }>(
   profiles: T[],
   baseScore: number,
   bounds?: DamageScoreBounds,
-  toBounds?: DamageScoreBounds
+  toBounds?: DamageScoreBounds,
+  varietyName?: string
 ): T {
   const supportBonus = CANDIDATE_WEIGHTS.supportRole / CANDIDATE_WEIGHTS.quality;
   const score = (profile: T) =>
@@ -108,7 +115,8 @@ export function chooseDefaultAbility<T extends AbilityProfile & { stats: Pokemon
       normalizedDamageFromScore: normalizeDamageFromScore(
         profile.damage_from_score, baseScore, bounds
       ),
-      abilityName: profile.ability_name
+      abilityName: profile.ability_name,
+      varietyName
     }) + (getAbilityEffect(profile.ability_name) ? supportBonus : 0);
 
   return profiles.reduce((best, profile) => (score(profile) > score(best) ? profile : best));
@@ -205,7 +213,8 @@ export function enrichPokemon(
   if (!clearsStatFloors) return null;
 
   const selectedProfile = chooseDefaultAbility(
-    profilesWithStats, options.baseScore, options.damageFromBounds, options.damageToBounds
+    profilesWithStats, options.baseScore, options.damageFromBounds, options.damageToBounds,
+    entry.pokemon.name
   );
   entry.ability_profiles = Object.fromEntries(
     profilesWithStats.map((profile) => [profile.ability_name || '', profile])
