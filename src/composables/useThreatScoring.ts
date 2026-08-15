@@ -4,7 +4,7 @@ import { DEFAULT_BASE_SCORE } from '../lib/pokedexScoring';
 import { getCatalogBaseTypes } from '../lib/pokemonCatalogScan';
 import { loadPokemonCatalog } from '../lib/pokemonCatalogLoader';
 import { getRegulation } from '../lib/regulations';
-import { getDefenderCensus, getThreatWeights } from '../lib/threatPool';
+import { getDefenderCensus, getThreatWeights, getTypeMatchupValues } from '../lib/threatPool';
 import { ALL_TYPES, useMetaFilters } from './useMetaFilters';
 import { useWorkspaceState } from './useWorkspaceState';
 import type { ThreatScoring } from '../lib/pokemonEntry';
@@ -84,6 +84,11 @@ export function useThreatScoring() {
     return {
       weights,
       census,
+      typeValues: getTypeMatchupValues(catalog.value, {
+        regulation: getRegulation(regulation.value),
+        cupTypes,
+        baseScore: DEFAULT_BASE_SCORE
+      }),
       toBounds: measureDamageToBounds(census, DEFAULT_BASE_SCORE),
       bounds: measureDamageFromBounds(baseTypesFor(catalog.value), DEFAULT_BASE_SCORE, weights)
     };

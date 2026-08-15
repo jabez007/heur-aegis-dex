@@ -492,6 +492,29 @@ export const COMPOSITE_WEIGHTS = {
  * 0.1368..0.6330 to 0.1365..0.6331 — which is the expected shape: the typing
  * term is one modulated input among three stats.
  *
+ * ## Re-measured for regulation-aware team coverage, and singles finally moved
+ *
+ * `analyzeTeamCoverage` now prices each type by what it is worth in the
+ * metagame instead of counting names, which is the largest single change to
+ * this score any of these reruns has covered — synergy is two thirds of it.
+ *
+ * **Singles synergy widens for the first time, 0.8189 to 0.8247.** It had held
+ * through six consecutive measurements, and the widen-only rule exists exactly
+ * so a real new maximum like this is taken while sampling noise is not. Doubles
+ * sampled 0.7863 against its recorded 0.8124 and keeps it, for the eighth time.
+ * Quality is untouched in both, as it must be: quality does not read synergy.
+ *
+ * The floors dropped further — doubles p01 from -0.7351 to -0.8945, singles from
+ * -0.7150 to -0.8408 — because a badly-matched team is now charged the real
+ * price of its weaknesses rather than an averaged one. Synergy's residual
+ * influence rises again with them, to **2.39:1** in doubles and 2.14:1 in
+ * singles against a nominal 1.22:1. That number has now moved three times in one
+ * day, always the same way, and the cause is always the same: every correction
+ * has added information to the penalty side. It is the clearest signal yet that
+ * closing the residual means revisiting `scoreTeamSynergy`'s -1 clamp rather
+ * than these bounds — the clamp is what stops the bottom of the range from
+ * being measured at all.
+ *
  * ## Re-measured for the regulation-aware offensive score
  *
  * `defenderCensus.ts` replaced the chart count with a measurement against the
@@ -548,7 +571,7 @@ export const COMPOSITE_BOUNDS = {
   },
   singles: {
     quality: { min: 0.1367, max: 0.6264 },
-    synergy: { min: -1, max: 0.8189 }
+    synergy: { min: -1, max: 0.8247 }
   }
 } as const;
 
@@ -714,10 +737,16 @@ function evaluateTeamSynergy(
     Object.values(counts).reduce((total, count) => total + count, 0);
   const maxDistinctTypes = Math.min(teamSize * 2, typeCount);
 
-  const coverageBreadthValue = clamp01(coverage.uniqueCoverages / typeCount);
-  const resistanceBreadthValue = clamp01(coverage.uniqueResistances / typeCount);
+  // Priced by what each type is worth in this metagame when the analysis carries
+  // that, and by a plain count when it does not. The weighted totals average the
+  // same as the counts they replace — see the mean-1 argument on
+  // `getTypeMatchupValues` — so every denominator below is unchanged.
+  const w = coverage.weighted;
+  const coverageBreadthValue = clamp01((w?.coverageBreadth ?? coverage.uniqueCoverages) / typeCount);
+  const resistanceBreadthValue = clamp01((w?.resistanceBreadth ?? coverage.uniqueResistances) / typeCount);
   const typeDiversityValue = clamp01(typesTotal / maxDistinctTypes);
-  const enabledSpreadValue = clamp01(coverage.enabledSpreadTypes.length / maxDistinctTypes);
+  const enabledSpreadValue =
+    clamp01((w?.enabledSpread ?? coverage.enabledSpreadTypes.length) / maxDistinctTypes);
   const supportRolesValue = clamp01((roles?.roles.length ?? 0) / applicableRoleCount);
   const coverageBreadth = bonusWeights.coverageBreadth * coverageBreadthValue;
   const resistanceBreadth = bonusWeights.resistanceBreadth * resistanceBreadthValue;
@@ -726,18 +755,22 @@ function evaluateTeamSynergy(
   const supportRoles = bonusWeights.supportRoles * supportRolesValue;
   const bonus = coverageBreadth + resistanceBreadth + typeDiversity + enabledSpread + supportRoles;
 
-  const sharedWeaknessNumerator = sumBeyondFirst(coverage.weaknessCounts, coverage.sharedWeaknesses);
-  const quadrupleWeaknessNumerator = sumAll(coverage.quadrupleWeaknessCounts);
-  const sharedQuadrupleNumerator = sumBeyondFirst(
+  const sharedWeaknessNumerator = w?.sharedWeakness
+    ?? sumBeyondFirst(coverage.weaknessCounts, coverage.sharedWeaknesses);
+  const quadrupleWeaknessNumerator = w?.quadrupleWeakness ?? sumAll(coverage.quadrupleWeaknessCounts);
+  const sharedQuadrupleNumerator = w?.sharedQuadrupleWeakness ?? sumBeyondFirst(
     coverage.quadrupleWeaknessCounts,
     coverage.sharedQuadrupleWeaknesses
   );
-  const uncoveredWeaknessValue = coverage.uncoveredWeaknesses.length / typeCount;
-  const uncoveredQuadrupleValue = coverage.uncoveredQuadrupleWeaknesses.length / typeCount;
+  const uncoveredWeaknessValue =
+    (w?.uncoveredWeakness ?? coverage.uncoveredWeaknesses.length) / typeCount;
+  const uncoveredQuadrupleValue =
+    (w?.uncoveredQuadrupleWeakness ?? coverage.uncoveredQuadrupleWeaknesses.length) / typeCount;
   const sharedWeaknessValue = sharedWeaknessNumerator / (teamSize * 2);
   const quadrupleWeaknessValue = quadrupleWeaknessNumerator / teamSize;
   const sharedQuadrupleValue = sharedQuadrupleNumerator / teamSize;
-  const spreadConflictValue = clamp01(coverage.spreadConflicts.length / maxDistinctTypes);
+  const spreadConflictValue =
+    clamp01((w?.spreadConflict ?? coverage.spreadConflicts.length) / maxDistinctTypes);
   const fieldConflictValue = clamp01((roles?.fieldConflicts.length ?? 0) / applicableRoleCount);
 
   // How thin the team's minority attacking stat is. Mixed attackers count on

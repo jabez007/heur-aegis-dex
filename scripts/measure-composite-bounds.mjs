@@ -20,7 +20,7 @@
 import { chooseDefaultAbility, getBaseTypes, getDualTypes } from '../src/lib/pokedex.ts';
 import { loadPokemonCatalog } from '../src/lib/pokemonCatalogLoader.ts';
 import { measureDamageFromBounds, measureDamageToBounds } from '../src/lib/damageBounds.ts';
-import { getDefenderCensus, getThreatWeights } from '../src/lib/threatPool.ts';
+import { getDefenderCensus, getThreatWeights, getTypeMatchupValues } from '../src/lib/threatPool.ts';
 import { applyAbilityModifiers } from '../src/lib/pokedexAbilities.ts';
 import { buildOffensiveTypeChart, getMoveCoverage } from '../src/lib/coverageMoves.ts';
 import { getEffectiveStats } from '../src/lib/statAbilities.ts';
@@ -57,6 +57,10 @@ const fromBounds = measureDamageFromBounds(await getBaseTypes(BASE), BASE, weigh
 // field the regulation actually fields, so bounding it against the chart census
 // would bound a formula nothing runs.
 const census = getDefenderCensus(catalog, { regulation, baseScore: BASE });
+// Synergy is measured under the type values the app runs with, for the reason
+// the offensive bounds are: bounding a formula nothing uses is the mistake this
+// script exists to avoid.
+const typeValues = getTypeMatchupValues(catalog, { regulation, baseScore: BASE });
 const toBounds = measureDamageToBounds(census, BASE);
 process.stderr.write(
   `census-weighted damage-to bounds: ${toBounds.min.toFixed(4)}..${toBounds.max.toFixed(4)}\n`
@@ -161,7 +165,7 @@ const halves = (members, format) => {
   const coverage = analyzeTeamCoverage(members.map((member) => ({
     ...member,
     immuneToAllyMoves: format.hasAlly && isImmuneToAllyMoves(member.abilityName)
-  })));
+  })), typeValues);
   const roles = analyzeTeamRoles(
     members.map((member) => ({ abilityName: member.abilityName })),
     { hasAlly: format.hasAlly }

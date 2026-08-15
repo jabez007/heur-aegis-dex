@@ -13,6 +13,7 @@ import {
   type BattleFormatId
 } from '../lib/battleFormats';
 import { useNotifications } from './useNotifications';
+import { useThreatScoring } from './useThreatScoring';
 import { createInjectableState } from './injectableState';
 
 export interface PartyMember {
@@ -107,6 +108,10 @@ export function useTeamBuilder() {
     unavailableRosterNames
   } = teamBuilderState.useState();
   const { notify } = useNotifications();
+  // Undefined until the catalog loads, which is the safe state: the team scorer
+  // falls back to counting types equally, exactly as it did before these values
+  // existed. See `useThreatScoring`.
+  const { scoring } = useThreatScoring();
   const markTeamEdited = () => { teamEditRevision.value++; };
   const markRosterEdited = () => {
     rosterEditRevision.value++;
@@ -172,7 +177,7 @@ export function useTeamBuilder() {
   const rosterEvaluation = computed(() =>
     evaluateRoster(
       hasUnavailableRosterMembers.value ? [] : roster.value.map(toRosterMember),
-      { format: format.value }
+      { format: format.value, typeValues: scoring.value?.typeValues }
     )
   );
 
@@ -265,7 +270,8 @@ export function useTeamBuilder() {
     broughtTeam.value.map((member) => ({
       ...toRosterMember(member),
       immuneToAllyMoves: format.value.hasAlly && isImmuneToAllyMoves(member.abilityName)
-    }))
+    })),
+    scoring.value?.typeValues
   ));
 
   const roleAnalysis = computed(() => analyzeTeamRoles(broughtTeam.value, { hasAlly: format.value.hasAlly }));
@@ -485,7 +491,8 @@ export function useTeamBuilder() {
       pokemon: allowedPokemon,
       format: format.value,
       rosterSize: maxRosterSize.value,
-      seed
+      seed,
+      typeValues: scoring.value?.typeValues
     });
 
     if (cycleAlternatives) {

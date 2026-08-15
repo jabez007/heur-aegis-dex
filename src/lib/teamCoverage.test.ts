@@ -176,3 +176,66 @@ describe('analyzeTeamCoverage', () => {
     expect(analysis.uniqueResistances).toBe(0);
   });
 });
+
+describe('metagame-weighted coverage', () => {
+  // Fighting is the heaviest attacking type in M-B and Normal the lightest, at
+  // 1.69 and 0.45 once mean-normalized. Written as literals rather than read
+  // from the catalog so the arithmetic under test is visible in the test.
+  const values = {
+    threat: { fighting: 1.69, normal: 0.45, water: 1.0 },
+    presence: { fighting: 1.13, normal: 1.07, water: 1.4 }
+  };
+
+  it('prices a weakness by what the metagame can bring', () => {
+    const weakToFighting = analyzeTeamCoverage([
+      { weaknesses: ['fighting'] }, { weaknesses: ['fighting'] }
+    ], values);
+    const weakToNormal = analyzeTeamCoverage([
+      { weaknesses: ['normal'] }, { weaknesses: ['normal'] }
+    ], values);
+
+    // Same shape — two members, one shared weakness, nothing answering it — and
+    // the old count gave both exactly the same number.
+    expect(weakToFighting.sharedWeaknesses).toEqual(['fighting']);
+    expect(weakToNormal.sharedWeaknesses).toEqual(['normal']);
+    expect(weakToFighting.weighted!.sharedWeakness).toBeCloseTo(1.69, 10);
+    expect(weakToNormal.weighted!.sharedWeakness).toBeCloseTo(0.45, 10);
+    expect(weakToFighting.weighted!.uncoveredWeakness).toBeCloseTo(1.69, 10);
+    expect(weakToNormal.weighted!.uncoveredWeakness).toBeCloseTo(0.45, 10);
+  });
+
+  it('prices a resistance the same way, and coverage by presence instead', () => {
+    const team = analyzeTeamCoverage([
+      { resistances: ['fighting', 'normal'], coverages: ['water', 'normal'] }
+    ], values);
+
+    // Incoming uses threat, outgoing uses presence — the two directions are
+    // different questions over the same pool.
+    expect(team.weighted!.resistanceBreadth).toBeCloseTo(1.69 + 0.45, 10);
+    expect(team.weighted!.coverageBreadth).toBeCloseTo(1.4 + 1.07, 10);
+  });
+
+  it('orders the gap lists most threatening first', () => {
+    // What the guided builder names as the need to fix. Insertion order put
+    // whichever type was found first at the top, which is arbitrary.
+    const team = analyzeTeamCoverage([
+      { weaknesses: ['normal', 'water', 'fighting'] }
+    ], values);
+
+    expect(team.uncoveredWeaknesses).toEqual(['fighting', 'water', 'normal']);
+  });
+
+  it('falls back to counting when there is no metagame to price against', () => {
+    const team = analyzeTeamCoverage([{ weaknesses: ['fighting'] }, { weaknesses: ['fighting'] }]);
+
+    expect(team.weighted).toBeUndefined();
+    expect(team.sharedWeaknesses).toEqual(['fighting']);
+  });
+
+  it('treats an unpriced type as one, so a partial map cannot zero a term', () => {
+    const team = analyzeTeamCoverage([{ weaknesses: ['ghost'] }], values);
+
+    expect(values.threat).not.toHaveProperty('ghost');
+    expect(team.weighted!.uncoveredWeakness).toBe(1);
+  });
+});

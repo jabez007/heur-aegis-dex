@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import catalogData from '../../data/pokemon-catalog.v1.json';
 import { getRegulation } from './regulations';
-import { getThreatPool, getThreatWeights } from './threatPool';
+import { getThreatPool, getThreatWeights, getTypeMatchupValues } from './threatPool';
 import {
   MOVESLOTS,
   UNIFORM_TYPE_THREAT,
@@ -255,6 +255,33 @@ describe('threat pools', () => {
     // And it is saturated with the three types it is made of.
     expect(cup.grass).toBeGreaterThan(full.grass);
     expect(cup.water).toBeGreaterThan(full.water);
+  });
+
+  it('averages the team-scoring values to one, which is what keeps the denominators', () => {
+    // `evaluateTeamSynergy` divides by counts — `typeCount`, `teamSize * 2` —
+    // so a set of per-type values must average 1 or every synergy term silently
+    // shrinks and `COMPOSITE_BOUNDS` stops describing the range it measured.
+    // Max-normalizing, which is right for the per-bucket defensive score, is
+    // exactly wrong here.
+    const values = getTypeMatchupValues(catalog, {
+      regulation: getRegulation('M-B'), baseScore: 18
+    });
+    const total = (v: Readonly<Record<string, number>>) =>
+      TYPES.reduce((sum, type) => sum + v[type], 0);
+
+    expect(total(values.threat)).toBeCloseTo(TYPES.length, 8);
+    expect(total(values.presence)).toBeCloseTo(TYPES.length, 8);
+    // And the spread survives the rescale: this is a redistribution, not a wash.
+    expect(values.threat.fighting).toBeGreaterThan(1.5);
+    expect(values.threat.normal).toBeLessThan(0.5);
+  });
+
+  it('returns the identical values object for the same selection', () => {
+    // Same contract as the weights, and needed for the same reason: these are
+    // read once per bring option and a bring of four has fifteen of them.
+    const selection = { regulation: getRegulation('M-B'), baseScore: 18 };
+
+    expect(getTypeMatchupValues(catalog, selection)).toBe(getTypeMatchupValues(catalog, selection));
   });
 
   it('returns the identical weights object for the same selection', () => {

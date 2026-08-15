@@ -42,6 +42,7 @@
  */
 
 import { evaluateRoster, scoreBring, type RosterEvaluation, type RosterMember } from './rosterScoring';
+import type { TypeMatchupValues } from './teamCoverage';
 import { scoreMemberQuality } from './teamScoring';
 import { DEFAULT_BASE_SCORE } from './pokedexScoring';
 import { getAbilityEffect, getApplicableRoles, soloRoleValue } from './abilityRoles';
@@ -245,6 +246,8 @@ export interface GenerateRostersOptions {
   seed?: PokemonEntry[];
   /** Number of elemental types in play. */
   typeCount?: number;
+  /** What each type is worth in the metagame, for the synergy half of the score. */
+  typeValues?: TypeMatchupValues;
   /** Champions forbids duplicate Pokedex numbers, so this defaults to false. */
   allowDuplicateSpecies?: boolean;
   /**
@@ -701,7 +704,7 @@ function searchRosters(
 
   if (rosterSize <= 0 || seed.length > rosterSize) return [];
 
-  const scoringOptions = { format, typeCount };
+  const scoringOptions = { format, typeCount, typeValues: options.typeValues };
   const seedNames = new Set(seed.map((entry) => entry.name));
   const seedSpecies = new Set(seed.map((entry) => entry.speciesName));
 

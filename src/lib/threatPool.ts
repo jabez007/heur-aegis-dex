@@ -59,6 +59,7 @@
 import { COVERAGE_MOVE_POKEDEX } from './coverageMoves';
 import { measureDefenderCensus } from './defenderCensus';
 import type { DefenderCensus } from './defenderCensus';
+import type { TypeMatchupValues } from './teamCoverage';
 import { getTypeThreatWeights } from './typeThreat';
 import type { CatalogVarietyV1, PokemonCatalogV1 } from './pokemonCatalog';
 import type { Regulation } from './regulations';
@@ -81,6 +82,7 @@ const keyFor = (selection: ThreatPoolSelection): string => JSON.stringify([
 
 const cache = new WeakMap<PokemonCatalogV1, Map<string, TypeThreatWeights>>();
 const censusCache = new WeakMap<PokemonCatalogV1, Map<string, DefenderCensus>>();
+const valuesCache = new WeakMap<PokemonCatalogV1, Map<string, TypeMatchupValues>>();
 
 const rosters = new WeakMap<PokemonCatalogV1, ReadonlySet<string>>();
 
@@ -194,4 +196,70 @@ export function getDefenderCensus(
   bySelection.set(key, census);
   censusCache.set(catalog, bySelection);
   return census;
+}
+
+/**
+ * Mean-normalizes a per-type map so its values average 1 over the types in play.
+ *
+ * The team scorer's denominators are counts, so a set of weights averaging 1
+ * leaves every term's range exactly where `COMPOSITE_BOUNDS` measured it and
+ * changes only which types carry the value. Max-normalizing instead — as
+ * `toTypeThreatWeights` does, correctly, for the per-bucket defensive score —
+ * would shrink every synergy term at once and reproduce the compression bug
+ * `damageBounds.ts` exists to prevent.
+ *
+ * @param values Raw per-type measurements.
+ * @param typeNames Types in play, which set the denominator.
+ * @returns The same map scaled so those types average 1.
+ */
+const meanNormalize = (
+  values: Readonly<Record<string, number>>,
+  typeNames: readonly string[]
+): Record<string, number> => {
+  const total = typeNames.reduce((sum, name) => sum + (values[name] ?? 0), 0);
+  const mean = typeNames.length > 0 ? total / typeNames.length : 0;
+  if (mean <= 0) return Object.fromEntries(typeNames.map((name) => [name, 1]));
+  return Object.fromEntries(typeNames.map((name) => [name, (values[name] ?? 0) / mean]));
+};
+
+/**
+ * What each type is worth to a team in a metagame, for `analyzeTeamCoverage`.
+ *
+ * Both halves are re-readings of measurements this module already hands out:
+ * `threat` is `getThreatWeights` rescaled, and `presence` is how much of
+ * `getDefenderCensus` carries each type. Nothing new is measured here — the two
+ * directions are the ones argued in `typeThreat.ts` and `defenderCensus.ts`.
+ *
+ * @param catalog Verified catalog.
+ * @param selection Regulation and cup restricting the pool.
+ * @returns Stable, frozen values averaging 1 across the types in play.
+ */
+export function getTypeMatchupValues(
+  catalog: PokemonCatalogV1,
+  selection: ThreatPoolSelection
+): TypeMatchupValues {
+  const bySelection = valuesCache.get(catalog) ?? new Map<string, TypeMatchupValues>();
+  const key = keyFor(selection);
+  const cached = bySelection.get(key);
+  if (cached) return cached;
+
+  const typeNames = catalog.types
+    .filter((type) => type.id <= selection.baseScore)
+    .map((type) => type.name);
+  const census = getDefenderCensus(catalog, selection);
+  const presence: Record<string, number> = Object.fromEntries(typeNames.map((name) => [name, 0]));
+  census.entries.forEach(({ types, weight }) => {
+    types.forEach((name) => {
+      if (name in presence) presence[name] += weight;
+    });
+  });
+
+  const values: TypeMatchupValues = Object.freeze({
+    threat: Object.freeze(meanNormalize(getThreatWeights(catalog, selection), typeNames)),
+    presence: Object.freeze(meanNormalize(presence, typeNames))
+  });
+
+  bySelection.set(key, values);
+  valuesCache.set(catalog, bySelection);
+  return values;
 }

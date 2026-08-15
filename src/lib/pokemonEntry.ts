@@ -34,6 +34,7 @@ import type {
 import type { TypeThreatWeights } from './typeThreat';
 import { calculateDamageToScore } from './defenderCensus';
 import type { DefenderCensus } from './defenderCensus';
+import type { TypeMatchupValues } from './teamCoverage';
 import { getEffectiveStats, getStatAbilityName, totalStats } from './statAbilities';
 
 /**
@@ -66,6 +67,13 @@ export interface ThreatScoring {
    */
   readonly census?: DefenderCensus;
   readonly toBounds: DamageScoreBounds;
+  /**
+   * What each type is worth to a *team* in this metagame. Carried here rather
+   * than derived at each call site so the browser, the workbench and the roster
+   * generator all price a weakness the same way — the mismatch this bundle
+   * exists to prevent, one level up.
+   */
+  readonly typeValues?: TypeMatchupValues;
 }
 
 /** Reads a scan's own recorded ranges without re-scoring anything under them. */

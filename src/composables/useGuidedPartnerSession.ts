@@ -1,4 +1,5 @@
 import { computed, ref, toValue, watch, type MaybeRefOrGetter } from 'vue';
+import { useThreatScoring } from './useThreatScoring';
 import {
   BATTLE_FORMATS,
   DEFAULT_BATTLE_FORMAT,
@@ -64,15 +65,21 @@ export function useGuidedPartnerSession(candidatePool: MaybeRefOrGetter<readonly
     ? getGuidedRoster(plan.value).map(resolveChoice).filter((pokemon): pokemon is PokemonEntry => !!pokemon)
     : favorites.value
   );
+  // Undefined until the catalog loads; the rules fall back to counting types
+  // equally, which is what they did before these values existed.
+  const { scoring } = useThreatScoring();
   const format = computed(() => BATTLE_FORMATS[plan.value?.format.id ?? formatId.value]);
   const need = computed(() => plan.value
-    ? selectPrimaryGuidedNeed(roster.value, { format: format.value, typeNames: ELEMENTAL_TYPES })
+    ? selectPrimaryGuidedNeed(roster.value, {
+      format: format.value, typeNames: ELEMENTAL_TYPES, typeValues: scoring.value?.typeValues
+    })
     : null
   );
   const recommendations = computed(() => plan.value && need.value
     ? recommendGuidedPartners({
         format: format.value,
         typeNames: ELEMENTAL_TYPES,
+        typeValues: scoring.value?.typeValues,
         currentMembers: roster.value,
         candidatePool: pool.value
       })

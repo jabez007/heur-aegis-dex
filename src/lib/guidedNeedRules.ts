@@ -1,6 +1,6 @@
 import { analyzeTeamRoles, isImmuneToAllyMoves } from './abilityRoles';
 import type { BattleFormat } from './battleFormats';
-import { analyzeTeamCoverage, type TeamCoverageProfile } from './teamCoverage';
+import { analyzeTeamCoverage, type TeamCoverageProfile, type TypeMatchupValues } from './teamCoverage';
 import {
   getTeamSynergyBreakdown,
   type SynergyBonusTermId,
@@ -68,6 +68,13 @@ export interface GuidedCandidateNeedEvaluation {
 export interface GuidedNeedOptions {
   readonly format: BattleFormat;
   readonly typeNames: readonly string[];
+  /**
+   * What each type is worth in the metagame. Reaches the advice twice: the
+   * synergy breakdown prices each need by it, and the gap lists arrive ordered
+   * most-threatening-first, so the need named is the one worth fixing rather
+   * than whichever type happened to be found first.
+   */
+  readonly typeValues?: TypeMatchupValues;
 }
 
 interface GuidedLineContext {
@@ -104,7 +111,7 @@ function analyzeLine(members: readonly GuidedLineMember[], options: GuidedNeedOp
     ...member,
     immuneToAllyMoves: options.format.hasAlly && isImmuneToAllyMoves(member.abilityName)
   }));
-  const coverage = analyzeTeamCoverage(profiles);
+  const coverage = analyzeTeamCoverage(profiles, options.typeValues);
   const roles = analyzeTeamRoles(
     members.map(({ abilityName }) => ({ abilityName })),
     { hasAlly: options.format.hasAlly }

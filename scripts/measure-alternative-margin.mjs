@@ -63,6 +63,9 @@ import { flattenToPokemon } from '../src/lib/pokemonEntry.ts';
 import { getCatalogResistantTypes } from '../src/lib/pokemonCatalogScan.ts';
 import { candidatePriority, generateRosters } from '../src/lib/rosterGeneration.ts';
 import { evaluateRoster } from '../src/lib/rosterScoring.ts';
+import { getTypeMatchupValues } from '../src/lib/threatPool.ts';
+import { getRegulation } from '../src/lib/regulations.ts';
+import { DEFAULT_BASE_SCORE } from '../src/lib/pokedexScoring.ts';
 import {
   MINIMUM_ROSTER_REPLACEMENTS,
   ROSTER_PORTFOLIO_LIMIT,
@@ -91,6 +94,13 @@ const scan = await getCatalogResistantTypes(catalog, {
 });
 const full = flattenToPokemon(scan);
 process.stderr.write(`${REGULATION}: ${full.length} scan candidates\n`);
+
+// Measured under the weighting the app runs, for the reason COMPOSITE_BOUNDS
+// gives: a margin derived from a scoring formula nothing uses is a margin
+// nobody has checked.
+const typeValues = getTypeMatchupValues(catalog, {
+  regulation: getRegulation(REGULATION), baseScore: DEFAULT_BASE_SCORE
+});
 
 const percentile = (values, p) => {
   const sorted = [...values].sort((left, right) => left - right);
@@ -137,6 +147,7 @@ const supply = Object.fromEntries(MARGINS.map((margin) => [margin, []]));
 
 for (const scenario of scenarios) {
   const rosters = generateRosters({
+    typeValues,
     pokemon: scenario.pool,
     format: scenario.format,
     rosterSize: scenario.format.maxRosterSize,
@@ -162,7 +173,8 @@ for (const scenario of scenarios) {
     // A seeded member is locked and cannot be the one swapped out.
     if (scenario.seed.some((locked) => locked.name === member.name)) return;
     const swapped = best.members.map((entry, position) => (position === index ? nextBest : entry));
-    const cost = best.score - evaluateRoster(swapped, { format: scenario.format }).score;
+    const cost = best.score
+      - evaluateRoster(swapped, { format: scenario.format, typeValues }).score;
     if (cost > 0) memberWorth.push(cost);
   });
 }
