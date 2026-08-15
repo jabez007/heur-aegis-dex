@@ -236,11 +236,30 @@ export const OBSERVED_STAB_POWER = { min: 77, max: 120 } as const;
  * inside the range picked by measurement, which is the outcome worth having.
  * Taking the argmax instead would be fitting a constant to 91 data points.
  *
- * Two limits on how much that supports. The sample is one format (doubles), one
- * ladder, one fortnight, and 91 matched Pokemon; and the correlation it improves
- * is still weak in absolute terms — 0.271 is a better ranking, not a good one.
- * This raises the term from "reasoned" to "reasoned and not contradicted", which
- * is a lower bar than it sounds and still more than any other constant here has.
+ * Two limits on how much that supports. The sample is one ladder, one fortnight,
+ * and 91 matched Pokemon; and the correlation it improves is still weak in
+ * absolute terms — 0.271 is a better ranking, not a good one. This raises the
+ * term from "reasoned" to "reasoned and not contradicted", which is a lower bar
+ * than it sounds and still more than any other constant here has.
+ *
+ * ## Singles is unvalidated, and the reason is worth reading
+ *
+ * The measurement is doubles. No comparable singles dataset was reachable when
+ * this was written — the one public singles ranking is a six-voter community
+ * poll — so this constant is applied to singles on the strength of a doubles
+ * result.
+ *
+ * That transfers further than it sounds, and for an uncomfortable reason. The
+ * script measures the two formats' member rankings agreeing at **0.9994**, with
+ * a median rank move of zero, because `candidatePriority` separates them through
+ * exactly one flag: whether redirection and ally-protection roles count. So
+ * firepower provably is not doing something different in singles that nobody
+ * checked — but only because almost nothing here does anything different in
+ * singles. Real singles and doubles metagames share few of their strongest
+ * Pokemon, and a model that ranks them near-identically cannot be right about
+ * both. Format differentiation lives in `scoreTeamSynergy` and
+ * `COMPOSITE_BOUNDS`; at the member level there is essentially none, and that is
+ * a gap this constant inherits rather than creates.
  */
 export const FIREPOWER_MODULATION = 0.4;
 

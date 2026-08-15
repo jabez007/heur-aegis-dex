@@ -300,6 +300,40 @@ for (const depth of [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]) {
     `  ${vsWin >= 0 ? ' ' : ''}${vsWin.toFixed(3)}${mark(vsWin, matched.length)}`);
 }
 
+// ## How far does a doubles result carry to singles?
+//
+// Everything above is doubles, because no comparable singles dataset exists.
+// Checked 2026-08-15: showdowntier has no singles format (its `smb` is BSS
+// *doubles*), pokemon-zone and pokechamps refuse automated requests,
+// stratadex and munchstats are VGC-only, and the one singles ranking that is
+// reachable — rankedmeta — is a community poll of six voters, which is opinion
+// rather than data and would be worse than nothing dressed as validation.
+// pokesynergy states the position plainly on its own page: singles data arrives
+// "once a reliable Champions Singles source exists".
+//
+// So the question is how much of the doubles result transfers, and that has an
+// internal answer. `candidatePriority` differentiates the formats through
+// exactly one flag, `hasAlly`, which gates credit for redirection and
+// ally-protection roles. If the two orderings are nearly identical then the
+// firepower term cannot be doing something different in singles that went
+// unchecked — but by the same token the model is barely distinguishing the
+// formats at the member level, which is a finding in its own right and not a
+// reassuring one. Real singles and doubles metagames share few of their top
+// Pokemon.
+const doublesPriority = scored.map((row) => row.priority);
+const singlesPriority = pool.map((entry) => candidatePriority(entry, { hasAlly: false }));
+const dRanks = rank(doublesPriority);
+const sRanks = rank(singlesPriority);
+const formatMoves = dRanks.map((r, index) => Math.abs(r - sRanks[index])).sort((a, b) => a - b);
+console.log(`\n=== singles against doubles (model-internal; no singles data exists) ===`);
+console.log(`  ranking agreement:  ${spearman(doublesPriority, singlesPriority).toFixed(4)}`);
+console.log(`  median rank move:   ${formatMoves[Math.floor(formatMoves.length / 2)]} of ${pool.length}, max ${formatMoves[formatMoves.length - 1]}`);
+console.log(`  firepower vs doubles priority: ${spearman(scored.map((r) => r.stab), doublesPriority).toFixed(4)}`);
+console.log(`  firepower vs singles priority: ${spearman(scored.map((r) => r.stab), singlesPriority).toFixed(4)}`);
+console.log(`  → the term behaves the same in both, because the member ranking is`);
+console.log(`    very nearly the same in both. Format differentiation lives in`);
+console.log(`    scoreTeamSynergy and COMPOSITE_BOUNDS, not here.`);
+
 // ## Does the default view contain the metagame?
 //
 // A ranking can only be right about Pokemon it shows. This asks a question the
