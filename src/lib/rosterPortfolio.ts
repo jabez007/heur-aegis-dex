@@ -25,6 +25,7 @@
  * | 2026-08-15 | pool median           | 1.17 | **2.63** | 4.18 |
  * | 2026-08-15 | pool median           | 1.33 | **2.94** | 4.57 |
  * | 2026-08-15 | best off-roster       | 0.96 | **1.99** | 3.36 |
+ * | 2026-08-15 | best off-roster       | 1.01 | **2.05** | 4.00 |
  *
  * ## The counterfactual was wrong, and the drift is how it showed
  *
@@ -43,11 +44,16 @@
  * so one member is worth less, not more. The number is anchored to the part of
  * the pool the portfolio uses.
  *
+ * The last row is the regulation-aware offensive score, and the 0.06 it moved is
+ * the corrected counterfactual earning its keep: a scoring change that reorders
+ * the browser now moves this constant by a rounding error, where the old one
+ * walked 0.5 on a pool-size change that meant nothing at all.
+ *
  * ## Two checks, neither of them the derivation
  *
  * **Supply.** The margin has to admit enough candidates for `selectRosterPortfolio`
  * to find genuinely different rosters; too tight and the loop below falls back to
- * near-duplicates, which defeats the feature. At 1.99 it inherits the 1.75 row:
+ * near-duplicates, which defeats the feature. At 2.05 it inherits the 1.75 row:
  * at least 95% of scenarios offer two diverse options and at least 86% offer
  * three, against 83% and 60% at a margin of 1.
  *
@@ -67,13 +73,13 @@
  * maximum — but a derivation that walks through it is a derivation measuring
  * something other than what it claims. At 1.99 there is 0.80 of headroom against
  * the tighter of the two, restored to where it was when this constant was first
- * derived.
+ * derived — 0.74 at the current 2.05.
  *
  * Reasoned against a measurement rather than validated against how many
  * alternatives people actually pick — the standing of `MEMBER_WEIGHTS` and
  * `TYPE_MODULATION`. Rerun the script after anything that moves roster scores.
  */
-export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 1.99;
+export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.05;
 export const ROSTER_PORTFOLIO_LIMIT = 6;
 export const MINIMUM_ROSTER_REPLACEMENTS = 2;
 

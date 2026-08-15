@@ -36,10 +36,12 @@
  */
 
 import { createAbilityProfile, TYPING_ABILITIES } from './pokedexAbilities';
-import { damageFromScoreBounds } from './pokedexScoring';
+import { damageFromScoreBounds, damageToScoreBounds } from './pokedexScoring';
 import { buildDualTypes } from './resistantTypeScan';
 import { isUniformTypeThreat } from './typeThreat';
+import { calculateDamageToScore, censusTypings } from './defenderCensus';
 import type { DamageScoreBounds } from './pokedexScoring';
+import type { DefenderCensus } from './defenderCensus';
 import type { PokemonTypeData } from './pokedexTypes';
 import type { TypeThreatWeights } from './typeThreat';
 
@@ -106,5 +108,47 @@ export function measureDamageFromBounds(
 
   byBaseScore.set(baseScore, bounds);
   cache.set(weights, byBaseScore);
+  return bounds;
+}
+
+/** As above, for the offensive side. Keyed on census identity for the same reason. */
+const toCache = new WeakMap<DefenderCensus, Map<number, DamageScoreBounds>>();
+
+/**
+ * Derives the extremes of `calculateDamageToScore` under a census.
+ *
+ * No ability cross product here, unlike the defensive bounds. Every ability the
+ * model prices changes what a Pokemon *takes*; none changes what it deals, so
+ * `pokedexAbilities` recomputing the offensive score after applying one always
+ * lands on the number it started with. The 171 typings are the whole space.
+ *
+ * @param census Field the scores are measured against.
+ * @param baseScore Baseline the scores are calculated with.
+ * @returns The minimum and maximum offensive score a typing reaches, which for
+ *   the chart census is `damageToScoreBounds(baseScore)`.
+ */
+export function measureDamageToBounds(
+  census: DefenderCensus,
+  baseScore: number
+): DamageScoreBounds {
+  // Same argument as above: the chart census has a published measurement with a
+  // date on it, and recomputing it here would give one number two sources.
+  if (census.isChart) return damageToScoreBounds(baseScore);
+
+  const byBaseScore = toCache.get(census) ?? new Map<number, DamageScoreBounds>();
+  const cached = byBaseScore.get(baseScore);
+  if (cached) return cached;
+
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  censusTypings(census.chart).forEach((typing) => {
+    const score = calculateDamageToScore(typing, census, baseScore);
+    if (score < min) min = score;
+    if (score > max) max = score;
+  });
+
+  const bounds: DamageScoreBounds = min <= max ? { min, max } : damageToScoreBounds(baseScore);
+  byBaseScore.set(baseScore, bounds);
+  toCache.set(census, byBaseScore);
   return bounds;
 }

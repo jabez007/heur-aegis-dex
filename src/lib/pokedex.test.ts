@@ -12,7 +12,7 @@ import {
   enrichCatalogVariety,
   getCatalogResistantTypes
 } from './pokemonCatalogScan';
-import { damageFromScoreBounds } from './pokedexScoring';
+import { damageFromScoreBounds, damageToScoreBounds } from './pokedexScoring';
 import { isResistantTypeResultList } from './pokedexTypes';
 import { UNIFORM_TYPE_THREAT } from './typeThreat';
 import { COVERAGE_MOVE_POKEDEX } from './coverageMoves';
@@ -538,8 +538,18 @@ describe('pokedex.js API integration logic', () => {
     // base score(18) + double_from(3) - 0.5 * half_from(3) - no_from(0) = 19.5
     expect(fireType.damage_relations.damage_from_score).toBe(19.5);
     
-    // base score(18) + double_to(2) - 0.5 * half_to(3) - no_to(0) = 18.5
-    expect(fireType.damage_relations.damage_to_score).toBe(18.5);
+    // The offensive score no longer reads the `*_damage_to` buckets at all. It
+    // scores against a census of defenders, and resolves each matchup from the
+    // defender's `*_damage_from` — the same side of the chart the defensive
+    // score reads, so a typing's two scores can no longer disagree about what
+    // beats what. This mock is where that shows: its four types are the whole
+    // field, and its Fire entry lists `double_damage_to: [grass, bug]` while its
+    // Steel entry lists `double_damage_from: [fire, ...]`. Fire beats Steel by
+    // one direction of the fixture and not the other, and the old formula could
+    // only see the direction that was wrong.
+    //
+    // 18 + fire(-0.5) + water(-0.5) + bug(+1) + steel(+1) = 19
+    expect(fireType.damage_relations.damage_to_score).toBe(19);
   });
 
   it('getDualTypes should combine damage relations for dual typing', async () => {
@@ -597,6 +607,7 @@ describe('pokedex.js API integration logic', () => {
         // weighting both paths default to rather than a measured one.
         threatWeights: UNIFORM_TYPE_THREAT,
         damageFromBounds: damageFromScoreBounds(18),
+        damageToBounds: damageToScoreBounds(18),
         inPokedex: 'national',
         allowMegas: false,
         includeAbilityImmunities: true,

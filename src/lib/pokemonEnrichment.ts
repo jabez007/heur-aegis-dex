@@ -68,6 +68,8 @@ export interface PokemonEnrichmentOptions {
    * and every entry in a scan shares one.
    */
   readonly damageFromBounds: DamageScoreBounds;
+  /** Extremes the offensive score reaches under the census the scan ran with. */
+  readonly damageToBounds: DamageScoreBounds;
   readonly inPokedex: string;
   readonly allowMegas: boolean;
   readonly includeAbilityImmunities: boolean;
@@ -95,13 +97,14 @@ export interface PokemonEnrichmentOptions {
 export function chooseDefaultAbility<T extends AbilityProfile & { stats: PokemonStats }>(
   profiles: T[],
   baseScore: number,
-  bounds?: DamageScoreBounds
+  bounds?: DamageScoreBounds,
+  toBounds?: DamageScoreBounds
 ): T {
   const supportBonus = CANDIDATE_WEIGHTS.supportRole / CANDIDATE_WEIGHTS.quality;
   const score = (profile: T) =>
     scoreMemberQuality({
       stats: profile.stats,
-      normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, baseScore),
+      normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, baseScore, toBounds),
       normalizedDamageFromScore: normalizeDamageFromScore(
         profile.damage_from_score, baseScore, bounds
       ),
@@ -202,7 +205,7 @@ export function enrichPokemon(
   if (!clearsStatFloors) return null;
 
   const selectedProfile = chooseDefaultAbility(
-    profilesWithStats, options.baseScore, options.damageFromBounds
+    profilesWithStats, options.baseScore, options.damageFromBounds, options.damageToBounds
   );
   entry.ability_profiles = Object.fromEntries(
     profilesWithStats.map((profile) => [profile.ability_name || '', profile])

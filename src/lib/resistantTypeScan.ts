@@ -3,14 +3,16 @@ import { collapseIndistinctVarieties } from './pokemonEntry';
 import {
   DEFAULT_BASE_SCORE,
   calculateDamageFromScore,
-  calculateDamageToScore,
   cloneDamageRelations,
   createTypeSummary,
   damageFromScoreBounds,
+  damageToScoreBounds,
   filterUniqueBy
 } from './pokedexScoring';
 import { getRegulation } from './regulations';
 import { UNIFORM_TYPE_THREAT } from './typeThreat';
+import { calculateDamageToScore, chartCensus, chartFromTypeData } from './defenderCensus';
+import type { DefenderCensus } from './defenderCensus';
 import type { OffensiveTypeChart } from './coverageMoves';
 import type { DamageScoreBounds } from './pokedexScoring';
 import type { PokemonEnrichmentOptions } from './pokemonEnrichment';
@@ -91,6 +93,11 @@ export interface ResolvedResistantTypeScanOptions {
   readonly weightByThreat: boolean;
   /** Resolved regulation, kept so the source can build the threat pool from it. */
   readonly regulation?: Regulation;
+  /**
+   * Field the offensive score is measured against. Absent before the source has
+   * measured a pool, at which point `applyThreatWeights` folds one in.
+   */
+  readonly census?: DefenderCensus;
   readonly enrichment: PokemonEnrichmentOptions;
 }
 
@@ -139,6 +146,7 @@ export function resolveResistantTypeScanOptions(
       baseScore,
       threatWeights: UNIFORM_TYPE_THREAT,
       damageFromBounds: damageFromScoreBounds(baseScore),
+      damageToBounds: damageToScoreBounds(baseScore),
       inPokedex: pokemonFilters.inPokedex,
       allowMegas: pokemonFilters.allowMegas,
       includeAbilityImmunities: pokemonFilters.includeAbilityImmunities,
@@ -164,17 +172,27 @@ export function resolveResistantTypeScanOptions(
  * @param options Already-resolved scan options.
  * @param weights Threat weights measured over the scan's own pool.
  * @param bounds Extremes the weighted score reaches, from `damageBounds.ts`.
- * @returns Options scoring with those weights.
+ * @param census Field the same pool presents to an attacker.
+ * @param toBounds Extremes the offensive score reaches under that census.
+ * @returns Options scoring with those weights and that census.
  */
 export function applyThreatWeights(
   options: ResolvedResistantTypeScanOptions,
   weights: TypeThreatWeights,
-  bounds: DamageScoreBounds
+  bounds: DamageScoreBounds,
+  census: DefenderCensus,
+  toBounds: DamageScoreBounds
 ): ResolvedResistantTypeScanOptions {
   if (!options.weightByThreat) return options;
   return {
     ...options,
-    enrichment: { ...options.enrichment, threatWeights: weights, damageFromBounds: bounds }
+    census,
+    enrichment: {
+      ...options.enrichment,
+      threatWeights: weights,
+      damageFromBounds: bounds,
+      damageToBounds: toBounds
+    }
   };
 }
 
@@ -240,7 +258,8 @@ const clonePokemonEntry = (entry: PokemonListEntry): PokemonListEntry => {
 export function buildDualTypes(
   baseTypes: readonly PokemonTypeData[],
   baseScore: number,
-  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT,
+  census: DefenderCensus = chartCensus(chartFromTypeData(baseTypes))
 ): PokemonTypeData[] {
   return pairCombinations(baseTypes).map(([first, second]) => {
     const dr0 = first.damage_relations;
@@ -294,10 +313,8 @@ export function buildDualTypes(
       baseScore,
       weights
     );
-    dualType.damage_relations.damage_to_score = calculateDamageToScore(
-      dualType.damage_relations,
-      baseScore
-    );
+    dualType.damage_relations.damage_to_score =
+      calculateDamageToScore([first.name, second.name], census, baseScore);
     return dualType;
   });
 }
@@ -323,7 +340,7 @@ export async function runResistantTypeScan(
   source: ResistantTypeScanSource
 ): Promise<ResistantTypeResult[]> {
   const allTypes = baseTypes.concat(
-    buildDualTypes(baseTypes, options.baseScore, options.enrichment.threatWeights)
+    buildDualTypes(baseTypes, options.baseScore, options.enrichment.threatWeights, options.census)
   );
   const offensiveChart = buildOffensiveTypeChart(baseTypes);
   await source.prepare?.(allTypes);
@@ -341,6 +358,7 @@ export async function runResistantTypeScan(
         name: type.name,
         include_ability_immunities: options.enrichment.includeAbilityImmunities,
         damage_from_bounds: options.enrichment.damageFromBounds,
+        damage_to_bounds: options.enrichment.damageToBounds,
         ...createTypeSummary(type.damage_relations),
         pokemon
       } satisfies ResistantTypeResult;

@@ -19,8 +19,8 @@
 
 import { chooseDefaultAbility, getBaseTypes, getDualTypes } from '../src/lib/pokedex.ts';
 import { loadPokemonCatalog } from '../src/lib/pokemonCatalogLoader.ts';
-import { measureDamageFromBounds } from '../src/lib/damageBounds.ts';
-import { getThreatWeights } from '../src/lib/threatPool.ts';
+import { measureDamageFromBounds, measureDamageToBounds } from '../src/lib/damageBounds.ts';
+import { getDefenderCensus, getThreatWeights } from '../src/lib/threatPool.ts';
 import { applyAbilityModifiers } from '../src/lib/pokedexAbilities.ts';
 import { buildOffensiveTypeChart, getMoveCoverage } from '../src/lib/coverageMoves.ts';
 import { getEffectiveStats } from '../src/lib/statAbilities.ts';
@@ -53,6 +53,14 @@ process.stderr.write(`regulation ${regulation.id}: ${species.length} legal speci
 const catalog = await loadPokemonCatalog();
 const weights = getThreatWeights(catalog, { regulation, baseScore: BASE });
 const fromBounds = measureDamageFromBounds(await getBaseTypes(BASE), BASE, weights);
+// Same reason, other axis: the offensive score is now measured against the
+// field the regulation actually fields, so bounding it against the chart census
+// would bound a formula nothing runs.
+const census = getDefenderCensus(catalog, { regulation, baseScore: BASE });
+const toBounds = measureDamageToBounds(census, BASE);
+process.stderr.write(
+  `census-weighted damage-to bounds: ${toBounds.min.toFixed(4)}..${toBounds.max.toFixed(4)}\n`
+);
 process.stderr.write(
   `threat-weighted damage-from bounds: ${fromBounds.min.toFixed(4)}..${fromBounds.max.toFixed(4)}\n`
 );
@@ -126,7 +134,7 @@ for (const [index, name] of species.entries()) {
     immunities: profile.immunities ?? [],
     coverages: profile.coverages ?? [],
     moveCoverages: getMoveCoverage(name, chart, profile.stats),
-    normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, BASE),
+    normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, BASE, toBounds),
     normalizedDamageFromScore: normalizeDamageFromScore(
       profile.damage_from_score, BASE, fromBounds
     )

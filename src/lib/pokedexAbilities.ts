@@ -2,7 +2,6 @@ import type { DamageRelations, DamageResidual, NamedResource } from './pokedexTy
 import {
   calculateDamageFromResidual,
   calculateDamageFromScore,
-  calculateDamageToScore,
   cloneDamageRelations,
   createTypeSummary
 } from './pokedexScoring';
@@ -93,7 +92,7 @@ const ABILITY_DAMAGE_TAKEN: Record<string, DamageTakenRule> = {
  * bucket shuffle, and it is why Solid Rock's 0.75x can be modelled at all: it
  * lands between buckets, and the residual below carries it exactly.
  *
- * **0x is the exception**: it scores `IMMUNITY_VALUE`, currently -4 rather than
+ * **0x is the exception**: it scores `IMMUNITY_VALUE`, currently -2 rather than
  * the -1 the identity would give, because an immunity is a threshold and not a
  * quantity of damage. The exception is safe precisely here, and the reason is
  * worth stating rather than trusting. A reduction rule multiplies an existing
@@ -241,7 +240,11 @@ const buildDamageRelations = (
   nextDamageRelations.damage_from_score =
     calculateDamageFromScore(nextDamageRelations, baseScore, weights)
     + calculateDamageFromResidual(nextDamageRelations, weights);
-  nextDamageRelations.damage_to_score = calculateDamageToScore(nextDamageRelations, baseScore);
+  // `damage_to_score` is carried through, not recomputed. Every ability the
+  // model prices changes what a Pokemon takes and none changes what it deals,
+  // so the recompute that used to sit here always reproduced its own input —
+  // which only became visible when the offensive score started needing the
+  // attacker's types and the field, neither of which an ability rule has.
   return nextDamageRelations;
 };
 

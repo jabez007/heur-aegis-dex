@@ -31,8 +31,12 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * effect on a scan under a regulation, where the two already agree; an
  * unregulated scan was weighting against 817 species that have no movepool
  * because they are not in the game, and its cached scores are not recoverable.
+ *
+ * 9: `damage_to_score` is measured against the typings the regulation fields
+ * rather than counted off the chart, so every cached offensive score predates a
+ * different formula and a different range.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 8 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 9 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [

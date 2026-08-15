@@ -93,6 +93,11 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
     // is corrected. It was rising at every prior step — 0.186 to 0.137 to 0.341
     // to 0.220 normalized — on weights that were understating what it is weak
     // to.
+    //
+    // Making the offensive score regulation-aware moved nothing here, which is
+    // worth recording because it is not obvious: Steel/Dragon is a poor
+    // attacking pair against M-B and the census says so, but every candidate on
+    // this list lost offensive credit and the order between them survived it.
     expect(first.map(({ varietyName }) => varietyName)).toEqual([
       'archaludon',
       'dragapult',

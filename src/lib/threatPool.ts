@@ -57,6 +57,8 @@
  */
 
 import { COVERAGE_MOVE_POKEDEX } from './coverageMoves';
+import { measureDefenderCensus } from './defenderCensus';
+import type { DefenderCensus } from './defenderCensus';
 import { getTypeThreatWeights } from './typeThreat';
 import type { CatalogVarietyV1, PokemonCatalogV1 } from './pokemonCatalog';
 import type { Regulation } from './regulations';
@@ -78,6 +80,7 @@ const keyFor = (selection: ThreatPoolSelection): string => JSON.stringify([
 ]);
 
 const cache = new WeakMap<PokemonCatalogV1, Map<string, TypeThreatWeights>>();
+const censusCache = new WeakMap<PokemonCatalogV1, Map<string, DefenderCensus>>();
 
 const rosters = new WeakMap<PokemonCatalogV1, ReadonlySet<string>>();
 
@@ -158,4 +161,37 @@ export function getThreatWeights(
   bySelection.set(key, weights);
   cache.set(catalog, bySelection);
   return weights;
+}
+
+/**
+ * The field a metagame presents to an attacker, memoized per catalog and
+ * selection.
+ *
+ * Memoized on the same key as the weights, and for the same second reason:
+ * `damageBounds.ts` keys the offensive bounds on census identity, so a fresh
+ * equal object each call would re-derive 171 typings per entry scored.
+ *
+ * @param catalog Verified catalog.
+ * @param selection Regulation and cup restricting the pool.
+ * @returns A stable census over the pool's distinct typings.
+ */
+export function getDefenderCensus(
+  catalog: PokemonCatalogV1,
+  selection: ThreatPoolSelection
+): DefenderCensus {
+  const bySelection = censusCache.get(catalog) ?? new Map<string, DefenderCensus>();
+  const key = keyFor(selection);
+  const cached = bySelection.get(key);
+  if (cached) return cached;
+
+  const chart = Object.fromEntries(catalog.types
+    .filter((type) => type.id <= selection.baseScore)
+    .map((type) => [type.name, type.damageRelations]));
+  const census = measureDefenderCensus(
+    getThreatPool(catalog, selection), chart, selection.baseScore
+  );
+
+  bySelection.set(key, census);
+  censusCache.set(catalog, bySelection);
+  return census;
 }

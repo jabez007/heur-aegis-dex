@@ -151,12 +151,14 @@ export const calculateDamageFromScore = (
     + weighted(dr.no_damage_from, IMMUNITY_VALUE);
 };
 
-export const calculateDamageToScore = (dr: DamageRelations, baseScore: number): number => {
-  return baseScore
-    + dr.double_damage_to.length
-    - (0.5 * dr.half_damage_to.length)
-    - dr.no_damage_to.length;
-};
+// `calculateDamageToScore` moved to `defenderCensus.ts`, where the field it
+// scores against is defined. It used to read the merged `double_damage_to` /
+// `half_damage_to` / `no_damage_to` buckets off a typing's damage relations,
+// and it had to move because those buckets cannot answer the question: they
+// record that *some* type of a Ground/Ice attacker hits Steel for double and
+// that some type hits Flying for double, and cannot recover that neither hits
+// Steel/Flying for anything. Scoring against real typings needs the attacker's
+// own types and the chart, not a per-defending-type summary of them.
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
@@ -233,6 +235,18 @@ const MEASURED_AT_BASE_SCORE = 18;
  * checked. Values outside the bounds clamp, as they do for `STAT_CEILINGS`.
  */
 const OBSERVED_DAMAGE_FROM = { min: 8.25, max: 26 } as const;
+
+/**
+ * The offensive range against the chart census, which is a field of one
+ * pure-typed Pokemon per type — see `defenderCensus.ts`.
+ *
+ * Still the authority for that census and no longer the default any real scan
+ * uses. Measured against the typings Regulation M-B actually fields, the range
+ * is 14.67..29.73, because a field of pure single types can never produce a 4x
+ * or a 0.25x matchup and so understates both ends. `measureDamageToBounds`
+ * derives that at runtime and short-circuits to these numbers for the chart
+ * census, exactly as `measureDamageFromBounds` does for uniform weights.
+ */
 const OBSERVED_DAMAGE_TO = { min: 16, max: 27 } as const;
 
 /**
@@ -322,11 +336,19 @@ export const normalizeDamageFromScore = (
  *
  * @param score Raw offensive score, or undefined when unavailable.
  * @param baseScore Baseline the score was calculated with.
+ * @param bounds Extremes to normalize against. Required whenever the score was
+ *   calculated against a measured census, since the chart census no longer
+ *   describes the range — the same requirement, for the same reason, that
+ *   `normalizeDamageFromScore` carries above.
  * @returns A value in 0..1, or 0.5 when the score is unknown.
  */
-export const normalizeDamageToScore = (score: number | undefined, baseScore: number): number => {
+export const normalizeDamageToScore = (
+  score: number | undefined,
+  baseScore: number,
+  bounds: DamageScoreBounds = damageToScoreBounds(baseScore)
+): number => {
   if (score === undefined) return 0.5;
-  const { min, max } = damageToScoreBounds(baseScore);
+  const { min, max } = bounds;
   return max === min ? 0.5 : clamp01((score - min) / (max - min));
 };
 

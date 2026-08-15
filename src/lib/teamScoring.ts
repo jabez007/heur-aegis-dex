@@ -492,6 +492,25 @@ export const COMPOSITE_WEIGHTS = {
  * 0.1368..0.6330 to 0.1365..0.6331 — which is the expected shape: the typing
  * term is one modulated input among three stats.
  *
+ * ## Re-measured for the regulation-aware offensive score
+ *
+ * `defenderCensus.ts` replaced the chart count with a measurement against the
+ * typings a regulation actually fields, which widens the raw offensive range
+ * from 16..27 to **14.67..29.73** — real dual defenders produce the 4x and 0.25x
+ * matchups a census of pure single types never reaches.
+ *
+ * The quality *ceiling* falls in both formats, doubles 0.6225 to 0.6155 and
+ * singles 0.6331 to 0.6264, and the floors barely move. That is the shape to
+ * expect: the wider denominator means only the genuinely best offensive typing
+ * still normalizes to 1, where the chart count had eight typings tied at its
+ * maximum of 27 and several more within half a point. Ground/Ice keeps the top
+ * — against M-B it is resisted by one legal species, Araquanid — and everything
+ * that used to tie with it now sits below.
+ *
+ * Both synergy maxima unchanged again, now for the fifth consecutive rerun.
+ *
+ * ## Re-measured for `monochromeOffense`
+ *
  * Both synergy maxima are unchanged again, for the same reason as the last two
  * reruns and with the same caveat. Doubles sampled 0.7770 against the recorded
  * 0.8124 and keeps it under the widen-only rule; singles hit 0.8189 exactly for
@@ -524,11 +543,11 @@ export const COMPOSITE_WEIGHTS = {
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.1556, max: 0.6225 },
+    quality: { min: 0.1557, max: 0.6155 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1365, max: 0.6331 },
+    quality: { min: 0.1367, max: 0.6264 },
     synergy: { min: -1, max: 0.8189 }
   }
 } as const;

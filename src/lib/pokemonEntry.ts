@@ -32,6 +32,8 @@ import type {
   TeamTypeData
 } from './pokedexTypes';
 import type { TypeThreatWeights } from './typeThreat';
+import { calculateDamageToScore } from './defenderCensus';
+import type { DefenderCensus } from './defenderCensus';
 import { getEffectiveStats, getStatAbilityName, totalStats } from './statAbilities';
 
 /**
@@ -56,12 +58,44 @@ export interface ThreatScoring {
    */
   readonly weights?: TypeThreatWeights;
   readonly bounds: DamageScoreBounds;
+  /**
+   * Field to re-score the offensive side against, and the range it reaches.
+   * Same contract as `weights` and `bounds`: absent keeps the scan's own score,
+   * and a census present without its bounds would normalize one measurement
+   * against another's range.
+   */
+  readonly census?: DefenderCensus;
+  readonly toBounds: DamageScoreBounds;
 }
 
-/** Reads a scan's own recorded range without re-scoring anything under it. */
+/** Reads a scan's own recorded ranges without re-scoring anything under them. */
 const asStoredScoring = (
-  bounds: DamageScoreBounds | undefined
-): ThreatScoring | undefined => (bounds ? { bounds } : undefined);
+  bounds: DamageScoreBounds | undefined,
+  toBounds: DamageScoreBounds | undefined
+): ThreatScoring | undefined => (bounds && toBounds ? { bounds, toBounds } : undefined);
+
+/**
+ * Re-derives an offensive score under a census, falling back to the stored one.
+ *
+ * Takes the attacker's types rather than its damage relations, because the
+ * merged `damage_to` buckets cannot resolve a dual defender — see
+ * `defenderCensus.ts`.
+ *
+ * @param types The attacker's own elemental types.
+ * @param stored Score the scan recorded, used when no census is supplied.
+ * @param baseScore Baseline the score is calculated with.
+ * @param scoring Census to score against, or undefined to keep the stored score.
+ * @returns The raw offensive score to normalize.
+ */
+const rescoreDamageTo = (
+  types: readonly string[] | undefined,
+  stored: number | undefined,
+  baseScore: number,
+  scoring: ThreatScoring | undefined
+): number | undefined => {
+  if (!scoring?.census || !types || types.length === 0) return stored;
+  return calculateDamageToScore(types, scoring.census, baseScore);
+};
 
 /**
  * Re-derives a defensive score under a weighting, falling back to the stored one.
@@ -205,6 +239,10 @@ export function toPokemonEntry(
   if (!entry?.pokemon?.name || !entry.stats) return null;
 
   const profile = getPokemonAbilityProfile(entry);
+  // Prefer the Pokemon's own types; fall back to splitting the grouping name for
+  // entries the scan never enriched. Hoisted because the offensive score is now
+  // computed from them rather than from a damage-relations summary.
+  const types = entry.types?.map((slot) => slot.type.name) ?? typeName.split('/');
   // The selected ability's own stat line where the scan recorded one, since
   // Huge Power and its kin change the numbers as well as the resistances.
   const stats = profile?.stats ?? entry.stats;
@@ -218,7 +256,7 @@ export function toPokemonEntry(
     typeName,
     // Prefer the Pokemon's own types; fall back to splitting the grouping name
     // for entries the scan never enriched.
-    types: entry.types?.map((slot) => slot.type.name) ?? typeName.split('/'),
+    types,
     sprite: entry.sprite || '',
     battleFormName: entry.battle_form_name,
     stats: stats ?? EMPTY_STATS,
@@ -242,7 +280,11 @@ export function toPokemonEntry(
     moveCoverages: profile?.move_coverages ?? entry.effective_move_coverages ?? [],
     scoring,
     normalizedDamageToScore: normalizeDamageToScore(
-      profile?.damage_to_score ?? entry.effective_damage_to_score, baseScore
+      rescoreDamageTo(
+        types, profile?.damage_to_score ?? entry.effective_damage_to_score, baseScore, scoring
+      ),
+      baseScore,
+      scoring?.toBounds
     ),
     normalizedDamageFromScore: normalizeDamageFromScore(
       rescoreDamageFrom(
@@ -349,7 +391,10 @@ export function flattenToPokemon(
     // range its scores were computed to occupy, and normalizing them against the
     // unweighted constants instead would silently compress the whole defensive
     // term. An explicit `scoring` replaces both halves together.
-    const resolved = scoring ?? asStoredScoring((typeData as TeamTypeData).damage_from_bounds);
+    const resolved = scoring ?? asStoredScoring(
+      (typeData as TeamTypeData).damage_from_bounds,
+      (typeData as TeamTypeData).damage_to_bounds
+    );
 
     (typeData.pokemon || []).forEach((entry) => {
       const pokemon = toPokemonEntry(entry, typeData.name, baseScore, resolved);
@@ -409,7 +454,14 @@ export function withAbility(
     resistances: profile.resistances ?? entry.resistances,
     immunities: profile.immunities ?? entry.immunities,
     coverages: profile.coverages ?? entry.coverages,
-    normalizedDamageToScore: normalizeDamageToScore(profile.damage_to_score, baseScore),
+    // An ability never changes what a Pokemon deals, so this re-derives against
+    // the census for the same reason `toPokemonEntry` does — a cup — and not
+    // because the ability moved it.
+    normalizedDamageToScore: normalizeDamageToScore(
+      rescoreDamageTo(entry.types, profile.damage_to_score, baseScore, scoring),
+      baseScore,
+      scoring?.toBounds
+    ),
     normalizedDamageFromScore: normalizeDamageFromScore(
       rescoreDamageFrom(profile.damage_relations, profile.damage_from_score, baseScore, scoring),
       baseScore,

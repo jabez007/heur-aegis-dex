@@ -59,6 +59,8 @@ export interface TeamTypeData {
    * unweighted results, where the published constants apply.
    */
   damage_from_bounds?: { min: number; max: number };
+  /** As above, for the offensive score under the census the scan measured. */
+  damage_to_bounds?: { min: number; max: number };
   weaknesses: string[];
   quadruple_weaknesses?: string[];
   resistances: string[];

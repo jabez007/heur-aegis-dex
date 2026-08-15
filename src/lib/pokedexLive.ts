@@ -3,9 +3,9 @@ import { getMergedBattleForm, sharesTyping } from './battleForms';
 import { enrichPokemon } from './pokemonEnrichment';
 import {
   DEFAULT_BASE_SCORE,
-  calculateDamageFromScore,
-  calculateDamageToScore
+  calculateDamageFromScore
 } from './pokedexScoring';
+import { calculateDamageToScore, chartCensus, chartFromTypeData } from './defenderCensus';
 import {
   buildDualTypes,
   resolveResistantTypeScanOptions,
@@ -238,13 +238,16 @@ export async function getBaseTypes(baseScore: number = BASESCORE): Promise<Pokem
       .map((type: NamedResource) => pokedex.getResource(`/api/v2/type/${type.name}/`))
   );
 
-  return types
-    .filter(t => (t.id || 0) <= baseScore)
-    .map(t => {
-      t.damage_relations.damage_from_score = calculateDamageFromScore(t.damage_relations, baseScore);
-      t.damage_relations.damage_to_score = calculateDamageToScore(t.damage_relations, baseScore);
-      return t;
-    });
+  const inPlay = types.filter(t => (t.id || 0) <= baseScore);
+  // The live path cannot measure a pool before fetching one, so it scores
+  // against the chart census — the field the old formula always assumed.
+  const census = chartCensus(chartFromTypeData(inPlay));
+
+  return inPlay.map(t => {
+    t.damage_relations.damage_from_score = calculateDamageFromScore(t.damage_relations, baseScore);
+    t.damage_relations.damage_to_score = calculateDamageToScore([t.name], census, baseScore);
+    return t;
+  });
 }
 
 /**

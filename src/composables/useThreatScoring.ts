@@ -1,10 +1,10 @@
 import { computed, shallowRef } from 'vue';
-import { measureDamageFromBounds } from '../lib/damageBounds';
+import { measureDamageFromBounds, measureDamageToBounds } from '../lib/damageBounds';
 import { DEFAULT_BASE_SCORE } from '../lib/pokedexScoring';
 import { getCatalogBaseTypes } from '../lib/pokemonCatalogScan';
 import { loadPokemonCatalog } from '../lib/pokemonCatalogLoader';
 import { getRegulation } from '../lib/regulations';
-import { getThreatWeights } from '../lib/threatPool';
+import { getDefenderCensus, getThreatWeights } from '../lib/threatPool';
 import { ALL_TYPES, useMetaFilters } from './useMetaFilters';
 import { useWorkspaceState } from './useWorkspaceState';
 import type { ThreatScoring } from '../lib/pokemonEntry';
@@ -75,8 +75,16 @@ export function useThreatScoring() {
       baseScore: DEFAULT_BASE_SCORE
     });
 
+    const census = getDefenderCensus(catalog.value, {
+      regulation: getRegulation(regulation.value),
+      cupTypes,
+      baseScore: DEFAULT_BASE_SCORE
+    });
+
     return {
       weights,
+      census,
+      toBounds: measureDamageToBounds(census, DEFAULT_BASE_SCORE),
       bounds: measureDamageFromBounds(baseTypesFor(catalog.value), DEFAULT_BASE_SCORE, weights)
     };
   });
