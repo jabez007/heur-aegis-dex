@@ -34,6 +34,46 @@ const oldFormula = (typing: readonly string[]): number => {
 };
 
 describe('defenderCensus', () => {
+  it('lets a defensive immunity cancel a super-effective attacking type', () => {
+    // The case that motivates taking a product across the defender's types
+    // rather than a maximum over them. Fighting is super effective on Normal, so
+    // a lone Normal takes 2x — but Normal/Ghost takes *nothing*, because the
+    // Ghost half is immune and an immunity anywhere in the pair zeroes the whole
+    // matchup. A model that read "is any of the defender's types weak to this"
+    // would report 2x for both and describe an attack that cannot be made.
+    expect(bestMultiplier(chart, ['fighting'], ['normal'])).toBe(2);
+    expect(bestMultiplier(chart, ['fighting'], ['normal', 'ghost'])).toBe(0);
+
+    // And the attacker's *other* STAB is what rescues it, which is why this is a
+    // maximum over attacking types and a product over defending ones.
+    expect(bestMultiplier(chart, ['fighting', 'dark'], ['normal', 'ghost'])).toBe(2);
+
+    // The immunity has to reach the score, not just the multiplier.
+    expect(damageToCoefficient(bestMultiplier(chart, ['fighting'], ['normal', 'ghost']))).toBe(-1);
+  });
+
+  it('scores STAB rather than everything a Pokemon could learn', () => {
+    // `damage_to_score` deliberately reads only the attacker's own types, and
+    // `coverageMoves.ts` argues why. The argument is now measured: scored
+    // against 166,311 ladder battles by `npm run measure:usage-correlation`,
+    // STAB-only correlates 0.131 with usage and 0.195 with win rate, while
+    // folding the coverage-move types in gives 0.036 and -0.016.
+    //
+    // The mechanism is visible here. Movepools are wide enough that the coverage
+    // types almost always contain the Pokemon's own types, so the two variants
+    // produce the *same* score and the measure stops being "what does this
+    // threaten" and becomes "how many types can it learn a move for". That is
+    // the defect `fec56d8` removed for Normal, one level up.
+    const garchomp = ['ground', 'dragon'];
+    const everything = Object.keys(chart);
+    expect(calculateDamageToScore(garchomp, census, BASE))
+      .toBeLessThan(calculateDamageToScore(everything, census, BASE));
+
+    // An attacker with every type in the game is the limit the coverage variant
+    // approaches, and it prices as though nothing ever resists it.
+    expect(calculateDamageToScore(everything, census, BASE)).toBeGreaterThan(BASE * 2);
+  });
+
   it('prices a matchup at multiplier minus one', () => {
     // The identity `calculateDamageFromScore` uses, extended to the two
     // multipliers only a real dual-typed defender produces.

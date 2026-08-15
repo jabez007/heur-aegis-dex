@@ -27,8 +27,14 @@
       "descends within every tier).",
       "",
       "`usage` is the share of teams carrying the Pokemon. `winRate` is the share of",
-      "games won by teams carrying it. They measure different things and the",
-      "correlation script reports against both, deliberately."
+      "games won by teams carrying it. The correlation script reports against both,",
+      "but they are NOT two independent checks: they rank-correlate at 0.683, and",
+      "winRate is compressed toward 50% for heavily-used Pokemon (corr of usage with",
+      "|winRate - 50| is -0.438). Something on a quarter of all teams is largely",
+      "playing itself and cannot post an extreme win rate, so most of the win-rate",
+      "variance sits in the rare tail where each Pokemon has the fewest games.",
+      "Treat agreement across the two columns as one result, not two, and do not",
+      "tune a weight on either."
     ]
   },
   "entries": [

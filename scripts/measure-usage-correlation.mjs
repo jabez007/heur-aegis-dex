@@ -35,13 +35,49 @@
 // The right reading of a modest correlation is therefore not "the model is
 // broken". It is a ceiling on how much of the metagame this kind of model can
 // explain, and a map of which terms contribute.
+//
+// ## The two targets are not independent, and win rate is worse than it looks
+//
+// This was measured after the fact and it constrains every number below, so it
+// belongs at the top rather than in a footnote. The script reports it as the
+// first section.
+//
+// `corr(usage, win rate)` is **0.683**, so the two columns are largely one
+// signal rather than two checks — a result confirmed against both is confirmed
+// about as strongly as a result confirmed against one.
+//
+// Worse, `corr(usage, |win rate - 50|)` is **-0.438**: the more a Pokemon is
+// played, the closer its win rate sits to even. That is arithmetic, not a
+// finding. Something on a quarter of all teams is largely playing itself, so it
+// cannot post an extreme win rate. Mean deviation from 50% falls from 2.59
+// points among 1-2% Pokemon to 0.84 among 8-15% ones.
+//
+// The consequence is that win-rate *variance* comes mostly from the rare tail,
+// where each Pokemon has the fewest games and the most noise. A term correlating
+// with win rate may only be detecting "rare and bad". So:
+//
+// **Do not tune a weight on this data.** The ablation section below exists to
+// locate suspects, not to set constants. Two of its results — that speed and
+// defensive typing both anti-correlate — are exactly what this artifact would
+// manufacture, because heavily-played support and defensive Pokemon are pinned
+// near 50% by construction while the tail drags the correlation negative.
+//
+// What the data *can* do reliably is compare two variants of the same term
+// against the same target, where the artifact applies equally to both and
+// largely cancels. That is how the STAB-only offensive score was checked
+// (0.195 against -0.016, an effect far too large to be noise) and how the
+// firepower depth sweep was read.
 
 import { readFileSync } from 'node:fs';
 import { loadPokemonCatalog } from '../src/lib/pokemonCatalogLoader.ts';
 import { getCatalogResistantTypes } from '../src/lib/pokemonCatalogScan.ts';
 import { flattenToPokemon } from '../src/lib/pokemonEntry.ts';
 import { candidatePriority } from '../src/lib/rosterGeneration.ts';
-import { scoreMemberQuality } from '../src/lib/teamScoring.ts';
+import {
+  FIREPOWER_MODULATION, MEMBER_WEIGHTS, OBSERVED_STAB_POWER, OBSERVED_STAT_TERMS,
+  STAT_CEILINGS, TYPE_MODULATION, scoreMemberQuality
+} from '../src/lib/teamScoring.ts';
+import { getQualityMultipliers } from '../src/lib/abilityEffects.ts';
 import { effectiveOffense, hpAdjustedBulk } from '../src/lib/statMetrics.ts';
 import { getStabPower } from '../src/lib/stabPower.ts';
 
@@ -137,8 +173,14 @@ const scored = pool.map((entry) => ({
   speed: entry.stats.speed,
   bst: Object.values(entry.stats).reduce((sum, stat) => sum + stat, 0),
   coverage: entry.moveCoverages.length,
-  stab: getStabPower(entry.name, entry.stats) ?? 0
+  stab: getStabPower(entry.name, entry.stats) ?? 0,
+  // Kept for the ablation, which rebuilds member quality from its parts.
+  stats: entry.stats,
+  ability: getQualityMultipliers(entry.abilityName, entry.stats)
 }));
+
+const clamp01 = (value) => Math.min(1, Math.max(0, value));
+const rescale = (value, { min, max }) => clamp01((clamp01(value) - min) / (max - min));
 const scoredByName = new Map(scored.map((row) => [row.name, row]));
 
 // Match the external list onto the scan.
@@ -192,6 +234,25 @@ const spearman = (left, right) => {
 // on 90-odd rows is not read as though it were measured on thousands.
 const significant = (rho, n) => Math.abs(rho) * Math.sqrt(n - 1) > 1.96;
 const mark = (rho, n) => (significant(rho, n) ? ' *' : '  ');
+
+// Reported first because it bounds how much every later number is worth. See
+// the header for what these two mean.
+{
+  const usage = data.entries.map((entry) => entry.usage);
+  const win = data.entries.map((entry) => entry.winRate);
+  const deviation = data.entries.map((entry) => Math.abs(entry.winRate - 50));
+  console.log(`\n=== how independent are the two targets? ===`);
+  console.log(`  corr(usage, win rate)        ${spearman(usage, win).toFixed(3)}  — 1.0 would mean one target, not two`);
+  console.log(`  corr(usage, |win rate - 50|) ${spearman(usage, deviation).toFixed(3)}  — negative means heavy use pins win rate to even`);
+  for (const [lo, hi] of [[1, 2], [2, 4], [4, 8], [8, 15], [15, 100]]) {
+    const band = data.entries.filter((entry) => entry.usage >= lo && entry.usage < hi);
+    if (band.length === 0) continue;
+    const mean = band.reduce((sum, entry) => sum + Math.abs(entry.winRate - 50), 0) / band.length;
+    console.log(`    usage ${String(lo).padStart(2)}-${String(hi).padEnd(3)} n=${String(band.length).padStart(2)}  mean |win-50| ${mean.toFixed(2)}`);
+  }
+  console.log(`  → win-rate variance lives in the rare tail, where samples are smallest.`);
+  console.log(`    Compare variants of one term against one target; do not tune weights.`);
+}
 
 const TERMS = [
   ['candidatePriority (what the Browser sorts by)', (r) => r.priority],
@@ -299,6 +360,55 @@ for (const depth of [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]) {
   console.log(`   ${depth.toFixed(1)}   ${vsUsage >= 0 ? ' ' : ''}${vsUsage.toFixed(3)}${mark(vsUsage, matched.length)}` +
     `  ${vsWin >= 0 ? ' ' : ''}${vsWin.toFixed(3)}${mark(vsWin, matched.length)}`);
 }
+
+// ## Ablation: which terms are carrying the ranking, and which are suspects
+//
+// Read this as a map of where to look, never as weights to copy. The header
+// explains why: the win-rate column is compressed toward even for exactly the
+// heavily-played support and defensive Pokemon these terms are meant to reward,
+// so a term that "hurts" here may only be failing to predict a number that
+// cannot move.
+//
+// Each row rebuilds member quality with one thing changed. The shipping row is
+// the baseline.
+const q = (row, { wo, wb, ws, tmO, tmD, fm }) => {
+  const off = rescale((effectiveOffense(row.stats) / STAT_CEILINGS.offense) * row.ability.offense,
+    OBSERVED_STAT_TERMS.offense);
+  const blk = rescale((hpAdjustedBulk(row.stats) / STAT_CEILINGS.bulk) * row.ability.bulk,
+    OBSERVED_STAT_TERMS.bulk);
+  const spd = rescale((row.stats.speed / STAT_CEILINGS.speed) * row.ability.speed,
+    OBSERVED_STAT_TERMS.speed);
+  const mod = (depth, value) => (1 - depth) + (depth * clamp01(value));
+  const fp = row.stab <= 0 ? 1 : mod(fm,
+    (row.stab - OBSERVED_STAB_POWER.min) / (OBSERVED_STAB_POWER.max - OBSERVED_STAB_POWER.min));
+  return clamp01(
+    (wo * off * mod(tmO, row.damageTo) * fp) +
+    (wb * blk * mod(tmD, 1 - row.damageFrom)) +
+    (ws * spd)
+  );
+};
+const SHIPPING = {
+  wo: MEMBER_WEIGHTS.offense, wb: MEMBER_WEIGHTS.bulk, ws: MEMBER_WEIGHTS.speed,
+  tmO: TYPE_MODULATION, tmD: TYPE_MODULATION, fm: FIREPOWER_MODULATION
+};
+console.log('\n=== ablation (suspects, not weights — see the header) ===');
+console.log('  configuration                        vs usage   vs win');
+const ablate = (label, changes) => {
+  const values = matched.map((row) => q(row, { ...SHIPPING, ...changes }));
+  const u = spearman(values, matched.map((row) => row.usage));
+  const w = spearman(values, matched.map((row) => row.winRate));
+  console.log(`  ${label.padEnd(34)} ${u >= 0 ? ' ' : ''}${u.toFixed(3)}${mark(u, matched.length)}` +
+    ` ${w >= 0 ? ' ' : ''}${w.toFixed(3)}${mark(w, matched.length)}`);
+};
+ablate('shipping', {});
+ablate('speed weight -> 0', { ws: 0 });
+ablate('offensive typing off', { tmO: 0 });
+ablate('defensive typing off', { tmD: 0 });
+ablate('firepower off', { fm: 0 });
+ablate('offence weight -> 0', { wo: 0 });
+ablate('bulk weight -> 0', { wb: 0 });
+console.log('  the last two collapse, which is the only unambiguous result here:');
+console.log('  both stat terms are load-bearing. The middle rows are suspects only.');
 
 // ## How far does a doubles result carry to singles?
 //
