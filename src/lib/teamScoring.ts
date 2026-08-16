@@ -245,6 +245,38 @@ export const OBSERVED_STAB_POWER = { min: 77, max: 120 } as const;
 export const MOVE_ROLE_CREDIT = 0.5;
 
 /**
+ * What a move-sourced role is worth to a Prankster carrier.
+ *
+ * ## Splitting the constant above into the two things it bundles
+ *
+ * `MOVE_ROLE_CREDIT` discounts a move-sourced role for two reasons at once, and
+ * pricing Prankster forces them apart. One is the **moveslot**: a Pokemon that
+ * spends a slot on Tailwind is not spending it on an attack, and no ability
+ * charges that. The other is **delivery**: an ability fires the moment its holder
+ * is on the field, while a status move only works if the Pokemon is still alive
+ * and untaunted when its turn comes, and the Pokemon that want these moves are
+ * mostly slow.
+ *
+ * Prankster refunds the second and not the first. It gives status moves +1
+ * priority, so Grimmsnarl at 60 Speed sets screens before anything happens to
+ * it — as reliably as an ability, for the same slot cost. That is why this sits
+ * between `MOVE_ROLE_CREDIT` and 1 rather than at either: half the discount was
+ * timing and is bought back, half was the slot and is not.
+ *
+ * It applies to every move-sourced role the model has, which is not a
+ * coincidence worth glossing over. Tailwind, Trick Room, Reflect, Light Screen,
+ * Wide Guard, Quick Guard, Ally Switch, Follow Me, Rage Powder, Will-O-Wisp and
+ * Spore are all status moves. The tables this reads were selected for supplying
+ * a support role, and support in this format is overwhelmingly status — so the
+ * ability that accelerates status accelerates all of it.
+ *
+ * Reasoned, not measured, and small in reach: three Pokemon in a default scan
+ * carry Prankster. Recorded as an even split of a constant that was itself
+ * reasoned, which is honest about being two guesses deep rather than one.
+ */
+export const PRANKSTER_ROLE_CREDIT = 0.75;
+
+/**
  * How strongly firepower modulates the attacking stat it applies to.
  *
  * ## Why the offence axis has three factors and not two
@@ -979,8 +1011,12 @@ function evaluateTeamSynergy(
   // Move-sourced roles count for less than ability-sourced ones. Lightning Rod
   // redirects every turn for nothing; Follow Me redirects because one of four
   // moveslots was spent, and that slot is not attacking.
+  // Prankster-backed roles are counted at the higher credit and then removed
+  // from the ordinary tally, so a role is paid once at the rate it earned.
+  const pranksterRoleCount = roles?.pranksterRoles.length ?? 0;
   const supportRoleCount = (roles?.roles.length ?? 0) +
-    (MOVE_ROLE_CREDIT * (roles?.moveRoles.length ?? 0));
+    (MOVE_ROLE_CREDIT * ((roles?.moveRoles.length ?? 0) - pranksterRoleCount)) +
+    (PRANKSTER_ROLE_CREDIT * pranksterRoleCount);
   const supportRolesValue = clamp01(supportRoleCount / applicableRoleCount);
   const coverageBreadth = bonusWeights.coverageBreadth * coverageBreadthValue;
   const resistanceBreadth = bonusWeights.resistanceBreadth * resistanceBreadthValue;

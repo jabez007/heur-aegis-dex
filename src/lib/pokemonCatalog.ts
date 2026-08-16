@@ -42,6 +42,11 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * damage class the Pokemon reads its best move from. So `selected_ability_name`
  * and everything derived from it can differ from what a cache holds.
  *
+ * 13: Prankster. It is priced through the support roles it makes reliable
+ * rather than as a stat multiplier, and `chooseDefaultAbility` now sees that —
+ * Meowstic was selecting Keen Eye over the ability it is played for, so cached
+ * `selected_ability_name` can differ.
+ *
  * 12: weather abusers. Sand Rush, Swift Swim, Chlorophyll, Slush Rush and Sand
  * Force became support roles, which reaches `chooseDefaultAbility` through its
  * ability-role bonus. Eight varieties now default to a different ability —
@@ -53,7 +58,7 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * merge whitelist, so cached entries hold Hero's stats for a Pokemon now scored
  * on Zero's. The stats themselves changed, not just a score derived from them.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 12 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 13 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [

@@ -31,6 +31,7 @@
  * | 2026-08-16 | best off-roster       | 1.06 | **2.06** | 3.55 |
  * | 2026-08-16 | best off-roster       | 1.18 | **2.43** | 3.97 |
  * | 2026-08-16 | best off-roster       | 1.16 | **2.56** | 4.04 | (capped to 2.54)
+ * | 2026-08-16 | best off-roster       | 1.12 | **2.66** | 4.05 | (capped to 2.54)
  *
  * ## The counterfactual was wrong, and the drift is how it showed
  *
@@ -138,9 +139,22 @@
  * file already recorded ("it compares a real-pool median against a
  * synthetic-fixture maximum"), now with a consequence attached.
  *
- * The next role added will push the median past the cap again, and at that point
- * the fixture is what needs revisiting: a worthless sixth slot should cost more
- * as the model learns more ways for a slot to be worth something. The previous value cleared by 0.335
+ * That prediction was tested immediately. Prankster pushed the median to 2.66,
+ * further past the cap, and the constant did not move — which is the cap working
+ * and also the sign that it is now doing the deriving. Two consecutive
+ * measurements have been discarded in favour of a ceiling, and a constant whose
+ * stated derivation no longer sets it is a constant with a stale docblock
+ * waiting to happen.
+ *
+ * **The fixture is what needs revisiting, and it is the next thing owed here.**
+ * The ceiling is measured on a synthetic roster whose wasted sixth member has no
+ * abilities, no movepool and no status moves, so it has gained nothing from the
+ * firepower term, the four move-sourced roles, the weather pairing or Prankster.
+ * Real members have gained from all of them. A worthless slot should cost more
+ * as the model learns more ways for a slot to be worth something, and this one
+ * costs exactly what it did before any of that work — which is why the two
+ * numbers are converging, and why closing the gap by lowering the margin is
+ * treating the symptom. The previous value cleared by 0.335
  * and the assertion in `rosterPortfolio.test.ts` had been loosened to admit it;
  * the loosened form is kept rather than tightened back, because it is anchored
  * to observed drift and re-tightening it on a favourable measurement is how a

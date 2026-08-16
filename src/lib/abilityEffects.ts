@@ -294,11 +294,22 @@ export const ABILITY_QUALITY_EFFECTS: readonly AbilityQualityRule[] = [
     component: 'bulk',
     multiplier: 1,
     applied: false,
+    migratedTo: 'abilityRoles.ts',
     condition: 'carrying status moves worth using first',
     reason:
-      'Among the strongest abilities in the format, and still not scoreable here: its entire value is which moves it '
-      + 'makes priority. Whimsicott and Grimmsnarl are built on Tailwind, screens and Encore, none of which this tool '
-      + 'models. Crediting it would be scoring a moveset that cannot be seen.'
+      'This read "still not scoreable here: its entire value is which moves it makes priority. Whimsicott and '
+      + 'Grimmsnarl are built on Tailwind, screens and Encore, none of which this tool models." That was true when '
+      + 'written and stopped being true on 2026-08-16, which is the useful thing about having written the condition '
+      + 'down: Tailwind and screens are now in `utilityMoveData.ts` and the status moves in `statusMoveData.ts`.\n\n'
+      + 'It is still not a multiplier, because it never was one. Prankster does not change what a stat line is worth '
+      + '— the question this file answers — it changes whether a support move arrives. So it is priced where the '
+      + 'support is: `PRANKSTER_ROLE_CREDIT` raises what a move-sourced role is worth to a carrier, on the reasoning '
+      + 'that `MOVE_ROLE_CREDIT` discounts for a moveslot *and* for delivery risk, and Prankster refunds the second '
+      + 'of those and not the first.\n\n'
+      + 'Encore remains unmodelled and is the part of Whimsicott this still cannot see. The entry stays here rather '
+      + 'than being deleted, because the reasoning that kept it out is the reasoning that would keep the next '
+      + 'move-dependent ability out, and it should be visible that the bar was cleared by building the data rather '
+      + 'than by lowering it.'
   },
   {
     ability: 'regenerator',

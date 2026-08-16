@@ -43,10 +43,15 @@
 
 import { evaluateRoster, scoreBring, type RosterEvaluation, type RosterMember } from './rosterScoring';
 import type { TypeMatchupValues } from './teamCoverage';
-import { MOVE_ROLE_CREDIT, scoreMemberQuality } from './teamScoring';
+import { MOVE_ROLE_CREDIT, PRANKSTER_ROLE_CREDIT, scoreMemberQuality } from './teamScoring';
 import { getMoveSourcedRoles } from './utilityMoves';
 import { DEFAULT_BASE_SCORE } from './pokedexScoring';
-import { getAbilityEffect, getApplicableRoles, soloRoleValue } from './abilityRoles';
+import {
+  getAbilityEffect,
+  getApplicableRoles,
+  RELIABLE_STATUS_ABILITIES,
+  soloRoleValue
+} from './abilityRoles';
 import type { BattleFormat } from './battleFormats';
 import type { PokemonEntry } from './pokemonEntry';
 
@@ -676,7 +681,14 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
     .filter((role) => applicable.includes(role) && role !== abilityRole)
     .reduce((total, role) => total + soloRoleValue(role), 0);
 
-  const roleValue = soloRoleValue(abilityRole) + (MOVE_ROLE_CREDIT * moveRoleValue);
+  // Prankster makes those moves land, which is worth more than being able to
+  // learn them. It is the one ability whose whole value is *which* moves it
+  // accelerates, and the move tables are what finally made that computable.
+  const moveCredit = entry.abilityName && RELIABLE_STATUS_ABILITIES.has(entry.abilityName)
+    ? PRANKSTER_ROLE_CREDIT
+    : MOVE_ROLE_CREDIT;
+
+  const roleValue = soloRoleValue(abilityRole) + (moveCredit * moveRoleValue);
 
   // Stats modulated by typing, on the same terms the team scorer will use.
   // Resistances and weaknesses are not added separately: they are already what

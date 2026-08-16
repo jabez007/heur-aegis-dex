@@ -224,9 +224,23 @@ export interface TeamRoleMember {
   varietyName?: string;
 }
 
+/**
+ * Abilities that make a Pokemon's status moves reliable enough to count on.
+ *
+ * Only Prankster today. Kept as a set rather than a check against one string so
+ * that adding Gale Wings or a future equivalent is a data change.
+ */
+export const RELIABLE_STATUS_ABILITIES: ReadonlySet<string> = new Set(['prankster']);
+
 export interface TeamRoleAnalysis {
   /** Distinct support roles the team covers. */
   roles: AbilityRole[];
+  /**
+   * The subset of `moveRoles` supplied by a Pokemon whose ability makes its
+   * status moves reliable — Prankster. Worth more than an ordinary move role
+   * because the move actually lands; see PRANKSTER_ROLE_CREDIT.
+   */
+  pranksterRoles: AbilityRole[];
   /**
    * Roles covered *only* by a move, with no ability on the team supplying them.
    * Kept apart from `roles` because they are not worth the same: an ability
@@ -287,12 +301,15 @@ export function analyzeTeamRoles(
   const fieldStatesByRole: Partial<Record<AbilityRole, Map<string, string>>> = {};
 
   const moveRoleSources: Partial<Record<AbilityRole, string[]>> = {};
+  const pranksterRoleSet = new Set<AbilityRole>();
   members.forEach((member) => {
+    const reliable = !!member.abilityName && RELIABLE_STATUS_ABILITIES.has(member.abilityName);
     getMoveSourcedRoles(member.varietyName).forEach((role) => {
       if (!applicableRoles.includes(role)) return;
       const sources = moveRoleSources[role] || [];
       if (member.varietyName && !sources.includes(member.varietyName)) sources.push(member.varietyName);
       moveRoleSources[role] = sources;
+      if (reliable) pranksterRoleSet.add(role);
     });
   });
 
@@ -340,12 +357,14 @@ export function analyzeTeamRoles(
   if (!abuserSatisfied) delete roleSources['weather-abuser'];
 
   const roles = applicableRoles.filter((role) => (roleSources[role] || []).length > 0);
+  const moveRoles = applicableRoles.filter((role) =>
+    !roles.includes(role) && (moveRoleSources[role] || []).length > 0);
   return {
     roles,
+    pranksterRoles: moveRoles.filter((role) => pranksterRoleSet.has(role)),
     // Only roles no ability already covers. A team with Lightning Rod *and*
     // Follow Me has redirection once, not one and a half times.
-    moveRoles: applicableRoles.filter((role) =>
-      !roles.includes(role) && (moveRoleSources[role] || []).length > 0),
+    moveRoles,
     roleSources,
     fieldConflicts,
     conflictingAbilities

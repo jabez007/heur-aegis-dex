@@ -1,5 +1,6 @@
-import { getAbilityEffect } from './abilityRoles';
+import { getAbilityEffect, RELIABLE_STATUS_ABILITIES, soloRoleValue } from './abilityRoles';
 import { getMoveCoverage } from './coverageMoves';
+import { getMoveSourcedRoles } from './utilityMoves';
 import { applyAbilityModifiers, createRawAbilityProfile } from './pokedexAbilities';
 import {
   cloneDamageRelations,
@@ -10,7 +11,7 @@ import { canMegaEvolve, hasCompleteData, isSpeciesLegal } from './regulations';
 import { CANDIDATE_WEIGHTS } from './rosterGeneration';
 import { hpAdjustedBulk } from './statMetrics';
 import { getEffectiveStats, getStatAbilityName, totalStats } from './statAbilities';
-import { scoreMemberQuality } from './teamScoring';
+import { MOVE_ROLE_CREDIT, PRANKSTER_ROLE_CREDIT, scoreMemberQuality } from './teamScoring';
 import { isVarietyBreedable } from './unbreedableForms';
 import type { OffensiveTypeChart } from './coverageMoves';
 import type { DamageScoreBounds } from './pokedexScoring';
@@ -122,6 +123,15 @@ export function chooseDefaultAbility<T extends AbilityProfile & { stats: Pokemon
   varietyName?: string
 ): T {
   const supportBonus = CANDIDATE_WEIGHTS.supportRole / CANDIDATE_WEIGHTS.quality;
+
+  // Prankster carries no role of its own — it makes the roles a Pokemon already
+  // reaches by move actually land — so the ability-role bonus above cannot see
+  // it. Without this term the model prices Prankster and then declines to pick
+  // it: Meowstic was selecting Keen Eye over the ability it is played for.
+  const moveRoleValue = getMoveSourcedRoles(varietyName)
+    .reduce((total, role) => total + soloRoleValue(role), 0);
+  const reliabilityBonus = (PRANKSTER_ROLE_CREDIT - MOVE_ROLE_CREDIT) * moveRoleValue * supportBonus;
+
   const score = (profile: T) =>
     scoreMemberQuality({
       stats: profile.stats,
@@ -131,7 +141,9 @@ export function chooseDefaultAbility<T extends AbilityProfile & { stats: Pokemon
       ),
       abilityName: profile.ability_name,
       varietyName
-    }) + (getAbilityEffect(profile.ability_name) ? supportBonus : 0);
+    })
+    + (getAbilityEffect(profile.ability_name) ? supportBonus : 0)
+    + (RELIABLE_STATUS_ABILITIES.has(profile.ability_name ?? '') ? reliabilityBonus : 0);
 
   return profiles.reduce((best, profile) => (score(profile) > score(best) ? profile : best));
 }

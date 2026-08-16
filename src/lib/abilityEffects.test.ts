@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RELIABLE_STATUS_ABILITIES } from './abilityRoles';
 import {
   ABILITY_QUALITY_EFFECTS,
   getAbilityQualityEffect,
@@ -39,7 +40,11 @@ describe('ABILITY_QUALITY_EFFECTS', () => {
     // migratedTo pointing nowhere real fails rather than passing quietly.
     const owners: Record<string, (ability: string) => boolean> = {
       'pokedexAbilities.ts': isDamageTakenAbility,
-      'statusThreat.ts': grantsStatusImmunity
+      'statusThreat.ts': grantsStatusImmunity,
+      // Prankster left for the role model rather than a damage or status one: it
+      // raises what a move-sourced support role is worth to its carrier, which is
+      // a third kind of destination and needs its own ownership check.
+      'abilityRoles.ts': (ability: string) => RELIABLE_STATUS_ABILITIES.has(ability)
     };
 
     ABILITY_QUALITY_EFFECTS.filter((rule) => rule.migratedTo).forEach((rule) => {
@@ -113,12 +118,25 @@ describe('ABILITY_QUALITY_EFFECTS', () => {
   });
 
   it('excludes move-dependent abilities', () => {
-    // The tool cannot see movesets, so crediting these would be scoring
-    // something it has no data for.
-    ['prankster', 'sheer-force', 'technician', 'tough-claws'].forEach((ability) => {
+    // The tool cannot see the moves these need, so crediting them here would be
+    // scoring something it has no data for.
+    ['sheer-force', 'technician', 'tough-claws'].forEach((ability) => {
       expect(hasAbilityQualityRule(ability), `${ability} should be recorded`).toBe(true);
       expect(getAbilityQualityEffect(ability), `${ability} should not apply`).toBeUndefined();
     });
+  });
+
+  it('still gives Prankster no multiplier, now for a different reason', () => {
+    // It was in the list above until the move tables landed, on the grounds that
+    // its value is which moves it accelerates and the tool could not see them.
+    // It can now — Tailwind and screens are in `utilityMoveData.ts`, the status
+    // moves in `statusMoveData.ts` — so the reason changed while the outcome did
+    // not. Prankster does not alter what a stat line is worth, which is the only
+    // question this file answers; it alters whether a support move arrives, and
+    // `PRANKSTER_ROLE_CREDIT` prices it there.
+    expect(hasAbilityQualityRule('prankster')).toBe(true);
+    expect(getAbilityQualityEffect('prankster')).toBeUndefined();
+    expect(RELIABLE_STATUS_ABILITIES.has('prankster')).toBe(true);
   });
 });
 
