@@ -67,6 +67,7 @@
     "measure:damage-bounds": "tsx scripts/measure-damage-bounds.mjs",
     "measure:stab-power": "tsx scripts/measure-stab-power.mjs",
     "measure:status-threat": "tsx scripts/measure-status-threat.mjs",
+    "measure:roster-validation": "tsx scripts/measure-roster-validation.mjs",
     "measure:support-eligibility": "tsx scripts/measure-support-eligibility.mjs",
     "measure:usage-correlation": "tsx scripts/measure-usage-correlation.mjs"
   },
