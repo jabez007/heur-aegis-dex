@@ -23,6 +23,7 @@ const enrichmentOptions = {
   allowMegas: false,
   includeAbilityImmunities: true,
   includeMoveCoverage: true,
+  breedableOnly: true,
   minimumAttacks: 1,
   minimumBulk: 1
 } as const;

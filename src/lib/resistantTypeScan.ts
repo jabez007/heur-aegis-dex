@@ -61,6 +61,11 @@ export interface ResistantTypeScanOptions {
     includeAbilityImmunities?: boolean;
     /** Include coverage reachable through learnable moves, not only STAB. */
     includeMoveCoverage?: boolean;
+    /**
+     * Keep only Pokemon the user could breed. Default true — see the field of
+     * the same name on `PokemonEnrichmentOptions` for what false is for.
+     */
+    breedableOnly?: boolean;
     /** Restrict results to a known regulation roster; null means unrestricted. */
     regulation?: string | null;
     /**
@@ -126,6 +131,7 @@ export function resolveResistantTypeScanOptions(
     allowMegas: false,
     includeAbilityImmunities: true,
     includeMoveCoverage: true,
+    breedableOnly: true,
     regulation: null,
     weightByThreat: true,
     ...options.pokemonFilters
@@ -151,6 +157,7 @@ export function resolveResistantTypeScanOptions(
       allowMegas: pokemonFilters.allowMegas,
       includeAbilityImmunities: pokemonFilters.includeAbilityImmunities,
       includeMoveCoverage: pokemonFilters.includeMoveCoverage,
+      breedableOnly: pokemonFilters.breedableOnly,
       minimumAttacks: options.statsFilters?.minimumAttacks ?? DEFAULT_STATS_FILTERS.minimumAttacks,
       minimumBulk: options.statsFilters?.minimumBulk ??
         options.statsFilters?.minimumDefenses ??

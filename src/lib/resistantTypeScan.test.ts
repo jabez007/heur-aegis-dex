@@ -68,6 +68,9 @@ describe('resistant type scan core', () => {
         allowMegas: false,
         includeAbilityImmunities: true,
         includeMoveCoverage: true,
+        // The app only ever offers Pokemon the user can breed, so this stays on
+        // unless a caller explicitly asks the other question.
+        breedableOnly: true,
         minimumAttacks: 80,
         minimumBulk: 70
       }
@@ -82,6 +85,14 @@ describe('resistant type scan core', () => {
       minimumAttacks: 80,
       minimumBulk: 42
     });
+
+    // Breeding is a constraint on what the *user* can bring, never on what the
+    // format contains. Scoring asks the second question through `getThreatPool`,
+    // which does not apply this rule at all; this flag lets a scan ask it too,
+    // which is what scoring somebody else's team requires.
+    expect(resolveResistantTypeScanOptions({
+      pokemonFilters: { breedableOnly: false }
+    }).enrichment).toMatchObject({ breedableOnly: false });
   });
 
   it('rejects unknown regulations before a source is invoked', () => {

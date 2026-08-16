@@ -72,6 +72,20 @@ export interface PokemonEnrichmentOptions {
   readonly damageToBounds: DamageScoreBounds;
   readonly inPokedex: string;
   readonly allowMegas: boolean;
+  /**
+   * Restrict to Pokemon the user could actually breed and bring.
+   *
+   * True everywhere the app builds a team, because this tool is for players who
+   * breed what they play: a Pokemon they cannot obtain is not a candidate.
+   *
+   * False answers the *other* question — what exists in the format — which is
+   * what anything reasoning about opponents needs. Scoring already asks it a
+   * different way: `getThreatPool` never applies this rule, so threat weights and
+   * the defender census see all 208 legal species including Gholdengo. This flag
+   * exists so a scan can be built on the same footing, which is what validating
+   * against real tournament teams requires. Nothing in the app sets it false.
+   */
+  readonly breedableOnly: boolean;
   readonly includeAbilityImmunities: boolean;
   readonly includeMoveCoverage: boolean;
   readonly minimumAttacks: number;
@@ -143,8 +157,10 @@ const isEligible = (facts: PokemonEnrichmentFacts, options: PokemonEnrichmentOpt
   }
 
   if (facts.isLegendary || facts.isMythical) return false;
-  if (facts.eggGroups.length > 0 && facts.eggGroups.every((name) => name === 'no-eggs')) return false;
-  if (!isVarietyBreedable(facts.name)) return false;
+  if (options.breedableOnly) {
+    if (facts.eggGroups.length > 0 && facts.eggGroups.every((name) => name === 'no-eggs')) return false;
+    if (!isVarietyBreedable(facts.name)) return false;
+  }
   if (options.regulation && !isSpeciesLegal(options.regulation, facts.speciesName)) return false;
 
   return facts.pokedexes.some((pokedex) =>

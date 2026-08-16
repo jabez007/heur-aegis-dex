@@ -63,13 +63,19 @@ const catalog = await loadPokemonCatalog();
 // Megas are legal in M-B and half these teams carry one, so the pool has to hold
 // them. Filters are opened for the reason measure-usage-correlation.mjs gives:
 // they describe what to show, and a tournament does not respect them.
+// `breedableOnly: false` for the same reason. The app keeps it true, because it
+// only ever offers the user Pokemon they can breed — but these are other
+// people's teams, and Gholdengo appears on 13 of them. Scoring an opponent's
+// roster through a filter describing what *you* can obtain drops 9% of the
+// sample, and drops it non-randomly: exactly the teams built around the Pokemon
+// the rule excludes.
 const scan = await getCatalogResistantTypes(catalog, {
-  pokemonFilters: { regulation: 'M-B', allowMegas: true },
+  pokemonFilters: { regulation: 'M-B', allowMegas: true, breedableOnly: false },
   statsFilters: { minimumAttacks: 0, minimumBulk: 0 },
   typeFilters: { limitQuadrupleDamage: false }
 });
 const pool = flattenToPokemon(scan);
-console.log(`pool: ${pool.length} varieties (megas allowed, filters opened)`);
+console.log(`pool: ${pool.length} varieties (megas allowed, unbreedable included, filters opened)`);
 
 // Display names to variety names. Everything else lower-cases and hyphenates.
 const ALIASES = {

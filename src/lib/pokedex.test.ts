@@ -612,6 +612,7 @@ describe('pokedex.js API integration logic', () => {
         allowMegas: false,
         includeAbilityImmunities: true,
         includeMoveCoverage: true,
+        breedableOnly: true,
         minimumAttacks: 10,
         minimumBulk: 10
       }
