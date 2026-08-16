@@ -379,6 +379,31 @@ export const ABILITY_QUALITY_EFFECTS: readonly AbilityQualityRule[] = [
     reason: 'Moveset-dependent, and the coverage table records move types rather than whether they make contact.'
   },
   {
+    ability: 'mirror-armor',
+    component: 'offense',
+    multiplier: 1.21,
+    applied: false,
+    condition: 'the opponent brought one of the eleven Intimidate-adjacent abilities, and this Pokemon attacks physically',
+    reason:
+      'The second entry rejected on measurement, and unlike Mold Breaker it was rejected for being too *narrow* '
+      + 'rather than too small. The number is large: Intimidate sits on 56.1% of teams by ladder usage — Incineroar '
+      + 'at 23.4% and Staraptor at 18.7% carry most of it — so an opposing team brings at least one about 43% of '
+      + 'the time, and dodging a stage of Attack is worth 1.5x when it lands. Expected offence multiplier **1.21**, '
+      + 'measured 2026-08-16 against the 166,311-battle usage table. That is nearly three times Sturdy, the '
+      + 'smallest applied entry, and forty-seven times the Mold Breaker measurement that got rejected.\n\n'
+      + 'It is not applied because Mirror Armor is one of eleven ways to answer Intimidate and the only one that '
+      + 'would be paid. Across the default view, 25 of 147 Pokemon carry Own Tempo, Inner Focus, Clear Body, '
+      + 'Defiant, Competitive, Hyper Cutter, White Smoke, Stamina, Scrappy, Oblivious or this. Defiant is *better* '
+      + 'than Mirror Armor into Intimidate — Annihilape gains two stages rather than declining one — so a table '
+      + 'holding only this entry would rank the weaker answer above the stronger one and give the other 24 carriers '
+      + 'nothing. That is worse than scoring none of them.\n\n'
+      + 'This is the door the header warns about, now measured rather than argued: pricing it means pricing the '
+      + 'family, the family is a matchup model, and a matchup model is a project. It also would not have fixed the '
+      + 'case that prompted the measurement. Corviknight is ranked below Goodra-Hisui on its attacking stat, and '
+      + 'even at the full 1.21 it moves from 29th to 11th and still trails. What Corviknight is missing is Tailwind, '
+      + 'Wide Guard, Roost and U-turn, which is a move-utility problem and not an ability one.'
+  },
+  {
     ability: 'mold-breaker',
     component: 'offense',
     multiplier: 1.01,

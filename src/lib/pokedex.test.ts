@@ -895,23 +895,25 @@ describe('pokedex.js API integration logic', () => {
     });
   };
 
-  it('getResistantTypes should rate a Pokemon on the form it fights in', async () => {
+  it('getResistantTypes should rate Palafin on its registered form', async () => {
     const entry = (await scanPalafin()).find(t => t.name === 'fire')!.pokemon[0];
 
-    // Identity stays with the registered form; only the numbers move.
+    // This asserted Hero's 160 Attack and 650 total until 2026-08-16. Reaching
+    // Hero costs a switch, and `battleForms.ts` condition 4 excludes forms that
+    // cost a turn — so nothing merges now and the registered numbers stand.
     expect(entry.pokemon.name).toBe('charmander');
     expect(entry.species_name).toBe('palafin');
-    expect(entry.battle_form_name).toBe('palafin-hero');
-    expect(entry.stats!.attack).toBe(160);
-    expect(entry.stats_total).toBe(650);
+    expect(entry.battle_form_name).toBeUndefined();
+    expect(entry.stats!.attack).toBe(52);
   });
 
-  it('getResistantTypes should apply stat floors to the fighting form', async () => {
-    // The registered Palafin-Zero form would fail this floor. Rating it there
-    // would drop from the scan a Pokemon that battles at 650.
+  it('getResistantTypes should apply stat floors to the registered form', async () => {
+    // The mirror of what this used to assert. Floors a battle form would clear
+    // and the registered form would not now exclude the Pokemon, which is the
+    // whole consequence of unmerging: you are filtered on what you register.
     const resistant = await scanPalafin({ minimumStatsTotal: 600, minimumAttacks: 150, minimumDefenses: 80 });
 
-    expect(resistant.find(t => t.name === 'fire')!.pokemon).toHaveLength(1);
+    expect(resistant.find(t => t.name === 'fire')!.pokemon).toHaveLength(0);
   });
 
   it('getResistantTypes should rate as registered when the trigger ability is absent', async () => {
@@ -1117,34 +1119,24 @@ describe('pokedex.js API integration logic', () => {
     expect(entry.selected_ability_name).toBe('unaware');
   });
 
-  it('getResistantTypes should fetch a battle form inside the concurrency budget', async () => {
-    // Enough entries that the prefetch cannot drain in a single wave, so there
-    // are provably later requests to compare against.
+  it('getResistantTypes should not fetch a battle form nothing merges', async () => {
+    // These two asserted that a merged form was fetched inside the concurrency
+    // budget and fetched only once. With the whitelist empty there is no merged
+    // form to fetch, so the claim worth keeping is the inverse: an unmerged
+    // battle form must cost no request at all. A scan that started fetching
+    // Palafin-Hero again would be doing work for a form it will not score.
     mockState.expandFireRoster = true;
     await scanPalafin();
 
-    const order = mockState.requestOrder;
-    const battleFormIndex = order.indexOf('/api/v2/pokemon/9000/');
-    expect(battleFormIndex).toBeGreaterThanOrEqual(0);
-
-    // The prefetch warms every detail request under mapWithConcurrency, and
-    // processPokemon then issues none of its own. A battle form resolved lazily
-    // instead would be the *last* detail request of the whole scan, since by
-    // then everything else is cached — so the presence of later ones is the
-    // signal that this fetch happened inside the budget.
-    const laterDetailRequests = order
-      .slice(battleFormIndex + 1)
-      .filter((url) => url.startsWith('/api/v2/pokemon'));
-
-    expect(laterDetailRequests.length).toBeGreaterThan(0);
+    expect(mockState.requestOrder).not.toContain('/api/v2/pokemon/9000/');
     expect(mockState.maxActiveDetailRequests).toBeLessThanOrEqual(12);
   });
 
-  it('getResistantTypes should fetch a battle form once across every typing', async () => {
+  it('getResistantTypes should not fetch an unmerged battle form for any typing', async () => {
     mockState.duplicateCharmanderAcrossTypes = true;
     await scanPalafin();
 
-    expect(mockState.requestCounts.get('/api/v2/pokemon/9000/')).toBe(1);
+    expect(mockState.requestCounts.get('/api/v2/pokemon/9000/')).toBeUndefined();
   });
 
   it('getResistantTypes should dedupe repeated pokemon and species detail fetches', async () => {

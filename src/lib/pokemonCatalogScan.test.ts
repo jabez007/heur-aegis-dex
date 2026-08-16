@@ -40,7 +40,7 @@ describe('catalog scan adapter', () => {
     expect(fire.pokemon?.some((entry) => entry.pokemon.name === 'charmander')).toBe(true);
   });
 
-  it('joins and rates Palafin on Hero stats while preserving registered identity', () => {
+  it('rates Palafin as registered, and does not mutate the catalog reading it', () => {
     const types = getCatalogBaseTypes(catalog, 18);
     const water = types.find((type) => type.name === 'water')!;
     const palafin = catalog.varieties.find((variety) => variety.name === 'palafin-zero')!;
@@ -52,9 +52,18 @@ describe('catalog scan adapter', () => {
 
     expect(first?.pokemon.name).toBe('palafin-zero');
     expect(first?.species_name).toBe('palafin');
-    expect(first?.battle_form_name).toBe('palafin-hero');
-    expect(first?.base_stats?.attack).toBe(160);
-    expect(first?.stats_total).toBe(650);
+
+    // Hero's stats used to be joined on here. They are not any more: reaching
+    // Hero costs a switch, and `battleForms.ts` condition 4 excludes forms that
+    // cost a turn, for the same reason every other conditional effect in the
+    // model is recorded and not applied. Zero's 70 Attack is what it registers
+    // with and now what it scores with.
+    expect(first?.battle_form_name).toBeUndefined();
+    expect(first?.base_stats?.attack).toBe(70);
+    expect(first?.stats_total).toBe(457);
+
+    // The parts of this test that were never about Palafin: enriching twice
+    // gives the same answer, and reading the catalog does not write to it.
     expect(second).toEqual(first);
     expect(JSON.stringify(palafin)).toBe(before);
   });

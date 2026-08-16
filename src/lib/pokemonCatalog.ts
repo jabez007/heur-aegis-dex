@@ -41,8 +41,13 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * ability choice, because an ability moving an attacking stat can flip which
  * damage class the Pokemon reads its best move from. So `selected_ability_name`
  * and everything derived from it can differ from what a cache holds.
+ *
+ * 11: Palafin is rated on the form it registers as. `battleForms.ts` gained a
+ * fourth condition — reaching the form must cost no turn — which empties the
+ * merge whitelist, so cached entries hold Hero's stats for a Pokemon now scored
+ * on Zero's. The stats themselves changed, not just a score derived from them.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 10 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 11 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [
