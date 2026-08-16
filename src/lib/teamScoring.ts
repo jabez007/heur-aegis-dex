@@ -758,6 +758,20 @@ export const COMPOSITE_WEIGHTS = {
  * correction, move-sourced roles and now weather abusers without moving, which
  * is what a well-set bound is supposed to do: the middle of the distribution
  * shifts and the extremes are held by teams that were already at them.
+ *
+ * ## Re-measured for screens and status infliction — a third time, unchanged
+ *
+ * Two more roles, taking the vocabulary to nine, and still nothing moves.
+ * Quality cannot; both synergy maxima sampled below the recorded pair again
+ * (singles 0.8185 against 0.8247, doubles 0.7850 against 0.8124) for a **ninth**
+ * consecutive measurement.
+ *
+ * The medians keep climbing while the maxima hold — doubles from 0.0881 through
+ * 0.0962 to 0.1031 across the three role additions — which is exactly the shape
+ * to expect and worth stating so the stability is not misread as inertia. Each
+ * new role is one more thing an ordinary team can be credited for, so the middle
+ * rises; the teams setting the maximum were already covering what they could,
+ * and a wider denominator offsets what they gain.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {

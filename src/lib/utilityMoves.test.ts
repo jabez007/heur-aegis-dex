@@ -8,7 +8,7 @@ describe('utility move table', () => {
     // the half of it the model could not see.
     expect(getUtilityRoles('pelipper')).toEqual(['ally-protection', 'speed-control']);
     // Corviknight is ranked on its attacking stat and played for Tailwind.
-    expect(getUtilityRoles('corviknight')).toEqual(['speed-control']);
+    expect(getUtilityRoles('corviknight')).toEqual(['screens', 'speed-control']);
   });
 
   it('records nothing for Pokemon whose support is already an ability', () => {
@@ -27,13 +27,22 @@ describe('utility move table', () => {
   it('stays selective, unlike the coverage table', () => {
     // The guard against repeating the Normal-as-coverage defect. Protect is on
     // 100% of the roster and Sunny Day on 74%; a capability most of the pool has
-    // discriminates nothing. Every role here is held by well under half.
-    const total = Object.keys(UTILITY_MOVE_ROLES).length;
+    // discriminates nothing.
+    //
+    // The denominator is the *roster*, not this table. Varieties with no role at
+    // all are absent from the literal, so dividing by its length would measure
+    // "of the Pokemon that have a role, how many have this one" — which read 73%
+    // for screens and failed, while screens is on 40% of the roster. Taken from
+    // the count recorded in the generated header.
+    const VARIETIES_GENERATED = 359;
     const counts: Record<string, number> = {};
     for (const roles of Object.values(UTILITY_MOVE_ROLES)) {
       for (const role of roles) counts[role] = (counts[role] ?? 0) + 1;
     }
-    for (const count of Object.values(counts)) expect(count / total).toBeLessThan(0.7);
+    expect(Object.keys(UTILITY_MOVE_ROLES).length).toBeLessThanOrEqual(VARIETIES_GENERATED);
+    for (const count of Object.values(counts)) {
+      expect(count / VARIETIES_GENERATED).toBeLessThan(0.5);
+    }
   });
 
   it('separates absence from ignorance', () => {
@@ -52,7 +61,9 @@ describe('analyzeTeamRoles with move-sourced roles', () => {
     ]);
 
     expect(analysis.roles).toEqual(['intimidate']);
-    expect(analysis.moveRoles).toEqual(['speed-control']);
+    // Corviknight brings Tailwind and screens; Incineroar's burn is a role from
+    // the status table, which is the other move-sourced source.
+    expect(analysis.moveRoles).toEqual(['speed-control', 'screens', 'disruption']);
   });
 
   it('does not pay twice for a role an ability already covers', () => {

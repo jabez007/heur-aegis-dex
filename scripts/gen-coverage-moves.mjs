@@ -231,6 +231,7 @@ for (const [variety, moves] of varietyMoves) {
 // | Tailwind                 |  8.5% | speed-control   |
 // | Quick Guard / Ally Switch|  9.1% | ally-protection |
 // | Trick Room               | 18.6% | speed-control   |
+// | Reflect / Light Screen   | ~39%  | screens         |
 //
 // And the ones deliberately absent, which is where the discipline shows:
 // **Protect is on 100% of the roster** and would have been pure noise — the
@@ -252,7 +253,13 @@ const UTILITY_MOVE_ROLES = new Map([
   // Speed control, which has no ability form in this roster and is the reason
   // the role vocabulary gains an entry rather than reusing one.
   ['tailwind', 'speed-control'],
-  ['trick-room', 'speed-control']
+  ['trick-room', 'speed-control'],
+  // Screens halve incoming damage for the whole side for five turns. Also no
+  // ability form here, and the archetype Grimmsnarl is built on — it is 18th in
+  // the format and was ranked 56th, with none of the reason visible.
+  ['reflect', 'screens'],
+  ['light-screen', 'screens'],
+  ['aurora-veil', 'screens']
 ]);
 
 const utilityTable = {};

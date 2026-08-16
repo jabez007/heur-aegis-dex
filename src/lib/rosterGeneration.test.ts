@@ -6,7 +6,8 @@ import {
   countTypeOverlap,
   countUnansweredWeaknesses,
   DEFAULT_UNANSWERED_WEAKNESS_SLACK,
-  generateRosters
+  generateRosters,
+  CANDIDATE_WEIGHTS
 } from './rosterGeneration';
 import { DEFAULT_BASE_SCORE, normalizeDamageFromScore } from './pokedexScoring';
 import type { PokemonEntry } from './pokemonEntry';
@@ -147,12 +148,17 @@ describe('candidatePriority', () => {
   it('scores the selected ability, not every ability the Pokemon has', () => {
     // Choosing Blaze over Intimidate should cost the credit; the browser
     // applies the override before ranking so the order follows the choice.
-    const chosen = mon('incineroar', {
-      abilityName: 'blaze',
-      abilities: [{ name: 'blaze', is_hidden: false }, { name: 'intimidate', is_hidden: true }]
-    });
+    const abilities = [{ name: 'blaze', is_hidden: false }, { name: 'intimidate', is_hidden: true }];
+    const chosen = mon('incineroar', { abilityName: 'blaze', abilities });
+    const alternative = mon('incineroar', { abilityName: 'intimidate', abilities });
 
-    expect(candidatePriority(chosen)).toBe(candidatePriority(mon('plain', { abilityName: 'blaze' })));
+    // Compared against the same Pokemon rather than a bare fixture, because
+    // roles now come from two places: Incineroar can also burn, which
+    // `getMoveSourcedRoles` reads off its name and which no ability choice
+    // changes. Holding the name fixed isolates the thing under test.
+    expect(candidatePriority(chosen)).toBeLessThan(candidatePriority(alternative));
+    expect(candidatePriority(alternative) - candidatePriority(chosen))
+      .toBeCloseTo(CANDIDATE_WEIGHTS.supportRole, 6);
   });
 
   it('credits a weather setter less than a role that works alone', () => {

@@ -14,7 +14,7 @@
  * 2026-07-27.
  */
 
-import { getUtilityRoles } from './utilityMoves';
+import { getMoveSourcedRoles } from './utilityMoves';
 
 export type AbilityRole =
   | 'intimidate'
@@ -33,7 +33,20 @@ export type AbilityRole =
    * The other half of `weather-setter`, which was scored alone for a long time —
    * see the note above DOUBLES_ABILITIES.
    */
-  | 'weather-abuser';
+  | 'weather-abuser'
+  /**
+   * Reflect, Light Screen and Aurora Veil: half the damage the whole side takes
+   * for five turns. No ability form on this roster, so it is bought with a
+   * moveslot or not at all — see `utilityMoveData.ts`.
+   */
+  | 'screens'
+  /**
+   * Can reliably burn or put an opponent to sleep, taking its contribution to
+   * the turn away rather than out-damaging it. Sourced from `statusMoveData.ts`,
+   * which the model already generated and until now read only to price the
+   * abilities that *resist* status.
+   */
+  | 'disruption';
 
 export interface AbilityEffect {
   role: AbilityRole;
@@ -58,7 +71,9 @@ export const ABILITY_ROLES: readonly AbilityRole[] = [
   'weather-setter',
   'terrain-setter',
   'speed-control',
-  'weather-abuser'
+  'weather-abuser',
+  'screens',
+  'disruption'
 ];
 
 /**
@@ -95,7 +110,10 @@ export const TEAM_DEPENDENT_ROLES: readonly AbilityRole[] = [
   // The mirror of the setters, and it has to take the same discount for the
   // same reason: Sand Rush is the whole point of Excadrill and worth nothing
   // without something putting sand up.
-  'weather-abuser'
+  'weather-abuser',
+  // Screens protect whoever is on the field for five turns, which is mostly
+  // somebody else — the Tailwind argument.
+  'screens'
 ];
 
 /**
@@ -270,7 +288,7 @@ export function analyzeTeamRoles(
 
   const moveRoleSources: Partial<Record<AbilityRole, string[]>> = {};
   members.forEach((member) => {
-    getUtilityRoles(member.varietyName).forEach((role) => {
+    getMoveSourcedRoles(member.varietyName).forEach((role) => {
       if (!applicableRoles.includes(role)) return;
       const sources = moveRoleSources[role] || [];
       if (member.varietyName && !sources.includes(member.varietyName)) sources.push(member.varietyName);

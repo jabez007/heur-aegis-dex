@@ -44,7 +44,7 @@
 import { evaluateRoster, scoreBring, type RosterEvaluation, type RosterMember } from './rosterScoring';
 import type { TypeMatchupValues } from './teamCoverage';
 import { MOVE_ROLE_CREDIT, scoreMemberQuality } from './teamScoring';
-import { getUtilityRoles } from './utilityMoves';
+import { getMoveSourcedRoles } from './utilityMoves';
 import { DEFAULT_BASE_SCORE } from './pokedexScoring';
 import { getAbilityEffect, getApplicableRoles, soloRoleValue } from './abilityRoles';
 import type { BattleFormat } from './battleFormats';
@@ -179,6 +179,35 @@ export const CANDIDATE_WEIGHTS = {
    *
    * It would also break the invariant above: at 3 a role is worth roughly three
    * times the quadruple-weakness charge on a frail Pokemon.
+   *
+   * ### Swept again once screens and status were modelled, and it changed shape
+   *
+   * The argument above predicted that the sweep misbehaved *because* most of
+   * support was invisible. Adding screens and status infliction tested that
+   * prediction directly, and it held:
+   *
+   * | weight | usage (before / after) | grimmsnarl | rotom-wash |
+   * | ------ | ---------------------- | ---------- | ---------- |
+   * | **1**  | 0.249 / 0.249          | 81 -> 77   | 176 -> 168 |
+   * | 4      | 0.271 / 0.263          | 92 -> 77   | 183 -> 162 |
+   * | 8      | 0.289 / 0.261          | 111 -> 74  | 191 -> 152 |
+   *
+   * Both objections are gone. Rotom-Wash now *improves* as the weight rises
+   * where it used to degrade, and the usage curve has a peak at 6 instead of
+   * climbing without one — the signature of a term measuring a cause rather than
+   * a correlate.
+   *
+   * It is still not raised, and the reason is now much narrower than before. At
+   * the peak the usage gain over 1 is 0.017, win rate is unchanged at 0.258
+   * against 0.260, and a weight of 6 is roughly six times the quadruple-weakness
+   * charge on a frail Pokemon. A documented invariant is not worth trading for
+   * 0.017 on the more compressed of two targets.
+   *
+   * What this does establish is that the constant is no longer *blocked*. When
+   * the last of support is modelled — Prankster is the obvious remaining one,
+   * and the move tables now make it computable where `abilityEffects.ts`
+   * correctly said they did not — this is the first thing to re-sweep, and the
+   * invariant is what has to be argued with rather than the correlation.
    *
    * That the charge is *smaller* for frail Pokemon is a real quirk of routing it
    * through the bulk term, not a deliberate claim: it says a 4x weakness costs
@@ -643,7 +672,7 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
   // format plays for their support: Corviknight is ranked on its attacking stat
   // while it is brought for Tailwind, and Pelipper's Wide Guard is invisible.
   // Roles the ability already supplies are not paid twice.
-  const moveRoleValue = getUtilityRoles(entry.name)
+  const moveRoleValue = getMoveSourcedRoles(entry.name)
     .filter((role) => applicable.includes(role) && role !== abilityRole)
     .reduce((total, role) => total + soloRoleValue(role), 0);
 

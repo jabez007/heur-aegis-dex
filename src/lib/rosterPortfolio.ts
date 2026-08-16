@@ -30,6 +30,7 @@
  * | 2026-08-15 | best off-roster       | 1.16 | **2.31** | 3.94 |
  * | 2026-08-16 | best off-roster       | 1.06 | **2.06** | 3.55 |
  * | 2026-08-16 | best off-roster       | 1.18 | **2.43** | 3.97 |
+ * | 2026-08-16 | best off-roster       | 1.16 | **2.56** | 4.04 | (capped to 2.54)
  *
  * ## The counterfactual was wrong, and the drift is how it showed
  *
@@ -64,9 +65,9 @@
  *
  * **Supply.** The margin has to admit enough candidates for `selectRosterPortfolio`
  * to find genuinely different rosters; too tight and the loop below falls back to
- * near-duplicates, which defeats the feature. At 2.43 it inherits the 2.25 row:
- * at least 95% of scenarios offer two diverse options and at least 90% offer
- * three, against 71% and 29% at a margin of 1.
+ * near-duplicates, which defeats the feature. At 2.54 it inherits at least the
+ * 2.25 row: 88% of scenarios offer two diverse options and 86% offer three,
+ * against 71% and 29% at a margin of 1.
  *
  * **The exclusion ceiling.** A roster registers six and brings four, so its
  * worst member is never brought and reaches the score only through the brings it
@@ -107,8 +108,39 @@
  * weather, so it separates rosters that pair rather than lifting everyone. A
  * member is worth more when losing it can cost a pairing.
  *
- * The ceilings re-measure at 3.009 in doubles and 2.825 in singles, so 2.43
- * clears the tighter of them by **0.395**. The previous value cleared by 0.335
+ * The last row is screens and status infliction, continuing the rise for the
+ * same reason as the row before it: both are capabilities only some rosters
+ * have, so pricing them separates rosters rather than lifting all of them.
+ *
+ * ## The ceiling started binding, and the constant is now capped by it
+ *
+ * That row is the first where the median derivation **exceeded what the ceiling
+ * permits**. The singles ceiling measures 2.786 and the median came to 2.56,
+ * clearing by 0.226 against the 0.24 the test requires — so the assertion fired.
+ *
+ * The threshold was not loosened. It was loosened once already, and doing it a
+ * second time on the same pressure is how a check stops being one. The value is
+ * instead **capped**, and the rule is stated rather than the number tuned:
+ *
+ *     margin = min(measured median, ceiling - 2x largest recorded drift)
+ *
+ * which gives 2.786 - 0.24 = **2.54**. The derivation still says what a member is
+ * worth; the ceiling says what the margin may not exceed; the smaller wins. That
+ * is the ceiling doing exactly the job described above rather than being argued
+ * with.
+ *
+ * Why the two are converging is worth recording, because it is not that either
+ * is wrong. The median is measured on real pools, where every role added over
+ * these two days gives real members more distinct capabilities to lose. The
+ * ceiling is measured on a synthetic fixture whose wasted sixth member has no
+ * abilities and no movepool, so it gains nothing from any of it. They are drifting
+ * apart because they are measured on different populations — the limitation this
+ * file already recorded ("it compares a real-pool median against a
+ * synthetic-fixture maximum"), now with a consequence attached.
+ *
+ * The next role added will push the median past the cap again, and at that point
+ * the fixture is what needs revisiting: a worthless sixth slot should cost more
+ * as the model learns more ways for a slot to be worth something. The previous value cleared by 0.335
  * and the assertion in `rosterPortfolio.test.ts` had been loosened to admit it;
  * the loosened form is kept rather than tightened back, because it is anchored
  * to observed drift and re-tightening it on a favourable measurement is how a
@@ -122,7 +154,8 @@
  * the doubles run spans 0.12. The clearance is asserted as a multiple of that
  * largest recorded drift instead of against a round number, so the check scales
  * with how much the ceiling has actually been seen to move. It stood at 2.8x
- * when the margin was 2.49, 4.3x at 2.31, 6.4x at 2.06, and stands at 3.3x now,
+ * when the margin was 2.49, 4.3x at 2.31, 6.4x at 2.06, 3.3x at 2.43, and is
+ * pinned at exactly 2x now by the cap above,
  * so crossing would take several consecutive worst-case recalibrations all in
  * the same direction.
  *
@@ -130,7 +163,7 @@
  * alternatives people actually pick — the standing of `MEMBER_WEIGHTS` and
  * `TYPE_MODULATION`. Rerun the script after anything that moves roster scores.
  */
-export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.43;
+export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.54;
 export const ROSTER_PORTFOLIO_LIMIT = 6;
 export const MINIMUM_ROSTER_REPLACEMENTS = 2;
 
