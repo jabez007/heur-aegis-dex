@@ -744,6 +744,20 @@ export const COMPOSITE_WEIGHTS = {
  * they can; a role most of them cannot fill lowers their share slightly. The
  * effect on the *middle* is the opposite and larger: the doubles median rises
  * from 0.0881 to 0.1007.
+ *
+ * ## Re-measured for weather abusers, and nothing moved again
+ *
+ * Sand Rush and its kin became a seventh role, so the breadth denominator grew
+ * once more and the rerun was mandatory. Quality is untouched for the same
+ * structural reason as last time, and both synergy maxima sampled below what is
+ * recorded — singles 0.8074 against 0.8247, doubles 0.7812 against 0.8124 —
+ * keeping the pair for an **eighth** consecutive measurement.
+ *
+ * Two reruns in a row where every number holds is worth stating rather than
+ * passing over. These bounds have absorbed a firepower term, a Palafin
+ * correction, move-sourced roles and now weather abusers without moving, which
+ * is what a well-set bound is supposed to do: the middle of the distribution
+ * shifts and the extremes are held by teams that were already at them.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {

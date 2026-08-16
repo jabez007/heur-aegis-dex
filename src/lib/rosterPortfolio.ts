@@ -29,6 +29,7 @@
  * | 2026-08-15 | best off-roster       | 1.25 | **2.49** | 4.70 |
  * | 2026-08-15 | best off-roster       | 1.16 | **2.31** | 3.94 |
  * | 2026-08-16 | best off-roster       | 1.06 | **2.06** | 3.55 |
+ * | 2026-08-16 | best off-roster       | 1.18 | **2.43** | 3.97 |
  *
  * ## The counterfactual was wrong, and the drift is how it showed
  *
@@ -63,8 +64,8 @@
  *
  * **Supply.** The margin has to admit enough candidates for `selectRosterPortfolio`
  * to find genuinely different rosters; too tight and the loop below falls back to
- * near-duplicates, which defeats the feature. At 2.06 it inherits the 2 row:
- * at least 93% of scenarios offer two diverse options and at least 86% offer
+ * near-duplicates, which defeats the feature. At 2.43 it inherits the 2.25 row:
+ * at least 95% of scenarios offer two diverse options and at least 90% offer
  * three, against 71% and 29% at a margin of 1.
  *
  * **The exclusion ceiling.** A roster registers six and brings four, so its
@@ -93,14 +94,21 @@
  * next-best off-roster candidate is closer in score, replacing one member costs
  * less.
  *
- * The last row is move-sourced support roles entering team synergy, moving this
- * from 2.31 to 2.06 — the second consecutive fall, and the same mechanism as the
+ * The eighth row is move-sourced support roles entering team synergy, moving
+ * this from 2.31 to 2.06 — the second consecutive fall, and the same mechanism as the
  * first. Anything that lets more of the pool score well compresses the gap
  * between a roster and its best replacement, and 130 varieties gained a role
  * they did not have.
  *
- * The ceilings re-measure at 3.009 in doubles and 2.825 in singles, so 2.06
- * clears the tighter of them by **0.765**. The previous value cleared by 0.335
+ * The last row is weather abusers, and it moves *up* — 2.06 to 2.43 — which is
+ * the first rise since the counterfactual was fixed and is the right direction
+ * for what changed. Move-sourced roles let more of the pool score well and
+ * compressed the field; a weather abuser only counts when the team also sets its
+ * weather, so it separates rosters that pair rather than lifting everyone. A
+ * member is worth more when losing it can cost a pairing.
+ *
+ * The ceilings re-measure at 3.009 in doubles and 2.825 in singles, so 2.43
+ * clears the tighter of them by **0.395**. The previous value cleared by 0.335
  * and the assertion in `rosterPortfolio.test.ts` had been loosened to admit it;
  * the loosened form is kept rather than tightened back, because it is anchored
  * to observed drift and re-tightening it on a favourable measurement is how a
@@ -114,15 +122,15 @@
  * the doubles run spans 0.12. The clearance is asserted as a multiple of that
  * largest recorded drift instead of against a round number, so the check scales
  * with how much the ceiling has actually been seen to move. It stood at 2.8x
- * when the margin was 2.49, 4.3x at 2.31, and stands at 6.4x now, so crossing
- * would take several consecutive worst-case recalibrations all in the same
- * direction.
+ * when the margin was 2.49, 4.3x at 2.31, 6.4x at 2.06, and stands at 3.3x now,
+ * so crossing would take several consecutive worst-case recalibrations all in
+ * the same direction.
  *
  * Reasoned against a measurement rather than validated against how many
  * alternatives people actually pick — the standing of `MEMBER_WEIGHTS` and
  * `TYPE_MODULATION`. Rerun the script after anything that moves roster scores.
  */
-export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.06;
+export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.43;
 export const ROSTER_PORTFOLIO_LIMIT = 6;
 export const MINIMUM_ROSTER_REPLACEMENTS = 2;
 

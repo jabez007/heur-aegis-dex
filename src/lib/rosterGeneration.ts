@@ -144,6 +144,42 @@ export const CANDIDATE_WEIGHTS = {
    * invariant for anything under roughly 270 bulk — the frail Pokemon, where a
    * quadruple weakness is least survivable. Pinned at the weakest case instead.
    *
+   * ## Swept against real usage, and deliberately not raised
+   *
+   * This weight is the binding constraint on three separate corrections — move
+   * sourced support roles, Mirror Armor, and now weather abusers — each of which
+   * measured as real and then moved almost nothing, because a role is worth one
+   * point against a quality term spanning thirty. So it was swept directly,
+   * against the 166,311-battle usage table:
+   *
+   * | weight | vs usage | vs win | excadrill / mamoswine | grimmsnarl | rotom-wash |
+   * | ------ | -------- | ------ | --------------------- | ---------- | ---------- |
+   * | 0      | 0.245    | 0.262  | 27 / 17               | 77         | 170        |
+   * | **1**  | 0.249    | 0.259  | 30 / 21               | 81         | 176        |
+   * | 3      | 0.268    | 0.261  | 28 / **29**           | 88         | 178        |
+   * | 8      | 0.289    | 0.259  | 27 / 40               | 111        | 191        |
+   *
+   * Raising it would fix the case that prompted the sweep: Excadrill passes
+   * Mamoswine at 3, matching the tier lists that put them at B and C. Usage
+   * correlation climbs the whole way.
+   *
+   * It is not raised, for three reasons that only mean anything together. The
+   * climb has no peak, which usually means a term is picking up a correlate
+   * rather than a cause — here, that support Pokemon are heavily played in
+   * doubles. Win rate is flat across the entire sweep, so the one target not
+   * compressed by usage sees nothing. And most tellingly, **the Pokemon this was
+   * meant to rescue get worse**: Grimmsnarl and Rotom-Wash are 18th and 38th in
+   * the format, and both fall as the weight rises, because their support is
+   * Prankster, screens and Will-O-Wisp — none of which the model can see.
+   *
+   * That is the finding. Widening the channel amplifies the fraction of support
+   * the model knows and penalizes the rest, so more support has to be modelled
+   * *before* this weight is worth revisiting. Raising it now would buy a better
+   * correlation by making the two clearest errors on the board bigger.
+   *
+   * It would also break the invariant above: at 3 a role is worth roughly three
+   * times the quadruple-weakness charge on a frail Pokemon.
+   *
    * That the charge is *smaller* for frail Pokemon is a real quirk of routing it
    * through the bulk term, not a deliberate claim: it says a 4x weakness costs
    * less when there was less to lose. Defensible, since something that dies to a

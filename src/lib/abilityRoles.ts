@@ -27,7 +27,13 @@ export type AbilityRole =
    * and the reason the vocabulary grew rather than being reused: speed control
    * is bought with a moveslot or not at all. See `utilityMoveData.ts`.
    */
-  | 'speed-control';
+  | 'speed-control'
+  /**
+   * Doubles the holder's Speed or its damage while a weather it wants is up.
+   * The other half of `weather-setter`, which was scored alone for a long time —
+   * see the note above DOUBLES_ABILITIES.
+   */
+  | 'weather-abuser';
 
 export interface AbilityEffect {
   role: AbilityRole;
@@ -51,7 +57,8 @@ export const ABILITY_ROLES: readonly AbilityRole[] = [
   'ally-protection',
   'weather-setter',
   'terrain-setter',
-  'speed-control'
+  'speed-control',
+  'weather-abuser'
 ];
 
 /**
@@ -84,7 +91,11 @@ export const TEAM_DEPENDENT_ROLES: readonly AbilityRole[] = [
   // Setting Tailwind helps whatever is behind it, not the setter — the same
   // argument that puts the field setters here. Trick Room is the sharper case:
   // it is worth less than nothing to a team that is not built slow.
-  'speed-control'
+  'speed-control',
+  // The mirror of the setters, and it has to take the same discount for the
+  // same reason: Sand Rush is the whole point of Excadrill and worth nothing
+  // without something putting sand up.
+  'weather-abuser'
 ];
 
 /**
@@ -118,6 +129,30 @@ export function getApplicableRoles(hasAlly: boolean): readonly AbilityRole[] {
   return hasAlly ? ABILITY_ROLES : ABILITY_ROLES.filter((role) => !DOUBLES_ONLY_ROLES.includes(role));
 }
 
+/**
+ * ## Both halves of the weather interaction, finally
+ *
+ * The setters were scored here for a long time while the abusers were worth
+ * nothing, and the docblock on TEAM_DEPENDENT_ROLES stated the asymmetry without
+ * closing it: a setter is discounted *because* "Drought on Ninetales is the whole
+ * reason to bring it and worth zero without the sun abusers behind it". The
+ * abusers behind it earned zero.
+ *
+ * The cost was concrete. Excadrill's Sand Rush doubles its Speed and read as a
+ * blank, so it ranked below Mamoswine — which the format has at C-tier against
+ * Excadrill's B — on the strength of Ice/Ground being the best offensive typing
+ * in the format. Twenty-two of the 146 Pokemon in a default scan carry a
+ * weather-dependent ability.
+ *
+ * ### What counts as abusing weather
+ *
+ * The weather has to change what the Pokemon *does* — how fast it moves or how
+ * hard it hits. Abilities that change how likely it is to be hit, or hand back a
+ * sixteenth of its HP, are recorded below and deliberately excluded. That line is
+ * doing real work rather than tidying: **Snow Cloak is why Mamoswine is over
+ * Excadrill in the first place**, and crediting evasion here would raise both and
+ * fix nothing.
+ */
 export const DOUBLES_ABILITIES: Readonly<Record<string, AbilityEffect>> = {
   intimidate: { role: 'intimidate' },
 
@@ -135,6 +170,24 @@ export const DOUBLES_ABILITIES: Readonly<Record<string, AbilityEffect>> = {
   drizzle: { role: 'weather-setter', fieldState: 'rain' },
   'sand-stream': { role: 'weather-setter', fieldState: 'sandstorm' },
   'snow-warning': { role: 'weather-setter', fieldState: 'snow' },
+
+  // Speed doubled in the weather they want. The reason to bring the setter.
+  'sand-rush': { role: 'weather-abuser', fieldState: 'sandstorm' },
+  'swift-swim': { role: 'weather-abuser', fieldState: 'rain' },
+  chlorophyll: { role: 'weather-abuser', fieldState: 'sun' },
+  'slush-rush': { role: 'weather-abuser', fieldState: 'snow' },
+  // Damage rather than Speed: Rock, Ground and Steel moves gain 30% in sand.
+  // Smaller than the Speed doublers and still a change to what the Pokemon does.
+  'sand-force': { role: 'weather-abuser', fieldState: 'sandstorm' },
+  // Recorded and excluded, all four. Sand Veil and Snow Cloak buy evasion, which
+  // changes whether the Pokemon is hit rather than what it does, and is a
+  // coin-flip besides. Ice Body and Rain Dish return a sixteenth of maximum HP
+  // per turn, which is chip healing and not a reason to build a team around the
+  // weather. Listed so their absence reads as a decision:
+  //   'sand-veil'  — evasion in sandstorm
+  //   'snow-cloak' — evasion in snow
+  //   'ice-body'   — 1/16 HP per turn in snow
+  //   'rain-dish'  — 1/16 HP per turn in rain
 
   'electric-surge': { role: 'terrain-setter', fieldState: 'electric-terrain' },
   'psychic-surge': { role: 'terrain-setter', fieldState: 'psychic-terrain' },
@@ -251,6 +304,22 @@ export function analyzeTeamRoles(
       conflictingAbilities.push(...states.values());
     }
   });
+
+  // An abuser is only a capability the team *has* when something on the team puts
+  // its weather up. Sand Rush with no sand is a blank, and counting it as role
+  // breadth would credit a team for an interaction it cannot perform.
+  //
+  // This gate is on the team analysis only, and deliberately not on
+  // `soloRoleValue`. Ranking a Pokemon alone, a setter is worth half credit with
+  // no abuser beside it yet; symmetry says an abuser is worth half credit with no
+  // setter beside it yet. Both are bets on a teammate that has not been chosen.
+  const setStates = new Set(
+    [...(fieldStatesByRole['weather-setter']?.keys() ?? [])]
+  );
+  const abuserStates = fieldStatesByRole['weather-abuser'];
+  const abuserSatisfied = !!abuserStates
+    && [...abuserStates.keys()].some((state) => setStates.has(state));
+  if (!abuserSatisfied) delete roleSources['weather-abuser'];
 
   const roles = applicableRoles.filter((role) => (roleSources[role] || []).length > 0);
   return {

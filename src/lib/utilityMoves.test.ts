@@ -75,3 +75,49 @@ describe('analyzeTeamRoles with move-sourced roles', () => {
     expect(analysis.moveRoles).toEqual([]);
   });
 });
+
+describe('weather abusers', () => {
+  it('scores both halves of the weather interaction', async () => {
+    const { getAbilityEffect } = await import('./abilityRoles');
+
+    // The asymmetry this closed: the setter had a role and the abuser did not.
+    expect(getAbilityEffect('sand-stream')?.role).toBe('weather-setter');
+    expect(getAbilityEffect('sand-rush')?.role).toBe('weather-abuser');
+    // And they have to agree about which weather, or the pairing cannot be found.
+    expect(getAbilityEffect('sand-rush')?.fieldState)
+      .toBe(getAbilityEffect('sand-stream')?.fieldState);
+  });
+
+  it('does not credit evasion or chip healing as abusing weather', async () => {
+    const { getAbilityEffect } = await import('./abilityRoles');
+
+    // Load-bearing rather than tidy. Snow Cloak is Mamoswine's ability, and
+    // Mamoswine outranking Excadrill is the case the weather work exists to fix;
+    // crediting evasion would raise both and fix nothing.
+    expect(getAbilityEffect('snow-cloak')).toBeUndefined();
+    expect(getAbilityEffect('sand-veil')).toBeUndefined();
+    expect(getAbilityEffect('ice-body')).toBeUndefined();
+    expect(getAbilityEffect('rain-dish')).toBeUndefined();
+  });
+
+  it('counts an abuser only when the team sets its weather', () => {
+    const withSand = analyzeTeamRoles([
+      { abilityName: 'sand-stream', varietyName: 'hippowdon' },
+      { abilityName: 'sand-rush', varietyName: 'excadrill' }
+    ]);
+    expect(withSand.roles).toContain('weather-abuser');
+
+    // Sand Rush with no sand is a blank, and role breadth must not reward a
+    // capability the team cannot perform.
+    const alone = analyzeTeamRoles([{ abilityName: 'sand-rush', varietyName: 'excadrill' }]);
+    expect(alone.roles).not.toContain('weather-abuser');
+
+    // The wrong weather is no better than none.
+    const mismatched = analyzeTeamRoles([
+      { abilityName: 'drought', varietyName: 'torkoal' },
+      { abilityName: 'sand-rush', varietyName: 'excadrill' }
+    ]);
+    expect(mismatched.roles).not.toContain('weather-abuser');
+    expect(mismatched.roles).toContain('weather-setter');
+  });
+});
