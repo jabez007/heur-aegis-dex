@@ -120,7 +120,7 @@ const halves = (entries) => {
     immuneToAllyMoves: format.hasAlly && isImmuneToAllyMoves(member.abilityName)
   })));
   const roles = analyzeTeamRoles(
-    members.map((member) => ({ abilityName: member.abilityName })),
+    members.map((member) => ({ abilityName: member.abilityName, varietyName: member.name })),
     { hasAlly: format.hasAlly }
   );
   const qualities = members.map((member) => scoreMemberQuality({

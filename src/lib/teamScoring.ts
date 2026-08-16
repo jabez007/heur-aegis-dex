@@ -195,6 +195,56 @@ export const OBSERVED_STAT_TERMS = {
 export const OBSERVED_STAB_POWER = { min: 77, max: 120 } as const;
 
 /**
+ * What a support role is worth when it comes from a move rather than an ability.
+ *
+ * The two are the same capability at different prices. Lightning Rod redirects
+ * every turn and costs nothing; Follow Me redirects because one of four
+ * moveslots holds it, and that slot is not attacking, not Protecting and not
+ * providing coverage. Counting them equally would say a Pokemon can support for
+ * free, which is the whole reason `analyzeTeamRoles` returns the two lists
+ * separately instead of merging them.
+ *
+ * Set to a half: a discretionary moveslot is roughly half of what a competitive
+ * set has spare once STAB and a coverage move are placed.
+ *
+ * ## The sweep found nothing, and the reason is the interesting part
+ *
+ * Swept 0 to 1 against both harnesses. Neither moves:
+ *
+ * | credit | vs usage | vs win rate |
+ * | ------ | -------- | ----------- |
+ * | 0.00   | 0.245    | 0.255       |
+ * | 0.50   | 0.240    | 0.250       |
+ * | 1.00   | 0.245    | 0.252       |
+ *
+ * Corviknight ranks 44th at every value; Pelipper moves one place and Whimsicott
+ * moves one place the wrong way. Against real tournament teams the
+ * composition-matched AUC goes from 65.8% to 65.9%.
+ *
+ * That is not the data failing. It is two structural ceilings:
+ *
+ * 1. **In `candidatePriority`, the channel is a rounding error.**
+ *    `CANDIDATE_WEIGHTS.supportRole` is 1 point against a quality term spanning
+ *    roughly 30, deliberately — it fell 4 to 2 to 1 to hold the invariant that a
+ *    role never offsets a quadruple weakness. A team-dependent role scores 0.5 of
+ *    that, and this halves it again, so speed control is worth **0.25 points**.
+ *    Widening it is a change to that invariant, not to this constant.
+ * 2. **In `scoreTeamSynergy`, the validation cannot see it.** The
+ *    composition-matched baseline draws from the same Pokemon the real teams use,
+ *    so it inherits the same utility roles. That test isolates *combinations*,
+ *    and a utility role is a member property.
+ *
+ * So this is kept at a reasoned half and recorded as unvalidated, rather than
+ * tuned against a number that does not respond. What the table does buy today is
+ * generation: the beam search prunes to `DEFAULT_CANDIDATE_LIMIT` by
+ * `candidatePriority`, and with filters opened Pelipper sits at 214 and
+ * Whimsicott at 198 — cut before team synergy, which weighs roles properly, ever
+ * sees them. That is the failure the `supportRole` docblock warns about, and
+ * this is the data needed to fix it whenever that weight is revisited.
+ */
+export const MOVE_ROLE_CREDIT = 0.5;
+
+/**
  * How strongly firepower modulates the attacking stat it applies to.
  *
  * ## Why the offence axis has three factors and not two
@@ -674,6 +724,26 @@ export const COMPOSITE_WEIGHTS = {
  * Both synergy maxima unchanged for the sixth consecutive rerun, and necessarily
  * so: quality does not read synergy. Doubles sampled 0.7863 against its recorded
  * 0.8124 and keeps it; singles hit 0.8247 exactly.
+ *
+ * ## Re-measured for move-sourced support roles, and nothing moved
+ *
+ * `speed-control` joined the role vocabulary and `analyzeTeamRoles` began
+ * reporting roles a Pokemon can fill with a move. That changes the support-role
+ * term in two opposing directions at once — the breadth denominator grows from
+ * five roles to six, while move-sourced roles add to the numerator — so the
+ * rerun was mandatory rather than optional.
+ *
+ * **All four numbers are unchanged.** Quality could not move: it does not read
+ * roles at all. Both synergy maxima sampled *below* what is recorded — singles
+ * 0.8139 against 0.8247, doubles 0.7883 against 0.8124 — and the widen-only rule
+ * keeps the recorded pair, now for the seventh consecutive measurement.
+ *
+ * Sampling below is the expected shape here and worth saying so it is not read
+ * as the term doing nothing. A sixth role widens the denominator for every team,
+ * and the teams that set the maximum are the ones already covering the roles
+ * they can; a role most of them cannot fill lowers their share slightly. The
+ * effect on the *middle* is the opposite and larger: the doubles median rises
+ * from 0.0881 to 0.1007.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
@@ -878,7 +948,12 @@ function evaluateTeamSynergy(
   const typeDiversityValue = clamp01(typesTotal / maxDistinctTypes);
   const enabledSpreadValue =
     clamp01((w?.enabledSpread ?? coverage.enabledSpreadTypes.length) / maxDistinctTypes);
-  const supportRolesValue = clamp01((roles?.roles.length ?? 0) / applicableRoleCount);
+  // Move-sourced roles count for less than ability-sourced ones. Lightning Rod
+  // redirects every turn for nothing; Follow Me redirects because one of four
+  // moveslots was spent, and that slot is not attacking.
+  const supportRoleCount = (roles?.roles.length ?? 0) +
+    (MOVE_ROLE_CREDIT * (roles?.moveRoles.length ?? 0));
+  const supportRolesValue = clamp01(supportRoleCount / applicableRoleCount);
   const coverageBreadth = bonusWeights.coverageBreadth * coverageBreadthValue;
   const resistanceBreadth = bonusWeights.resistanceBreadth * resistanceBreadthValue;
   const typeDiversity = bonusWeights.typeDiversity * typeDiversityValue;
@@ -980,9 +1055,9 @@ function evaluateTeamSynergy(
           typeDiversityValue, typeDiversity, []),
         bonusTerm('enabledSpread', bonusWeights.enabledSpread, coverage.enabledSpreadTypes.length,
           maxDistinctTypes, enabledSpreadValue, enabledSpread, [...coverage.enabledSpreadTypes].sort()),
-        bonusTerm('supportRoles', bonusWeights.supportRoles, roles?.roles.length ?? 0,
+        bonusTerm('supportRoles', bonusWeights.supportRoles, supportRoleCount,
           applicableRoleCount, supportRolesValue, supportRoles,
-          [...(roles?.roles ?? [])].sort() as AbilityRole[])
+          [...(roles?.roles ?? []), ...(roles?.moveRoles ?? [])].sort() as AbilityRole[])
       ],
       penaltyTerms: [
         penaltyTerm('uncoveredWeakness', SYNERGY_PENALTY_WEIGHTS.uncoveredWeakness,

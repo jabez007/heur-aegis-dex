@@ -14,12 +14,20 @@
  * 2026-07-27.
  */
 
+import { getUtilityRoles } from './utilityMoves';
+
 export type AbilityRole =
   | 'intimidate'
   | 'redirection'
   | 'ally-protection'
   | 'weather-setter'
-  | 'terrain-setter';
+  | 'terrain-setter'
+  /**
+   * Tailwind and Trick Room. The only role with no ability form in this roster,
+   * and the reason the vocabulary grew rather than being reused: speed control
+   * is bought with a moveslot or not at all. See `utilityMoveData.ts`.
+   */
+  | 'speed-control';
 
 export interface AbilityEffect {
   role: AbilityRole;
@@ -42,7 +50,8 @@ export const ABILITY_ROLES: readonly AbilityRole[] = [
   'redirection',
   'ally-protection',
   'weather-setter',
-  'terrain-setter'
+  'terrain-setter',
+  'speed-control'
 ];
 
 /**
@@ -69,7 +78,14 @@ export const DOUBLES_ONLY_ROLES: readonly AbilityRole[] = ['redirection', 'ally-
  * payoff has not happened yet. Team scoring credits these properly through its
  * own support-role synergy term, which is the right place for it.
  */
-export const TEAM_DEPENDENT_ROLES: readonly AbilityRole[] = ['weather-setter', 'terrain-setter'];
+export const TEAM_DEPENDENT_ROLES: readonly AbilityRole[] = [
+  'weather-setter',
+  'terrain-setter',
+  // Setting Tailwind helps whatever is behind it, not the setter — the same
+  // argument that puts the field setters here. Trick Room is the sharper case:
+  // it is worth less than nothing to a team that is not built slow.
+  'speed-control'
+];
 
 /**
  * How much of a solo support bonus a team-dependent role earns.
@@ -129,11 +145,24 @@ export const DOUBLES_ABILITIES: Readonly<Record<string, AbilityEffect>> = {
 export interface TeamRoleMember {
   /** The ability actually selected for battle, not the full learnable set. */
   abilityName?: string;
+  /**
+   * PokeAPI variety name, used to find roles the Pokemon can fill with a move
+   * rather than an ability. Omitting it scores abilities only, which is what
+   * this function did before `utilityMoveData.ts` existed.
+   */
+  varietyName?: string;
 }
 
 export interface TeamRoleAnalysis {
   /** Distinct support roles the team covers. */
   roles: AbilityRole[];
+  /**
+   * Roles covered *only* by a move, with no ability on the team supplying them.
+   * Kept apart from `roles` because they are not worth the same: an ability
+   * works for free and a move costs one of four slots, so the consumer charges
+   * the difference rather than this function pretending they are equal.
+   */
+  moveRoles: AbilityRole[];
   /** Ability names providing each covered role. */
   roleSources: Partial<Record<AbilityRole, string[]>>;
   /**
@@ -186,6 +215,16 @@ export function analyzeTeamRoles(
   const roleSources: Partial<Record<AbilityRole, string[]>> = {};
   const fieldStatesByRole: Partial<Record<AbilityRole, Map<string, string>>> = {};
 
+  const moveRoleSources: Partial<Record<AbilityRole, string[]>> = {};
+  members.forEach((member) => {
+    getUtilityRoles(member.varietyName).forEach((role) => {
+      if (!applicableRoles.includes(role)) return;
+      const sources = moveRoleSources[role] || [];
+      if (member.varietyName && !sources.includes(member.varietyName)) sources.push(member.varietyName);
+      moveRoleSources[role] = sources;
+    });
+  });
+
   members.forEach((member) => {
     const effect = getAbilityEffect(member.abilityName);
     if (!effect || !member.abilityName) return;
@@ -213,8 +252,13 @@ export function analyzeTeamRoles(
     }
   });
 
+  const roles = applicableRoles.filter((role) => (roleSources[role] || []).length > 0);
   return {
-    roles: applicableRoles.filter((role) => (roleSources[role] || []).length > 0),
+    roles,
+    // Only roles no ability already covers. A team with Lightning Rod *and*
+    // Follow Me has redirection once, not one and a half times.
+    moveRoles: applicableRoles.filter((role) =>
+      !roles.includes(role) && (moveRoleSources[role] || []).length > 0),
     roleSources,
     fieldConflicts,
     conflictingAbilities

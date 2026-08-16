@@ -274,7 +274,10 @@ export function useTeamBuilder() {
     scoring.value?.typeValues
   ));
 
-  const roleAnalysis = computed(() => analyzeTeamRoles(broughtTeam.value, { hasAlly: format.value.hasAlly }));
+  const roleAnalysis = computed(() => analyzeTeamRoles(
+    broughtTeam.value.map((member) => ({ abilityName: member.abilityName, varietyName: member.name })),
+    { hasAlly: format.value.hasAlly }
+  ));
 
   // The workbench reports weaknesses with no *defensive* answer, because that is
   // what "Team Weaknesses" means to a player: types nobody can switch into.

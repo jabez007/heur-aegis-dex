@@ -113,7 +113,7 @@ function analyzeLine(members: readonly GuidedLineMember[], options: GuidedNeedOp
   }));
   const coverage = analyzeTeamCoverage(profiles, options.typeValues);
   const roles = analyzeTeamRoles(
-    members.map(({ abilityName }) => ({ abilityName })),
+    members.map(({ abilityName, name }) => ({ abilityName, varietyName: name })),
     { hasAlly: options.format.hasAlly }
   );
   const typesTotal = new Set(members.flatMap((member) => member.types ?? [])).size;

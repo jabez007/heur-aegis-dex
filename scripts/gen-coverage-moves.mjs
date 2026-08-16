@@ -206,6 +206,65 @@ for (const [variety, moves] of varietyMoves) {
   if (ailments.size > 0) statusTable[variety] = [...ailments].sort();
 }
 
+// ## Utility moves that fill a modelled role
+//
+// `abilityRoles.ts` scores redirection, ally protection and the field setters,
+// and reads all of them off *abilities*. That leaves the model blind to the
+// Pokemon whose support is a move: Corviknight ranks 29th on its attacking stat
+// while the format plays it for Tailwind, Wide Guard, Roost and U-turn, and the
+// same gap sits under Whimsicott, Pelipper and Torkoal.
+//
+// ### Selected by role, not by frequency
+//
+// A move is emitted when it supplies a role the model already scores, plus one
+// new role for speed control. That rule is the reason this table cannot repeat
+// the coverage mistake — it is not an argmax over anything, and a move nothing
+// scores is not included however common it is.
+//
+// The frequencies confirm the selection discriminates rather than choosing it.
+// Measured across 317 varieties with a Champions learnset:
+//
+// | move                     | share | role            |
+// | ------------------------ | ----- | --------------- |
+// | Follow Me / Rage Powder  |  3.2% | redirection     |
+// | Wide Guard               |  7.9% | ally-protection |
+// | Tailwind                 |  8.5% | speed-control   |
+// | Quick Guard / Ally Switch|  9.1% | ally-protection |
+// | Trick Room               | 18.6% | speed-control   |
+//
+// And the ones deliberately absent, which is where the discipline shows:
+// **Protect is on 100% of the roster** and would have been pure noise — the
+// Normal-as-coverage defect exactly, one layer up. Rain Dance and Sunny Day sit
+// at 75% and 74%, universal TMs rather than a capability worth recording, and
+// setting weather by move costs both a turn and a slot to get five turns of what
+// an ability gives permanently. Helping Hand is 66%. None of them tell you
+// anything about the Pokemon holding them.
+const UTILITY_MOVE_ROLES = new Map([
+  // Pulls an attack off a partner. The ability form is Lightning Rod and Storm
+  // Drain; these are the same capability bought with a moveslot.
+  ['follow-me', 'redirection'],
+  ['rage-powder', 'redirection'],
+  // Blunts what is aimed at the pair. Wide Guard stops spread moves outright,
+  // which is the single most format-defining protective move in doubles.
+  ['wide-guard', 'ally-protection'],
+  ['quick-guard', 'ally-protection'],
+  ['ally-switch', 'ally-protection'],
+  // Speed control, which has no ability form in this roster and is the reason
+  // the role vocabulary gains an entry rather than reusing one.
+  ['tailwind', 'speed-control'],
+  ['trick-room', 'speed-control']
+]);
+
+const utilityTable = {};
+for (const [variety, moves] of varietyMoves) {
+  const roles = new Set();
+  for (const move of moves) {
+    const role = UTILITY_MOVE_ROLES.get(move);
+    if (role) roles.add(role);
+  }
+  if (roles.size > 0) utilityTable[variety] = [...roles].sort();
+}
+
 // ## Best usable STAB power
 //
 // The coverage table answers *which* types a Pokemon can reach. This answers
@@ -418,6 +477,23 @@ const statusLines = Object.keys(statusTable).sort().map((variety) =>
 );
 writeFileSync('status-table.txt', statusLines.join(',\n') + '\n');
 
+const utilityLines = Object.keys(utilityTable).sort().map((variety) =>
+  `  '${variety}': [${utilityTable[variety].map((r) => `'${r}'`).join(', ')}]`
+);
+writeFileSync('utility-move-table.txt', utilityLines.join(',\n') + '\n');
+
+const roleCounts = {};
+for (const roles of Object.values(utilityTable)) {
+  for (const role of roles) roleCounts[role] = (roleCounts[role] || 0) + 1;
+}
+console.log(`\nutility-move entries: ${Object.keys(utilityTable).length}/${varieties.length}`);
+for (const [role, count] of Object.entries(roleCounts).sort((a, b) => b[1] - a[1])) {
+  console.log(`  ${role.padEnd(16)} ${String(count).padStart(4)}  ${(100 * count / varieties.length).toFixed(1)}%`);
+}
+for (const check of ['corviknight', 'whimsicott', 'pelipper', 'torkoal', 'incineroar', 'garchomp']) {
+  console.log(`  ${check.padEnd(12)} [${(utilityTable[check] || []).join(', ')}]`);
+}
+
 const stabLines = Object.keys(stabTable).sort().map((variety) => {
   const { physical, special } = stabTable[variety];
   return `  '${variety}': { physical: ${physical}, special: ${special} }`;
@@ -471,4 +547,4 @@ writeFileSync('coverage-stats.json', JSON.stringify({
     Object.entries(ailmentCounts).map(([a, c]) => [a, c / varietyCount])
   )
 }, null, 2));
-console.log('\nwrote coverage-table.txt, status-table.txt and stab-power-table.txt');
+console.log('\nwrote coverage-table.txt, status-table.txt, stab-power-table.txt and utility-move-table.txt');

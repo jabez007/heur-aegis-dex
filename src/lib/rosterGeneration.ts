@@ -43,7 +43,8 @@
 
 import { evaluateRoster, scoreBring, type RosterEvaluation, type RosterMember } from './rosterScoring';
 import type { TypeMatchupValues } from './teamCoverage';
-import { scoreMemberQuality } from './teamScoring';
+import { MOVE_ROLE_CREDIT, scoreMemberQuality } from './teamScoring';
+import { getUtilityRoles } from './utilityMoves';
 import { DEFAULT_BASE_SCORE } from './pokedexScoring';
 import { getAbilityEffect, getApplicableRoles, soloRoleValue } from './abilityRoles';
 import type { BattleFormat } from './battleFormats';
@@ -597,10 +598,20 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
 
   // Scored in isolation, so a role that needs teammates to pay off earns less
   // than one that works the moment the Pokemon is on the field.
+  const applicable = getApplicableRoles(hasAlly);
   const effect = getAbilityEffect(entry.abilityName);
-  const roleValue = effect && getApplicableRoles(hasAlly).includes(effect.role)
-    ? soloRoleValue(effect.role)
-    : 0;
+  const abilityRole = effect && applicable.includes(effect.role) ? effect.role : undefined;
+
+  // A role the Pokemon can only reach with a move counts too, at a discount for
+  // the moveslot it costs. Without this the browser is blind to the Pokemon the
+  // format plays for their support: Corviknight is ranked on its attacking stat
+  // while it is brought for Tailwind, and Pelipper's Wide Guard is invisible.
+  // Roles the ability already supplies are not paid twice.
+  const moveRoleValue = getUtilityRoles(entry.name)
+    .filter((role) => applicable.includes(role) && role !== abilityRole)
+    .reduce((total, role) => total + soloRoleValue(role), 0);
+
+  const roleValue = soloRoleValue(abilityRole) + (MOVE_ROLE_CREDIT * moveRoleValue);
 
   // Stats modulated by typing, on the same terms the team scorer will use.
   // Resistances and weaknesses are not added separately: they are already what

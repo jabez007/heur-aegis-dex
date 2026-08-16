@@ -235,7 +235,7 @@ export function scoreBring(members: RosterMember[], options: RosterScoringOption
   })), options.typeValues);
 
   const roles = analyzeTeamRoles(
-    members.map((member) => ({ abilityName: member.abilityName })),
+    members.map((member) => ({ abilityName: member.abilityName, varietyName: member.name })),
     { hasAlly: format.hasAlly }
   );
   const typesTotal = new Set(members.flatMap((member) => member.types || [])).size;

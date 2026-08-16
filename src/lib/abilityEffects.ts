@@ -379,6 +379,28 @@ export const ABILITY_QUALITY_EFFECTS: readonly AbilityQualityRule[] = [
     reason: 'Moveset-dependent, and the coverage table records move types rather than whether they make contact.'
   },
   {
+    ability: 'weak-armor',
+    component: 'speed',
+    multiplier: 1.4,
+    applied: false,
+    condition: 'the opponent attacks physically, which they usually do',
+    reason:
+      'Raised because the browser picks Flash Fire on Ceruledge and Armarouge and competitive players tend to run '
+      + 'this instead. The selection is not arbitrary — Flash Fire is a real Fire immunity and is priced in '
+      + '`pokedexAbilities.ts`, while Weak Armor appears in no table and is worth exactly zero, so Flash Fire wins '
+      + 'by default. Both are slow offensive Pokemon (85 and 75 Speed) that +2 Speed converts into sweepers.\n\n'
+      + 'It is recorded rather than applied because it fails the bar at the top of this file, and it fails it in a '
+      + 'way worth arguing with. The bar excludes effects that need "the opponent cooperating", which was written '
+      + 'for Marvel Scale and Rattled — abilities that need the opponent to *blunder*. Weak Armor needs the '
+      + 'opponent to attack physically, which is not a blunder; it is the default. The bar does not currently '
+      + 'separate "needs a mistake" from "needs the normal course of play", and Weak Armor is the case that shows '
+      + 'the difference matters.\n\n'
+      + 'Sized at Speed Boost\'s 1.4 for comparison, since both convert a slow attacker into a fast one and Speed '
+      + 'Boost *is* applied on the reasoning that "staying on the field is not setup; it is the default". If that '
+      + 'reasoning extends to being attacked, this entry should be applied and the bar reworded. That is a change '
+      + 'to the rule rather than an addition to the table, so it is not made in passing.'
+  },
+  {
     ability: 'mirror-armor',
     component: 'offense',
     multiplier: 1.21,
