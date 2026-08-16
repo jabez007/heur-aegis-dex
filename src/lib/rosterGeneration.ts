@@ -208,11 +208,53 @@ export const CANDIDATE_WEIGHTS = {
    * charge on a frail Pokemon. A documented invariant is not worth trading for
    * 0.017 on the more compressed of two targets.
    *
-   * What this does establish is that the constant is no longer *blocked*. When
-   * the last of support is modelled — Prankster is the obvious remaining one,
-   * and the move tables now make it computable where `abilityEffects.ts`
-   * correctly said they did not — this is the first thing to re-sweep, and the
-   * invariant is what has to be argued with rather than the correlation.
+   * ### Swept a third time with Prankster in, and the answer is no
+   *
+   * The last piece of support landed and the sweep was rerun. It does not need
+   * the invariant argued with, because the term does not earn the raise:
+   *
+   * | weight | vs usage | vs win rate |
+   * | ------ | -------- | ----------- |
+   * | 0      | 0.245    | **0.262**   |
+   * | **1**  | 0.250    | 0.260       |
+   * | 3      | 0.256    | 0.261       |
+   * | 6      | 0.263    | 0.250       |
+   * | 10     | 0.258    | 0.228       |
+   *
+   * The two targets now point in opposite directions. Usage peaks around 4 to 6
+   * and win rate declines steadily from 3 onward, losing more than it ever
+   * gained by 10. Raising this makes the ranking better at predicting what
+   * people *play* and worse at predicting what *wins*.
+   *
+   * Checking the term directly rather than through the composite says why, and
+   * it is the result that closes this line of work. Support-role count on its
+   * own correlates **-0.043 with usage and -0.104 with win rate**, and the group
+   * means fall monotonically:
+   *
+   * | roles filled | n  | mean usage | mean win rate |
+   * | ------------ | -- | ---------- | ------------- |
+   * | 0            |  9 | 7.78%      | 49.76%        |
+   * | 1            | 28 | 5.68%      | 49.23%        |
+   * | 2            | 30 | 5.39%      | 49.07%        |
+   * | 3            | 18 | 7.28%      | 49.02%        |
+   * | 4            |  5 | 1.86%      | 48.63%        |
+   *
+   * Filling more support roles predicts winning slightly *less*. The tail is thin
+   * and the win-rate column is compressed, so this is suggestive rather than
+   * settled — but there is no reading of it that argues for paying support more.
+   * Whatever lifts the usage correlation as the weight rises, it is not the
+   * support term predicting usage, because support does not predict usage either.
+   * The likeliest mechanism is that support Pokemon are slow and the speed term
+   * anti-correlates with win rate at -0.114, so weighting support partly cancels
+   * a different error. Fixing one error with another is not a calibration.
+   *
+   * ### And the two cases that started this were not both errors
+   *
+   * Grimmsnarl wins 49.76% and Rotom-Wash 48.68%, both below the field, while
+   * being played 18th and 38th. Ranking them low is defensible on performance and
+   * wrong only against popularity, which this tool does not claim to predict.
+   * Excadrill at 50.75% against Mamoswine's 48.60% is the real error in that pair
+   * — and it is an error about Sand Rush, now scored, not about this weight.
    *
    * That the charge is *smaller* for frail Pokemon is a real quirk of routing it
    * through the bulk term, not a deliberate claim: it says a 4x weakness costs
