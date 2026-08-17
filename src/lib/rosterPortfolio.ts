@@ -34,6 +34,7 @@
  * | 2026-08-16 | best off-roster       | 1.12 | **2.66** | 4.05 | (capped to 2.54)
  * | 2026-08-17 | best off-roster       | 1.17 | **2.39** | 4.02 |
  * | 2026-08-17 | best off-roster       | 0.98 | **2.47** | 4.47 |
+ * | 2026-08-17 | best off-roster       | 0.86 | **1.85** | 3.84 |
  *
  * ## The counterfactual was wrong, and the drift is how it showed
  *
@@ -223,11 +224,39 @@
  * offering two or more diverse options and 79% to 88% offering three. Unchanged
  * in substance from the 95% / 86% recorded at 1.99.
  *
+ * ## Removing the coverage double count, and the largest fall yet
+ *
+ * Re-measured the same day after `candidatePriority` stopped charging for the
+ * reach a Pokemon's STAB already has. 2.47 to **1.85**, and this one needs no
+ * new mechanism: it is the same "sharper model finds closer substitutes" effect
+ * described above, arriving through the pruning rather than through the score.
+ *
+ * `candidatePriority` decides which `DEFAULT_CANDIDATE_LIMIT` Pokemon the beam
+ * search ever sees. Removing a charge that was concentrated in Pokemon whose
+ * typings already hit everything — Mamoswine's count fell 16 to 7, Excadrill's
+ * 15 to 8 — promotes Pokemon with genuinely distinct coverage into that pool.
+ * A better-populated candidate pool has a better *next-best* member, so
+ * replacing one costs less. That is the constant measuring a real improvement
+ * in the search, not a loss of discrimination.
+ *
+ * Worth naming plainly: three readings in one day, 2.39, 2.47 and 1.85, is more
+ * churn than this constant has shown before. The counterfactual is not drifting
+ * — it is that three separate changes each moved what the beam search looks at.
+ * Clearance against the 2.786 ceiling is 0.936, or **7.8x** the largest recorded
+ * drift, so nothing here is near the binding constraint.
+ *
+ * Supply at 1.85 sits between the 1.75 and 2 rows: 93% to 95% of scenarios offer
+ * two or more diverse options and 69% to 83% offer three. The second figure is
+ * the lowest recorded and is the cost of the fall — still comfortably above the
+ * 38% at a margin of 1 that the supply assertion exists to keep away from.
+ *
  * Reasoned against a measurement rather than validated against how many
  * alternatives people actually pick — the standing of `MEMBER_WEIGHTS` and
- * `TYPE_MODULATION`. Rerun the script after anything that moves roster scores.
+ * `TYPE_MODULATION`. Rerun the script after anything that moves roster scores,
+ * **including anything that moves `candidatePriority`**, which prunes the pool
+ * this is measured over.
  */
-export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.47;
+export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 1.85;
 export const ROSTER_PORTFOLIO_LIMIT = 6;
 export const MINIMUM_ROSTER_REPLACEMENTS = 2;
 

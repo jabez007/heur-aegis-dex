@@ -115,12 +115,26 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
     // reshuffle that demotes the fastest and frailest of five equally useful
     // partners in favour of the two bulkiest is the weights doing what they
     // were changed to do.
+    //
+    // Mamoswine then left the list entirely, replaced by Excadrill, when
+    // `moveCoverage` stopped counting the reach a Pokemon's STAB already has.
+    // This is the first membership change here rather than another tie-break
+    // reshuffle, and it falls out of the two largest corrections in the pool:
+    // Mamoswine's reachable coverage drops 16 -> 7 and Excadrill's 15 -> 8,
+    // because Ground/Ice and Ground/Steel already hit most of what their
+    // coverage moves hit. Both were being paid twice; Mamoswine more.
+    //
+    // Worth recording that this moves the pair the way outside data does. The
+    // sweep in `CANDIDATE_WEIGHTS.supportRole` notes that tier lists put
+    // Excadrill at B and Mamoswine at C while this model had them the other way
+    // round, and declined to fix it by raising a weight. Removing a double count
+    // fixed part of it without one.
     expect(first.map(({ varietyName }) => varietyName)).toEqual([
       'archaludon',
       'ursaluna',
-      'goodra-hisui',
       'dragapult',
-      'mamoswine'
+      'goodra-hisui',
+      'excadrill'
     ]);
     // Pin the tie itself, so a change that makes these five genuinely separable
     // shows up as this assertion failing rather than as a reshuffled list whose

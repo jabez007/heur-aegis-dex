@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import TypeBadge from './TypeBadge.vue';
 import StatBar from './StatBar.vue';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
+import { coverageBeyondStab } from '../lib/coverageMoves';
 import type { PokemonEntry } from '../lib/pokemonEntry';
 
 const props = defineProps<{
@@ -64,7 +65,7 @@ const displayWeaknesses = computed(() => props.pokemon.weaknesses);
 const displayQuadrupleWeaknesses = computed(() => props.pokemon.quadrupleWeaknesses);
 const displayCoverages = computed(() => props.pokemon.coverages);
 const displayMoveCoverages = computed(() =>
-  props.pokemon.moveCoverages.filter((type) => !props.pokemon.coverages.includes(type))
+  coverageBeyondStab(props.pokemon.coverages, props.pokemon.moveCoverages)
 );
 
 const defenseScore = computed(() => props.pokemon.normalizedDamageFromScore.toFixed(2));

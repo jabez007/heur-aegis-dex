@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   COVERAGE_MOVE_TYPES,
   buildOffensiveTypeChart,
+  coverageBeyondStab,
   getAttackerBias,
   getCoverageMoveTypes,
   getMoveCoverage,
@@ -187,5 +188,33 @@ describe('getMoveCoverage', () => {
 
   it('returns nothing when the chart has no entry for the move types', () => {
     expect(getMoveCoverage('garchomp', {})).toEqual([]);
+  });
+});
+
+describe('coverageBeyondStab', () => {
+  it('drops the reach the offence term has already been paid for', () => {
+    // The defect this exists to close. `getMoveCoverage` reads every qualifying
+    // move including moves of the Pokemon's own types, so its list contains
+    // whatever `normalizedDamageToScore` already scored off STAB. Charging the
+    // full length paid for that reach twice.
+    expect(coverageBeyondStab(['steel', 'grass'], ['bug', 'grass', 'ice', 'steel']))
+      .toEqual(['bug', 'ice']);
+  });
+
+  it('keeps nothing when the movepool reaches no further than the typing', () => {
+    expect(coverageBeyondStab(['steel', 'grass'], ['grass', 'steel'])).toEqual([]);
+  });
+
+  it('leaves an unmatched list alone rather than assuming containment', () => {
+    // Containment is near-total across a real pool but is not guaranteed: a
+    // Pokemon whose only STAB move falls under COVERAGE_MOVE_MIN_POWER reaches
+    // types by typing that it cannot reach by move.
+    expect(coverageBeyondStab(['dragon'], ['ice', 'rock'])).toEqual(['ice', 'rock']);
+  });
+
+  it('preserves the order it was given', () => {
+    // Callers render this straight into the card, and getMoveCoverage already
+    // sorts. Re-sorting here would hide a caller that had not.
+    expect(coverageBeyondStab([], ['water', 'bug', 'ice'])).toEqual(['water', 'bug', 'ice']);
   });
 });

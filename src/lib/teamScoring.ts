@@ -565,17 +565,22 @@ export const FIREPOWER_MODULATION = 0.4;
  *
  * | input              | pts   | share | was   |
  * | ------------------ | ----- | ----- | ----- |
- * | effective bulk     | 14.76 | 28.5% | 26.4% |
+ * | effective bulk     | 14.76 | 28.4% | 26.4% |
  * | speed              | 9.23  | 17.8% | 23.7% |
- * | effective offence  | 8.88  | 17.2% | 17.1% |
- * | defensive typing   | 6.30  | 12.2% | 8.7%  |
+ * | effective offence  | 8.88  | 17.1% | 17.1% |
+ * | defensive typing   | 6.30  | 12.1% | 8.7%  |
  * | STAB power         | 5.33  | 10.3% | 10.2% |
  * | offensive typing   | 3.52  | 6.8%  | 6.8%  |
- * | reachable coverage | 2.20  | 4.3%  | 4.2%  |
+ * | reachable coverage | 2.40  | 4.6%  | 4.2%  |
  * | support role       | 1.50  | 2.9%  | 2.9%  |
  *
- * The three premise terms decide 51.0% of the order against 45.4% before, and
- * premise alignment rose from 0.634 to 0.686 with top-20 overlap 11/20 -> 12/20.
+ * The three premise terms decide 50.8% of the order against 45.4% before, and
+ * premise alignment rose from 0.634 to 0.692 with top-20 overlap 11/20 -> 12/20.
+ *
+ * (Coverage and the shares around it include the later repair to
+ * `CANDIDATE_WEIGHTS.moveCoverage`, which stopped it charging for reach the
+ * offence term had already scored. The five stat and typing figures are
+ * untouched by that; it is a separate additive term.)
  *
  * Speed is still second, which is the honest summary of how far this got. The
  * order the premise asks for — bulk, then defensive typing, then offence, speed

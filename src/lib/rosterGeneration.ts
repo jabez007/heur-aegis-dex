@@ -41,6 +41,7 @@
  * must not describe the result as optimal.
  */
 
+import { coverageBeyondStab } from './coverageMoves';
 import { evaluateRoster, scoreBring, type RosterEvaluation, type RosterMember } from './rosterScoring';
 import type { TypeMatchupValues } from './teamCoverage';
 import { MOVE_ROLE_CREDIT, PRANKSTER_ROLE_CREDIT, scoreMemberQuality } from './teamScoring';
@@ -269,11 +270,58 @@ export const CANDIDATE_WEIGHTS = {
    */
   supportRole: 1,
   /**
-   * Reachable coverage. A tiebreak: it says "can learn", never "would run".
+   * Reachable coverage *beyond STAB*. A tiebreak: it says "can learn", never
+   * "would run".
    *
-   * Not duplicated by anything, unlike the STAB `coverage` term that used to sit
-   * beside it: this comes from `getMoveCoverage` reading the Champions movepool,
-   * not from the type chart, and it is already read against the attacker's stats.
+   * ## The claim that used to be here was wrong
+   *
+   * It read: "Not duplicated by anything, unlike the STAB `coverage` term that
+   * used to sit beside it: this comes from `getMoveCoverage` reading the
+   * Champions movepool, not from the type chart." Both halves are true and the
+   * conclusion does not follow. The move tables include moves of the Pokemon's
+   * **own** types, so a Pokemon with a real STAB move reaches everything its
+   * typing reaches, plus more — and `normalizedDamageToScore` had already
+   * scored the first part inside the offence term.
+   *
+   * Measured by `npm run measure:ranking-terms`: **145 of the 146** entries in a
+   * default M-B view have their STAB coverage wholly inside their move coverage.
+   * So this was the same double count that removed the `coverage` weight below,
+   * arriving by a different route — through the movepool rather than off the
+   * chart, which is exactly why the note above thought it was safe.
+   *
+   * Now counts only `coverageBeyondStab`, the quantity `PokemonCard` was already
+   * displaying. The card had shown STAB coverage and extra coverage as separate
+   * rows since it was written; the ranking is what disagreed with it.
+   *
+   * ## The weight does not move, and that is the interesting part
+   *
+   * Subtracting shrinks every count — Mamoswine 16 -> 7, Excadrill 15 -> 8 —
+   * and the term's swing across the pool goes *up*, 2.20 points to 2.40, because
+   * what it removes is concentrated in the Pokemon whose typings already hit
+   * everything. The spread widens (p05 7 -> 3) while the top barely moves.
+   *
+   * The sign of what it measures flips, which is the real repair. Against the
+   * offensive typing score the raw count correlates at **+0.22** and the
+   * remainder at **-0.23**: a Pokemon whose STAB already covers the format has
+   * less left to gain from a coverage move, and that is the thing worth paying
+   * for. Correlation with STAB power falls from 0.36 to 0.15 over the same
+   * change.
+   *
+   * ## What is still wrong with it, recorded rather than fixed
+   *
+   * It is **stat-independent**. Klefki reaching seven extra types off an 80
+   * Special Attack is paid at the same rate as Kingambit reaching seven, which
+   * is word-for-word the objection that removed the `coverage` weight below.
+   * The old note's "already read against the attacker's stats" is half true:
+   * `getAttackerBias` picks the physical or special move list, so the *types*
+   * are right for the attacker, but the *value* is not scaled by whether it can
+   * hurt anything with them.
+   *
+   * Not fixed here because the fix is a different decision. Routing it through
+   * the offence term, which is what was done for `coverage`, would make this a
+   * factor of a product rather than a tiebreak beside one, and 0.2 per type was
+   * chosen for the second shape. Removing the double count is a defect repair;
+   * changing the shape is a design change, and they should not ride together.
    */
   moveCoverage: 0.2
 } as const;
@@ -743,9 +791,15 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
     varietyName: entry.name
   });
 
+  // Only the reach STAB does not already have. The offence term inside
+  // `quality` scores STAB coverage through `normalizedDamageToScore`, and the
+  // move tables include moves of the Pokemon's own types, so the raw list
+  // charged for most of that a second time. See `coverageBeyondStab`.
+  const extraCoverage = coverageBeyondStab(entry.coverages, entry.moveCoverages);
+
   return (quality * w.quality) +
     (roleValue * w.supportRole) +
-    (entry.moveCoverages.length * w.moveCoverage);
+    (extraCoverage.length * w.moveCoverage);
 }
 
 /**

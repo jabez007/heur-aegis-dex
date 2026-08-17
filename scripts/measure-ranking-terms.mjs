@@ -40,6 +40,7 @@ import { loadPokemonCatalog } from '../src/lib/pokemonCatalogLoader.ts';
 import { getCatalogResistantTypes } from '../src/lib/pokemonCatalogScan.ts';
 import { flattenToPokemon } from '../src/lib/pokemonEntry.ts';
 import { candidatePriority, CANDIDATE_WEIGHTS } from '../src/lib/rosterGeneration.ts';
+import { coverageBeyondStab } from '../src/lib/coverageMoves.ts';
 import { scoreMemberQuality } from '../src/lib/teamScoring.ts';
 import { getStabPower } from '../src/lib/stabPower.ts';
 import { hpAdjustedBulk } from '../src/lib/statMetrics.ts';
@@ -101,8 +102,9 @@ const inputs = pool.map((entry) => ({
       abilityName: entry.abilityName,
       varietyName: entry.name
     })
-    - entry.moveCoverages.length * CANDIDATE_WEIGHTS.moveCoverage,
-  coverage: entry.moveCoverages.length * CANDIDATE_WEIGHTS.moveCoverage
+    - coverageBeyondStab(entry.coverages, entry.moveCoverages).length * CANDIDATE_WEIGHTS.moveCoverage,
+  coverage: coverageBeyondStab(entry.coverages, entry.moveCoverages).length
+    * CANDIDATE_WEIGHTS.moveCoverage
 }));
 
 const at = (key, p) => percentile(inputs.map((row) => row[key]).filter((v) => v !== null), p);
@@ -308,22 +310,28 @@ axes.forEach((rowAxis, rowIndex) => {
   console.log(`  ${rowAxis[0].padEnd(11)}${cells.join('')}`);
 });
 
-// The structural half of the same question, for the one pair where the overlap
-// is not a matter of degree. `coverages` is what a Pokemon hits super-effectively
-// off its own typing, and it is exactly what `normalizedDamageToScore` counts.
+// The structural half of the same question, and the regression test for the
+// repair it prompted. `coverages` is what a Pokemon hits super-effectively off
+// its own typing, and it is exactly what `normalizedDamageToScore` counts.
 // `moveCoverages` is what it reaches with any qualifying move — and the move
 // table includes moves of its own types, so whenever a Pokemon has a real STAB
 // move its typing's coverage is a *subset* of its move coverage.
+//
+// `candidatePriority` charged the full list until 2026-08-17 and now charges
+// only the remainder, so the containment below is expected to stay high and is
+// no longer a defect. What it is now is the reason the subtraction has to stay:
+// the day it stops being near-total is the day the two lists have come apart
+// and this whole section needs rereading.
 const withCoverage = pool.filter((entry) => entry.moveCoverages.length > 0);
 const contained = withCoverage.filter((entry) =>
   entry.coverages.every((type) => entry.moveCoverages.includes(type)));
 console.log(`\n  of the ${withCoverage.length} entries with move-coverage data, ${contained.length}`
   + ' have their STAB coverage wholly inside it');
-console.log('  — so the STAB half of `moveCoverage` is charged twice, once through the');
-console.log('  offence term and again at a flat rate per type. Unlike the removed');
-console.log('  `coverage` weight this is a superset rather than the same list, so the');
-console.log('  non-STAB reach is real information; what it shares with that weight is');
-console.log('  being stat-independent, paying a weak attacker per type at full rate.');
+console.log('  — which is why the `coverage` row above counts only what STAB does not');
+console.log('  already reach. Charging the full list paid for that reach twice, once');
+console.log('  through the offence term and again at a flat rate per type.');
+console.log('\n  what is still unrepaired: the charge is stat-independent, paying a weak');
+console.log('  attacker per type at the same rate as a strong one. See CANDIDATE_WEIGHTS.');
 
 // The premise stated as a score, deliberately naive: equal parts of the three
 // things the tool was built to find, each on the pool's own range. It is a

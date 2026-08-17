@@ -163,6 +163,38 @@ export function getMoveCoverage(
 }
 
 /**
+ * The types a Pokemon reaches by move that its STAB does not already reach.
+ *
+ * `getMoveCoverage` reads every qualifying move, and the move tables include
+ * moves of the Pokemon's own types — so for 145 of the 146 entries in a default
+ * M-B view, `coverages` is a strict subset of `moveCoverages`. Anything scoring
+ * or displaying the raw length is therefore counting STAB reach a second time.
+ *
+ * That mattered in two places, which disagreed with each other. `PokemonCard`
+ * already subtracted, showing STAB coverage and extra coverage as separate
+ * rows; `candidatePriority` did not, and charged the full list. This is the one
+ * definition, so the number the card shows is the number the ranking pays for.
+ *
+ * The subtraction is not merely tidier — it changes what the quantity measures.
+ * Across the M-B view the full count correlates with the offensive typing score
+ * at +0.22, because it contains it. The remainder correlates at **-0.23**: a
+ * Pokemon whose typing already hits much of the format has less left to gain
+ * from a coverage move. That sign is real information, and the raw count had it
+ * backwards.
+ *
+ * @param coverages Types the Pokemon hits super-effectively off STAB.
+ * @param moveCoverages Types it reaches super-effectively with any learnable move.
+ * @returns The `moveCoverages` entries not already in `coverages`, order preserved.
+ */
+export function coverageBeyondStab(
+  coverages: readonly string[],
+  moveCoverages: readonly string[]
+): string[] {
+  const stab = new Set(coverages);
+  return moveCoverages.filter((type) => !stab.has(type));
+}
+
+/**
  * Reports whether the table knows about a Pokemon at all.
  *
  * Absence means "no qualifying move recorded", which is also true of a Pokemon

@@ -108,7 +108,7 @@ describe('candidatePriority', () => {
     // The two have the *same* primary attacking stat, 115. Lucario's whole edge
     // was its 110 secondary against Incineroar's 80 — worth 9 effective points
     // once discounted — while Incineroar carries 65 more bulk on a term weighted
-    // 0.45 against offence's 0.35. Bulk winning that trade is the model doing
+    // 0.50 against offence's 0.35. Bulk winning that trade is the model doing
     // what MEMBER_WEIGHTS says it should.
     expect(candidatePriority(incineroar)).toBeGreaterThan(candidatePriority(lucario));
   });
@@ -123,6 +123,30 @@ describe('candidatePriority', () => {
     });
 
     expect(candidatePriority(listed)).toBe(candidatePriority(plain));
+  });
+
+  it('does not pay for STAB coverage twice through the movepool', () => {
+    // The offensive mirror of the test above, and the same defect arriving by a
+    // different route. `normalizedDamageToScore` already scores what a typing
+    // hits super-effectively, and `getMoveCoverage` reads moves of the Pokemon's
+    // own types too — so a raw `moveCoverages.length` charged for that reach a
+    // second time, flat, on top of the offence term.
+    const stabOnly = mon('stab-only', {
+      coverages: ['grass', 'ice', 'bug', 'steel'],
+      moveCoverages: ['bug', 'grass', 'ice', 'steel']
+    });
+    const plain = mon('plain', { coverages: ['grass', 'ice', 'bug', 'steel'] });
+
+    expect(candidatePriority(stabOnly)).toBe(candidatePriority(plain));
+
+    // And reach the typing genuinely does not have is still worth something,
+    // which is the half of the term that was never the problem.
+    const reachesFurther = mon('further', {
+      coverages: ['grass', 'ice', 'bug', 'steel'],
+      moveCoverages: ['bug', 'grass', 'ice', 'rock', 'steel', 'water']
+    });
+
+    expect(candidatePriority(reachesFurther)).toBeGreaterThan(candidatePriority(stabOnly));
   });
 
   it('still rates a stronger stat line above a weaker one at equal typing', () => {
