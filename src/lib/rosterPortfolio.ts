@@ -32,6 +32,8 @@
  * | 2026-08-16 | best off-roster       | 1.18 | **2.43** | 3.97 |
  * | 2026-08-16 | best off-roster       | 1.16 | **2.56** | 4.04 | (capped to 2.54)
  * | 2026-08-16 | best off-roster       | 1.12 | **2.66** | 4.05 | (capped to 2.54)
+ * | 2026-08-17 | best off-roster       | 1.17 | **2.39** | 4.02 |
+ * | 2026-08-17 | best off-roster       | 0.98 | **2.47** | 4.47 |
  *
  * ## The counterfactual was wrong, and the drift is how it showed
  *
@@ -173,11 +175,59 @@
  * so crossing would take several consecutive worst-case recalibrations all in
  * the same direction.
  *
+ * ## Pool-relative typing bounds handed the derivation back
+ *
+ * Re-measured 2026-08-17 after `damageBounds.ts` began normalizing both typing
+ * scores over the Pokemon a regulation can field, and again once
+ * `measure-composite-bounds.mjs` was corrected to score offence against the
+ * census it normalizes against. The median fell from 2.66 to **2.39**, which is
+ * under the 2.54 cap — so `min(median, ceiling - 2x drift)`
+ * takes the median again and the constant is set by its stated derivation for
+ * the first time in three measurements. The paragraph above predicted that a
+ * capped constant would end up with a stale docblock; it did not get the chance.
+ *
+ * The fall is the expected direction and worth stating so it is not read as
+ * noise. A narrower defensive denominator moves every member's quality term
+ * closer together — the range a real M-B Pokemon can occupy is smaller than the
+ * range the type lattice can express — so replacing one member with the best
+ * off-roster alternative costs slightly less than it did. Clearance against the
+ * 2.786 ceiling widens from 0.246 to 0.396, or 3.3x the largest recorded drift.
+ *
+ * ## The speed/bulk transfer, and a direction that does not generalize
+ *
+ * Re-measured 2026-08-17 after `MEMBER_WEIGHTS` moved to 0.35 / 0.50 / 0.15 and
+ * `TYPE_MODULATION` split into 0.4 offensive / 0.5 defensive. The median rose
+ * from 2.39 to **2.47**, still under the 2.54 cap, so the derivation sets the
+ * constant for the second consecutive measurement.
+ *
+ * What is worth recording is that this number is **not monotone in how much the
+ * model favours defensive typing**, which the entries above might lead a reader
+ * to assume. The same measurement was taken at the rejected 0.57 / 0.08 with a
+ * 0.7 modulation and returned 2.00 — a fall of 0.39 where the shipped, milder
+ * version of the same change returned a rise of 0.08.
+ *
+ * The mechanism that explains the fall is real but only dominates at the far
+ * end. The counterfactual is a downgrade to the **best off-roster candidate**,
+ * not to an average one, so a model with sharper opinions finds *closer*
+ * substitutes and one member is worth less. At 0.7 that effect runs the table.
+ * At 0.5 it is outweighed by the ordinary one — a stronger typing signal spreads
+ * quality out, so the roster's members sit further above the field. Two effects
+ * in opposite directions, and which wins is a question about depth rather than
+ * about direction, so no prediction should be made from this row alone.
+ *
+ * Clearance against the 2.786 ceiling is 0.316, or 2.6x the largest recorded
+ * drift — narrower than the 3.3x before it, and the convergence those sections
+ * describe is therefore still under way rather than reversed.
+ *
+ * Supply at 2.47 sits between the 2.25 and 2.5 rows: 90% to 98% of scenarios
+ * offering two or more diverse options and 79% to 88% offering three. Unchanged
+ * in substance from the 95% / 86% recorded at 1.99.
+ *
  * Reasoned against a measurement rather than validated against how many
  * alternatives people actually pick — the standing of `MEMBER_WEIGHTS` and
  * `TYPE_MODULATION`. Rerun the script after anything that moves roster scores.
  */
-export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.54;
+export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.47;
 export const ROSTER_PORTFOLIO_LIMIT = 6;
 export const MINIMUM_ROSTER_REPLACEMENTS = 2;
 

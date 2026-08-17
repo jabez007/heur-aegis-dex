@@ -17,10 +17,13 @@
 // are calibration constants, not generated code: a bound that silently moves
 // when someone reruns a script is a bound nobody has checked.
 
-import { chooseDefaultAbility, getBaseTypes, getDualTypes } from '../src/lib/pokedex.ts';
+import { chooseDefaultAbility, getBaseTypes } from '../src/lib/pokedex.ts';
+import { getCatalogBaseTypes } from '../src/lib/pokemonCatalogScan.ts';
+import { buildDualTypes } from '../src/lib/resistantTypeScan.ts';
 import { loadPokemonCatalog } from '../src/lib/pokemonCatalogLoader.ts';
-import { measureDamageFromBounds, measureDamageToBounds } from '../src/lib/damageBounds.ts';
-import { getDefenderCensus, getThreatWeights, getTypeMatchupValues } from '../src/lib/threatPool.ts';
+import {
+  getDamageFromBounds, getDamageToBounds, getDefenderCensus, getThreatWeights, getTypeMatchupValues
+} from '../src/lib/threatPool.ts';
 import { applyAbilityModifiers } from '../src/lib/pokedexAbilities.ts';
 import { buildOffensiveTypeChart, getMoveCoverage } from '../src/lib/coverageMoves.ts';
 import { getEffectiveStats } from '../src/lib/statAbilities.ts';
@@ -52,7 +55,11 @@ process.stderr.write(`regulation ${regulation.id}: ${species.length} legal speci
 // OBSERVED_DAMAGE_FROM records for the damage scores themselves.
 const catalog = await loadPokemonCatalog();
 const weights = getThreatWeights(catalog, { regulation, baseScore: BASE });
-const fromBounds = measureDamageFromBounds(await getBaseTypes(BASE), BASE, weights);
+// Bounded over the Pokemon the regulation can field rather than over the whole
+// type lattice, because that is the range the app normalizes against — see
+// `measurePoolDamageFromBounds`. Taking the lattice bound here would measure
+// quality on a scale nothing runs, which is the mistake in the note above.
+const fromBounds = getDamageFromBounds(catalog, { regulation, baseScore: BASE }, await getBaseTypes(BASE));
 // Same reason, other axis: the offensive score is now measured against the
 // field the regulation actually fields, so bounding it against the chart census
 // would bound a formula nothing runs.
@@ -61,7 +68,7 @@ const census = getDefenderCensus(catalog, { regulation, baseScore: BASE });
 // the offensive bounds are: bounding a formula nothing uses is the mistake this
 // script exists to avoid.
 const typeValues = getTypeMatchupValues(catalog, { regulation, baseScore: BASE });
-const toBounds = measureDamageToBounds(census, BASE);
+const toBounds = getDamageToBounds(catalog, { regulation, baseScore: BASE });
 process.stderr.write(
   `census-weighted damage-to bounds: ${toBounds.min.toFixed(4)}..${toBounds.max.toFixed(4)}\n`
 );
@@ -69,8 +76,16 @@ process.stderr.write(
   `threat-weighted damage-from bounds: ${fromBounds.min.toFixed(4)}..${fromBounds.max.toFixed(4)}\n`
 );
 
-const base = await getBaseTypes(BASE, weights);
-const allTypes = base.concat(await getDualTypes(BASE, base, weights));
+// The census has to reach the type construction, not just the bounds.
+// `damage_to_score` is computed once when a type is built and carried through
+// the ability profiles unchanged, so building types without it produces
+// chart-weighted offensive scores that are then normalized against
+// census-derived bounds — a formula nothing runs, measured on a scale nothing
+// uses. `measure-stab-power.mjs` records the same trap; this script had been
+// falling into it since the census was introduced, and every COMPOSITE_BOUNDS
+// measurement between then and 2026-08-17 carries the error.
+const base = getCatalogBaseTypes(catalog, BASE, weights, census);
+const allTypes = base.concat(buildDualTypes(base, BASE, weights, census));
 const chart = buildOffensiveTypeChart(base);
 
 const findType = (types) => {

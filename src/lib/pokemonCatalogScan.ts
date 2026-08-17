@@ -14,7 +14,7 @@ import {
   resolveResistantTypeScanOptions,
   runResistantTypeScan
 } from './resistantTypeScan';
-import { getThreatPool, getThreatWeights } from './threatPool';
+import { getDamageFromBounds, getDamageToBounds, getThreatPool, getThreatWeights } from './threatPool';
 import { UNIFORM_TYPE_THREAT } from './typeThreat';
 import type { OffensiveTypeChart } from './coverageMoves';
 import type {
@@ -186,16 +186,25 @@ export async function getCatalogResistantTypes(
     )
     : chartCensus(catalogChart(catalog, resolved.baseScore));
 
-  // Bounds are derived from an unweighted lattice, since only the buckets are
-  // read from it and the weights are applied when each combination is scored.
+  // Bounds come from the Pokemon this regulation can field, not from the whole
+  // type lattice — see `measurePoolDamageFromBounds`. They travel with the
+  // weights and the census because all four are one measurement of one pool;
+  // mixing a score from one pool with a range from another is the compression
+  // defect `damageBounds.ts` exists to prevent. The lattice they are looked up
+  // through stays unweighted, since only its buckets are read.
+  const selection = { regulation: resolved.regulation, baseScore: resolved.baseScore };
   const resolvedOptions = applyThreatWeights(
     resolved,
     weights,
-    measureDamageFromBounds(
-      getCatalogBaseTypes(catalog, resolved.baseScore), resolved.baseScore, weights
-    ),
+    resolved.weightByThreat
+      ? getDamageFromBounds(catalog, selection, getCatalogBaseTypes(catalog, resolved.baseScore))
+      : measureDamageFromBounds(
+        getCatalogBaseTypes(catalog, resolved.baseScore), resolved.baseScore, weights
+      ),
     census,
-    measureDamageToBounds(census, resolved.baseScore)
+    resolved.weightByThreat
+      ? getDamageToBounds(catalog, selection)
+      : measureDamageToBounds(census, resolved.baseScore)
   );
   const baseTypes = getCatalogBaseTypes(catalog, resolvedOptions.baseScore, weights, census);
   const varietiesByName = new Map(catalog.varieties.map((variety) => [variety.name, variety]));

@@ -42,6 +42,23 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * damage class the Pokemon reads its best move from. So `selected_ability_name`
  * and everything derived from it can differ from what a cache holds.
  *
+ * 15: the speed/bulk transfer and the split type modulation. `MEMBER_WEIGHTS`
+ * moved to 0.35 / 0.57 / 0.08 and `TYPE_MODULATION` became 0.4 offensive / 0.7
+ * defensive, which changes what `scoreMemberQuality` returns — and
+ * `chooseDefaultAbility` picks the default ability by comparing profiles through
+ * exactly that function. A deeper defensive modulation raises what a resistance
+ * or immunity is worth relative to the stats an ability moves, so an entry
+ * cached under the old weights can hold a `selected_ability_name` the current
+ * model would not choose, along with every `effective_*` field derived from it.
+ *
+ * 14: pool-relative typing bounds. Both damage scores are normalized against
+ * the range the Pokemon a regulation can field actually reach, rather than
+ * against every typing × ability profile the game can express. A cached entry
+ * holds `normalized` scores computed against the old wider range, and the
+ * default ability choice reaches them too — `chooseDefaultAbility` compares
+ * profiles through `scoreMemberQuality`, so a different scale can pick a
+ * different ability.
+ *
  * 13: Prankster. It is priced through the support roles it makes reliable
  * rather than as a stat multiplier, and `chooseDefaultAbility` now sees that —
  * Meowstic was selecting Keen Eye over the ability it is played for, so cached
@@ -58,7 +75,7 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * merge whitelist, so cached entries hold Hero's stats for a Pokemon now scored
  * on Zero's. The stats themselves changed, not just a score derived from them.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 13 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 15 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [

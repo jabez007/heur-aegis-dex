@@ -24,7 +24,7 @@ import { chooseDefaultAbility } from '../src/lib/pokedex.ts';
 import { getCatalogBaseTypes } from '../src/lib/pokemonCatalogScan.ts';
 import { buildDualTypes } from '../src/lib/resistantTypeScan.ts';
 import { loadPokemonCatalog } from '../src/lib/pokemonCatalogLoader.ts';
-import { measureDamageFromBounds, measureDamageToBounds } from '../src/lib/damageBounds.ts';
+import { getDamageFromBounds, getDamageToBounds } from '../src/lib/threatPool.ts';
 import { getDefenderCensus, getThreatWeights } from '../src/lib/threatPool.ts';
 import { applyAbilityModifiers } from '../src/lib/pokedexAbilities.ts';
 import { getEffectiveStats } from '../src/lib/statAbilities.ts';
@@ -52,8 +52,9 @@ const census = getDefenderCensus(catalog, { regulation, baseScore: BASE });
 // offensive scores while every label says otherwise.
 const base = getCatalogBaseTypes(catalog, BASE, weights, census);
 const allTypes = base.concat(buildDualTypes(base, BASE, weights, census));
-const fromBounds = measureDamageFromBounds(base, BASE, weights);
-const toBounds = measureDamageToBounds(census, BASE);
+// Pool-relative, matching what the app normalizes against.
+const fromBounds = getDamageFromBounds(catalog, { regulation, baseScore: BASE }, base);
+const toBounds = getDamageToBounds(catalog, { regulation, baseScore: BASE });
 
 const findType = (types) => {
   const key = types.length === 1 ? types[0] : types.join('/');

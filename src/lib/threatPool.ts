@@ -57,7 +57,10 @@
  */
 
 import { COVERAGE_MOVE_POKEDEX } from './coverageMoves';
+import { measurePoolDamageFromBounds, measurePoolDamageToBounds } from './damageBounds';
 import { measureDefenderCensus } from './defenderCensus';
+import type { DamageScoreBounds } from './pokedexScoring';
+import type { PokemonTypeData } from './pokedexTypes';
 import type { DefenderCensus } from './defenderCensus';
 import type { TypeMatchupValues } from './teamCoverage';
 import { getTypeThreatWeights } from './typeThreat';
@@ -131,6 +134,118 @@ export function getThreatPool(
     // regulation ones.
     return cupTypes.length === 0 || variety.types.some((type) => cupTypes.includes(type));
   });
+}
+
+/**
+ * Pokemon a selection can put on *your* side of the field.
+ *
+ * The mirror of `getThreatPool`, and the distinction is the one that module
+ * opens with: the threat pool is who you will face, this is who you may bring.
+ * They differ in three places, and each difference is a rule about candidacy
+ * rather than a filter on the view:
+ *
+ * - **Every form, not only the default one.** Rotom-Heat and Basculegion-Female
+ *   are candidates in their own right; an opponent census counts their species
+ *   once. Battle-only forms are excluded because `enrichPokemon` never admits
+ *   one, so it can never need a score.
+ * - **No legendaries or mythicals.** `enrichPokemon` refuses them outright, so
+ *   they are opponents the tool will never offer you.
+ * - **Everything else stays.** Breeding, stat floors, Pokedex region and Megas
+ *   are view choices, and `threatPool.ts` already argues that scoring runs on
+ *   the regulation while filtering runs on the view. A bound that moved when a
+ *   stat floor slider moved would make two scans incomparable.
+ *
+ * @param catalog Verified catalog.
+ * @param selection Regulation and cup restricting the pool.
+ * @returns Varieties this metagame allows as candidates.
+ */
+export function getCandidatePool(
+  catalog: PokemonCatalogV1,
+  selection: ThreatPoolSelection
+): readonly CatalogVarietyV1[] {
+  const cupTypes = selection.cupTypes ?? [];
+  const roster = getRoster(catalog);
+  const restricted = new Set(catalog.species
+    .filter((species) => species.isLegendary || species.isMythical)
+    .map((species) => species.name));
+
+  return catalog.varieties.filter((variety) => {
+    if (!variety.isDefault && variety.form.isBattleOnly) return false;
+    if (!roster.has(variety.speciesName)) return false;
+    if (restricted.has(variety.speciesName)) return false;
+    if (selection.regulation && !selection.regulation.legalSpecies.has(variety.speciesName)) {
+      return false;
+    }
+    return cupTypes.length === 0 || variety.types.some((type) => cupTypes.includes(type));
+  });
+}
+
+const fromBoundsCache = new WeakMap<PokemonCatalogV1, Map<string, DamageScoreBounds>>();
+const toBoundsCache = new WeakMap<PokemonCatalogV1, Map<string, DamageScoreBounds>>();
+
+/**
+ * The range a defensive score occupies in a metagame, memoized per selection.
+ *
+ * Both halves of the normalization now come from one place and one key, which is
+ * the property that keeps a cached scan re-scorable: the scan derives weights
+ * and bounds from its regulation, the browser derives them again from the same
+ * regulation, and neither serializes anything. Before this they were two calls
+ * with two different notions of the pool, and only the weights tracked it.
+ *
+ * @param catalog Verified catalog.
+ * @param selection Regulation and cup restricting the pool.
+ * @param baseTypes Single elemental types, which the dual lattice is built from.
+ *   Passed rather than derived here because deriving it belongs to the scan
+ *   module, and importing that back into this one would close a cycle.
+ * @returns Extremes of the weighted defensive score across the candidate pool.
+ */
+export function getDamageFromBounds(
+  catalog: PokemonCatalogV1,
+  selection: ThreatPoolSelection,
+  baseTypes: readonly PokemonTypeData[]
+): DamageScoreBounds {
+  const bySelection = fromBoundsCache.get(catalog) ?? new Map<string, DamageScoreBounds>();
+  const key = keyFor(selection);
+  const cached = bySelection.get(key);
+  if (cached) return cached;
+
+  const bounds = measurePoolDamageFromBounds(
+    getCandidatePool(catalog, selection),
+    baseTypes,
+    selection.baseScore,
+    getThreatWeights(catalog, selection)
+  );
+
+  bySelection.set(key, bounds);
+  fromBoundsCache.set(catalog, bySelection);
+  return bounds;
+}
+
+/**
+ * The range an offensive score occupies in a metagame, memoized per selection.
+ *
+ * @param catalog Verified catalog.
+ * @param selection Regulation and cup restricting the pool.
+ * @returns Extremes of the census-scored offensive score across the candidates.
+ */
+export function getDamageToBounds(
+  catalog: PokemonCatalogV1,
+  selection: ThreatPoolSelection
+): DamageScoreBounds {
+  const bySelection = toBoundsCache.get(catalog) ?? new Map<string, DamageScoreBounds>();
+  const key = keyFor(selection);
+  const cached = bySelection.get(key);
+  if (cached) return cached;
+
+  const bounds = measurePoolDamageToBounds(
+    getCandidatePool(catalog, selection),
+    getDefenderCensus(catalog, selection),
+    selection.baseScore
+  );
+
+  bySelection.set(key, bounds);
+  toBoundsCache.set(catalog, bySelection);
+  return bounds;
 }
 
 /**

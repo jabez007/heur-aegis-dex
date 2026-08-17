@@ -65,6 +65,7 @@
     "measure:alternative-margin": "tsx scripts/measure-alternative-margin.mjs",
     "measure:composite-bounds": "tsx scripts/measure-composite-bounds.mjs",
     "measure:damage-bounds": "tsx scripts/measure-damage-bounds.mjs",
+    "measure:ranking-terms": "tsx scripts/measure-ranking-terms.mjs",
     "measure:stab-power": "tsx scripts/measure-stab-power.mjs",
     "measure:status-threat": "tsx scripts/measure-status-threat.mjs",
     "measure:roster-validation": "tsx scripts/measure-roster-validation.mjs",

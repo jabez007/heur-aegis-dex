@@ -59,18 +59,89 @@ export { effectiveOffense, SECONDARY_OFFENSE_WEIGHT } from './statMetrics';
  * typings, and weighting bulk over offence keeps the scoring pointed at the
  * question it was built to answer.
  *
- * Speed is left where it is, and is the weakest part of this model: it is
- * treated as linearly good, which is wrong for a format where Trick Room makes
- * low Speed an asset. Correcting that needs move data the scan does not have,
- * so the bias is recorded here rather than papered over.
+ * Speed is treated as linearly good, which is wrong for a format where Trick
+ * Room makes low Speed an asset. Correcting that needs move data the scan does
+ * not have, so the bias is recorded here rather than papered over — and the
+ * weight below is set low partly because of it.
  *
  * These describe the real balance because the terms under them are rescaled
  * against the ranges they occupy first — see OBSERVED_STAT_TERMS.
+ *
+ * ## Why speed fell 0.20 -> 0.15 and bulk rose 0.45 -> 0.50
+ *
+ * Because the paragraphs above described an intent the numbers did not deliver.
+ * `npm run measure:ranking-terms` moves one input from its 5th to its 95th
+ * percentile across the pool being ranked and reports the points of
+ * `candidatePriority` between them. At 0.45 / 0.20, speed was the **second
+ * largest influence on the Browser's order**, in a tool built to rank defensive
+ * typings, and it was second largest while carrying the smallest nominal weight
+ * of the three:
+ *
+ * | input            | before | after |
+ * | ---------------- | ------ | ----- |
+ * | effective bulk   | 13.75  | 14.76 |
+ * | speed            | 12.31  | 9.23  |
+ * | effective offence| 8.88   | 8.88  |
+ * | defensive typing | 4.54   | 6.30  |
+ * | STAB power       | 5.33   | 5.33  |
+ *
+ * That is not a contradiction. A weight applies to a *rescaled* term, and speed
+ * occupies nearly all of its range — p05..p95 spans 0.62 of it — while a typing
+ * occupies under half of its own. The weakest-understood term in the model was
+ * deciding the most, because base Speed spreads further across real Pokemon than
+ * anything else here does. See `TYPE_MODULATION` for the same argument from the
+ * other side.
+ *
+ * Bulk takes the whole 0.05. Defensive typing modulates the bulk term rather
+ * than standing beside it, so the two move together and part of typing's rise
+ * comes from here rather than from `TYPE_MODULATION.defensive` — which is why
+ * raising bulk is the cheaper of the two ways to raise typing.
+ *
+ * Speed is reduced rather than removed. Outspeeding decides games; the objection
+ * is to its size, not its presence. At 0.15 it still separates Pokemon whose
+ * bulk and typing are close, which is the job it should have.
+ *
+ * ## Why not further, which is the more useful half of this note
+ *
+ * 0.57 / 0.08 was measured first and is not what shipped. Together with a
+ * defensive modulation of 0.7 it produced exactly the order this project's
+ * premise asks for — bulk, then defensive typing, then offence, with speed
+ * fifth — and **broke three assertions in `scoringValidation.test.ts`**,
+ * including the one that holds gate three of that same premise: a team of walls
+ * whose best attacking stats top out at 100 scored above a team of bulky
+ * attackers. A model that ranks defensive typing highly enough to prefer
+ * Pokemon that cannot KO has stopped expressing the premise rather than
+ * expressing it harder.
+ *
+ * The frontier those assertions draw, measured by sweeping:
+ *
+ * | guard                                | binds at                       |
+ * | ------------------------------------ | ------------------------------ |
+ * | Azumarill/Blastoise stay close       | bulk >= 0.52, or def mod > 0.55|
+ * | bulky attackers beat walls (team)    | bulk >= 0.55, or def mod >= 0.7|
+ * | Feraligatr beats Skarmory on quality | def mod >= 0.65                |
+ *
+ * These weights sit inside all three with room. The Azumarill pair — the
+ * binding one — clears its threshold by 16% here, a ratio of 9.28 against the 8
+ * required, where the alternative at 0.50 / 0.15 with a 0.55 modulation cleared
+ * by 3% and was rejected for being a knife edge rather than a setting.
+ *
+ * Whether that guard is still the right
+ * guard is a real question — it demands two Pokemon stay close because what
+ * distinguishes them (Belly Drum) is invisible to the model, while the thing
+ * now separating them is a typing difference the model can see and that the
+ * guard's own comment calls legitimate. Relitigating it is a deliberate
+ * decision about the fixture, not a side effect of a weight change, so it has
+ * not been taken here.
+ *
+ * Reasoned against measured term swings and bounded by the validation fixture,
+ * not validated against match outcomes. Rerun `measure:composite-bounds`,
+ * `measure:alternative-margin` and `measure:ranking-terms` after touching these.
  */
 export const MEMBER_WEIGHTS = {
   offense: 0.35,
-  bulk: 0.45,
-  speed: 0.2
+  bulk: 0.5,
+  speed: 0.15
 } as const;
 
 /**
@@ -84,9 +155,14 @@ export const MEMBER_WEIGHTS = {
  *
  * | term    | floor | ceiling | realized share | nominal |
  * | ------- | ----- | ------- | -------------- | ------- |
-  * | offense | 0.320 | 0.992   | 0.347          | 0.35    |
-  * | bulk    | 0.264 | 0.785   | 0.355          | 0.45    |
-  * | speed   | 0.133 | 1.000   | 0.298          | 0.20    |
+ * | offense | 0.320 | 0.992   | 0.379          | 0.35    |
+ * | bulk    | 0.264 | 0.785   | 0.491          | 0.57    |
+ * | speed   | 0.133 | 1.000   | 0.130          | 0.08    |
+ *
+ * The two right-hand columns are as of 2026-08-17, when `MEMBER_WEIGHTS` moved
+ * to 0.35 / 0.57 / 0.08; the floors and ceilings are the measurement this
+ * constant exists for and have not moved since 2026-08-13. Read the sections
+ * below against the weights they were written under, 0.35 / 0.45 / 0.20.
  *
  * The floors are what matter here. An 85 Attack — unusable in a format where the
  * Pokemon worth bringing carry 130 — still collected **52%** of the offence term,
@@ -168,6 +244,25 @@ export const MEMBER_WEIGHTS = {
  * the ceiling nor offensive enough to approach the offence one, so the reachable
  * extremes are still set by other Pokemon entirely. Recorded because a rerun
  * that confirms a bound is as much a result as one that moves it.
+ *
+ * ## The drift the section above declined to close, closed
+ *
+ * That section recorded bulk realizing 0.355 against a nominal 0.45 and speed
+ * 0.298 against 0.20, and left it because closing it meant changing
+ * `MEMBER_WEIGHTS` without a mandate. `measure:ranking-terms` supplied the
+ * mandate on 2026-08-17 by measuring the same gap from the other end — as points
+ * of the Browser's actual ordering rather than as a share of the quality term —
+ * and the weights moved to 0.35 / 0.57 / 0.08.
+ *
+ * The realized shares are now 0.379 / 0.491 / 0.130. The drift is smaller in
+ * absolute terms and points the same way it always did, because it is a property
+ * of how far each term spreads and not of the weights: speed spreads widest, so
+ * it over-realizes at any weight, and bulk spreads least, so it under-realizes at
+ * any weight. Every rerun since 2026-08-13 has reproduced the six floors and
+ * ceilings exactly, which is what says this is the pool's shape rather than a
+ * mismeasurement.
+ *
+ * Rerun 2026-08-17; the six bounds reproduced exactly again.
  */
 export const OBSERVED_STAT_TERMS = {
   offense: { min: 0.32, max: 0.9923 },
@@ -346,11 +441,14 @@ export const PRANKSTER_ROLE_CREDIT = 0.75;
 export const FIREPOWER_MODULATION = 0.4;
 
 /**
- * How strongly a typing modulates the raw stats it applies to.
+ * How strongly a typing modulates the raw stats it applies to, per side.
  *
  * Typing scales its stat term between (1 - modulation) and 1 rather than
  * multiplying it outright. A poor offensive typing should discount a big
  * attack stat, not erase it.
+ *
+ * The two sides are deliberately unequal; the last section explains why. Read
+ * the history below as being about the offensive value, which has not moved.
  *
  * ## Why this moved from 0.5 to 0.4
  *
@@ -375,8 +473,126 @@ export const FIREPOWER_MODULATION = 0.4;
  *
  * Reasoned against measured term swings, not validated against match outcomes —
  * the same standing as MEMBER_WEIGHTS.
+ *
+ * ## Those four figures are potential swings, and the realized ones are smaller
+ *
+ * 10.7 against 12.1 is the swing across the *full* 0..1 of each normalized
+ * score. `npm run measure:ranking-terms` measures what the inputs actually do
+ * across the pool being ranked, and the two readings disagree sharply — because
+ * a Pokemon's typing occupies less of its range than its Speed does:
+ *
+ * | input            | potential | realized (p05..p95, M-B) |
+ * | ---------------- | --------- | ------------------------ |
+ * | bulk             | 12.7      | 13.75                    |
+ * | speed            | 12.1      | 12.31                    |
+ * | offence          | 10.6      | 8.88                     |
+ * | defensive typing | 10.7      | **4.54**                 |
+ *
+ * Speed realizes nearly all of its potential and defensive typing realizes 42%
+ * of its own, so the term this project is built on decides 8.7% of its Browser's
+ * order against Speed's 23.7%. Pool-relative bounds recovered part of that —
+ * the realized swing was 3.83 before them — and the rest is not a normalization
+ * error: it is that real defensive typings cluster, while base Speed spans 20 to
+ * 142. Closing it further means changing this constant or `MEMBER_WEIGHTS`,
+ * deliberately, with the measurement in hand rather than the potential swings.
+ *
+ * ## Why it became two constants, and why the defensive one is 0.5
+ *
+ * It was one number on the argument that the two typings are peers doing the
+ * same job on opposite sides of the score. They are not peers of this project.
+ * The premise names defensive typing and does not name offensive typing: the
+ * tool exists to find bulky Pokemon with strong defensive typings and good
+ * offensive **STAB**, and offensive typing is a breadth measure that arrived
+ * later as the mirror of the defensive one. One constant made "raise defensive
+ * typing" impossible to ask for without also raising a term nobody asked to
+ * raise.
+ *
+ * It also made the raise cost more than it should. Both factors enter
+ * multiplicatively, so lifting the modulation lowers the modulator's value at
+ * the median and shrinks the *stat* swing under it. Raising the shared constant
+ * to 0.7 buys 4.16 points of defensive typing and pays 2.79 of it straight back
+ * out of effective offence and STAB power — and STAB power is a premise term.
+ * Raising only the defensive half buys the same 4.16 and the offence axis does
+ * not move at all:
+ *
+ * | input            | 0.4 both | 0.7 both | 0.4 / 0.7 |
+ * | ---------------- | -------- | -------- | --------- |
+ * | effective bulk   | 16.88    | 14.84    | 14.84     |
+ * | defensive typing | 5.55     | 9.71     | 9.71      |
+ * | effective offence| 8.88     | 7.14     | **8.88**  |
+ * | STAB power       | 5.33     | 4.28     | **5.33**  |
+ * | offensive typing | 3.52     | 6.16     | **3.52**  |
+ *
+ * (The three columns are a sweep at `MEMBER_WEIGHTS` 0.35 / 0.55 / 0.10, so they
+ * differ only in this constant. Those are not the shipping weights — see the
+ * shipping figures below, and `MEMBER_WEIGHTS` for why 0.55 / 0.10 was not
+ * taken either.)
+ *
+ * The table is the argument for splitting. It is **not** the argument for 0.7,
+ * which is where the sweep started and is not what shipped.
+ *
+ * ## Why 0.5 and not the 0.7 the sweep preferred
+ *
+ * Because `scoringValidation.test.ts` rejected everything above it, and the
+ * assertions it rejected them with are the premise stated as test cases. At 0.65
+ * the model puts Skarmory above Feraligatr on quality — a wall with 80 Attack
+ * over a Pokemon with more effective bulk and 25 more Attack — and at 0.7 with
+ * bulk at 0.57 a whole team of walls outscores a team of bulky attackers. The
+ * premise is a pipeline whose third gate is a real attacking stat, and a
+ * defensive modulation deep enough to skip that gate is not a stronger reading
+ * of the premise. It is a different premise.
+ *
+ * 0.5 is the last value that clears every guard with room: the binding one, the
+ * Azumarill/Blastoise pair, clears by 16% here against 3% at 0.55. See
+ * `MEMBER_WEIGHTS` for the frontier the sweep mapped and for what it would take
+ * to move it.
+ *
+ * The peer intent stated above survives the change, which is the other reason
+ * to stop here. At 0.5 the modulator spans 0.5..1, so the worst defensive typing
+ * in the pool keeps half its bearer's bulk, and defensive typing swings 6.30
+ * points against bulk's 14.76 — able to decide between close Pokemon, unable to
+ * overturn a large bulk gap. That is the shape this constant has always claimed.
+ * What changed is that it is now 12.2% of the Browser's order rather than 8.7%.
+ *
+ * The offensive half stays at 0.4 and keeps its argument-by-analogy with
+ * `FIREPOWER_MODULATION`, which is now a real analogy rather than a shared
+ * variable: both sit on the offence axis, and that axis is unchanged.
+ *
+ * ## The shipping figures
+ *
+ * At `MEMBER_WEIGHTS` 0.35 / 0.50 / 0.15 and 0.4 / 0.5 here, `measure:
+ * ranking-terms` reads:
+ *
+ * | input              | pts   | share | was   |
+ * | ------------------ | ----- | ----- | ----- |
+ * | effective bulk     | 14.76 | 28.5% | 26.4% |
+ * | speed              | 9.23  | 17.8% | 23.7% |
+ * | effective offence  | 8.88  | 17.2% | 17.1% |
+ * | defensive typing   | 6.30  | 12.2% | 8.7%  |
+ * | STAB power         | 5.33  | 10.3% | 10.2% |
+ * | offensive typing   | 3.52  | 6.8%  | 6.8%  |
+ * | reachable coverage | 2.20  | 4.3%  | 4.2%  |
+ * | support role       | 1.50  | 2.9%  | 2.9%  |
+ *
+ * The three premise terms decide 51.0% of the order against 45.4% before, and
+ * premise alignment rose from 0.634 to 0.686 with top-20 overlap 11/20 -> 12/20.
+ *
+ * Speed is still second, which is the honest summary of how far this got. The
+ * order the premise asks for — bulk, then defensive typing, then offence, speed
+ * near the bottom — is reachable and was measured; it is on the far side of the
+ * validation fixture. `MEMBER_WEIGHTS` records the frontier.
+ *
+ * One thing the sweep established that is worth keeping: this constant
+ * **redistributes within the premise rather than growing it**. Holding
+ * `MEMBER_WEIGHTS` fixed and moving the shared modulation across 0.4, 0.55 and
+ * 0.7 left the premise share at exactly 55.5% every time — defensive typing rose
+ * and bulk and STAB power fell by the same total. Only `MEMBER_WEIGHTS` moves
+ * that number. Which of the two premise terms leads is what this constant sets.
  */
-export const TYPE_MODULATION = 0.4;
+export const TYPE_MODULATION = {
+  offensive: 0.4,
+  defensive: 0.5
+} as const;
 
 /**
  * Positive synergy weights per format. Each set sums to 1, so the bonus is
@@ -804,14 +1020,94 @@ export const COMPOSITE_WEIGHTS = {
  * new role is one more thing an ordinary team can be credited for, so the middle
  * rises; the teams setting the maximum were already covering what they could,
  * and a wider denominator offsets what they gain.
+ *
+ * ## Re-measured for pool-relative typing bounds
+ *
+ * `damageBounds.ts` stopped normalizing the two typing scores against every
+ * profile the game can express and started bounding them over the Pokemon a
+ * regulation can field, so `scoreMemberQuality` produces different numbers and
+ * these had to be taken again.
+ *
+ * Quality rises at both ends — doubles 0.1511..0.6130 to **0.1553..0.6333**,
+ * singles 0.1346..0.6245 to **0.1374..0.6443** — and rising at both ends is the
+ * shape this particular change must produce. The defensive floor moved up (the
+ * worst profile a real M-B Pokemon presents is milder than the worst the lattice
+ * can express, so every Pokemon's defensive term improves) while the ceiling did
+ * not (Aurorus and Avalugg-Hisui are exactly as bad as the lattice's worst, so
+ * nothing at the top was rescaled away).
+ *
+ * **`OBSERVED_STAT_TERMS` did not move and could not have**, which is worth
+ * stating because the ordering constraint above says to check: the three stat
+ * terms are rescaled before typing touches them, and typing enters through
+ * `TYPE_MODULATION` afterwards. The rerun reproduced all six numbers exactly.
+ *
+ * Both synergy maxima unchanged for the tenth consecutive rerun — singles
+ * sampled 0.8185 against the recorded 0.8247, doubles 0.7850 against 0.8124 —
+ * and necessarily so, since quality does not read synergy.
+ *
+ * ### The script was measuring one thing and normalizing against another
+ *
+ * Found while making the change above, and it moves these numbers more than the
+ * change did. `measure-composite-bounds.mjs` built its types through
+ * `getBaseTypes(BASE, weights)`, which takes no census, so every
+ * `damage_to_score` it scored was counted against the **chart** census and then
+ * normalized against **census-derived** bounds. `measure-stab-power.mjs` carries
+ * a comment warning about exactly this — "a census that does not reach here
+ * silently produces chart-weighted offensive scores while every label says
+ * otherwise" — and this script had been doing it since the census was
+ * introduced.
+ *
+ * So every COMPOSITE_BOUNDS measurement taken between the offensive-census work
+ * and 2026-08-17 was read off a formula the app does not run. The correction is
+ * worth 0.006 at the doubles ceiling against the 0.014 the bounds change itself
+ * was worth, in the same direction — small, and the point is that nothing said
+ * it was there. A bound measured on the wrong scale looks exactly like one
+ * measured on the right scale.
+ *
+ * Measured 2026-08-17, with the census reaching the type construction.
+ *
+ * ## Re-measured for the speed/bulk transfer and the split modulation
+ *
+ * `MEMBER_WEIGHTS` moved to 0.35 / 0.50 / 0.15 and `TYPE_MODULATION` became a
+ * pair at 0.4 offensive / 0.5 defensive, so quality is a different function
+ * again.
+ *
+ * Both quality ranges **widen at the bottom and are flat at the top** — doubles
+ * 0.1553..0.6333 to **0.1457..0.6328**, singles 0.1374..0.6443 to
+ * **0.1251..0.6426**. The floors fell by 0.010 and 0.012 while the ceilings
+ * moved 0.0005 and 0.0017, and that is the shape a deeper defensive modulation
+ * has to produce. Taking it from 0.4 to 0.5 drops the multiplier's floor from
+ * 0.6 to 0.5,
+ * so the worst defensive typings lose more of their bulk term than they did and
+ * the bottom of the pool falls away. The ceiling barely moves because a Pokemon
+ * at the *good* end of the defensive score was already near a multiplier of 1
+ * and there is nothing above it to gain.
+ *
+ * That is the cost of the change stated in the one place it shows up as a
+ * number: the pool spreads out at the bad end, which is what a stronger typing
+ * signal means, and it is why this bound has to be retaken rather than left.
+ *
+ * The rejected 0.57 / 0.08 with a 0.7 modulation was measured too, and shows the
+ * same effect four times over — doubles 0.1292, singles 0.1058. Recorded because
+ * it is the clearest available evidence that the floor movement tracks the
+ * modulation depth rather than anything else in the change.
+ *
+ * `OBSERVED_STAT_TERMS` did not move again, for the same reason as the entry
+ * above: the stat terms are rescaled before any of this applies. Six numbers
+ * reproduced exactly. Their *realized shares* did move, and are recorded there.
+ *
+ * Both synergy maxima unchanged for an eleventh rerun — singles sampled 0.8185
+ * against 0.8247, doubles 0.7850 against 0.8124.
+ *
+ * Measured 2026-08-17.
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.1511, max: 0.613 },
+    quality: { min: 0.1457, max: 0.6328 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1346, max: 0.6245 },
+    quality: { min: 0.1251, max: 0.6426 },
     synergy: { min: -1, max: 0.8247 }
   }
 } as const;
@@ -876,9 +1172,10 @@ export function scoreMemberQuality(member: MemberQualityInput): number {
     OBSERVED_STAT_TERMS.speed
   );
 
-  const modulate = (quality: number) => (1 - TYPE_MODULATION) + (TYPE_MODULATION * clamp01(quality));
-  const offensiveTyping = modulate(normalizedDamageToScore);
-  const defensiveTyping = modulate(1 - normalizedDamageFromScore);
+  const modulate = (depth: number, quality: number) =>
+    (1 - depth) + (depth * clamp01(quality));
+  const offensiveTyping = modulate(TYPE_MODULATION.offensive, normalizedDamageToScore);
+  const defensiveTyping = modulate(TYPE_MODULATION.defensive, 1 - normalizedDamageFromScore);
 
   // The third factor on the offence axis, beside the stat and the typing: how
   // hard the move it would actually click hits. Unknown scores as full credit

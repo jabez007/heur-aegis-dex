@@ -104,11 +104,22 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
     // Mamoswine's best usable STAB is 100 against Goodra-Hisui's 120, so the
     // ordering within the tie now reflects a real difference even though the
     // improvement they offer this core does not.
+    //
+    // Dragapult fell from second to fourth when `MEMBER_WEIGHTS` moved to
+    // 0.35 / 0.50 / 0.15 and `TYPE_MODULATION.defensive` rose to 0.5. Another
+    // tie-break reshuffle by the same reading as the one above — the five are
+    // still tied on improvement, which the next assertion pins — and the
+    // clearest single illustration of what that change was for. Dragapult is
+    // 142 base Speed on 88/75/75 bulk; the two that passed it are Ursaluna at
+    // 130/105/80 and Goodra-Hisui, whose Steel/Dragon resists nine types. A
+    // reshuffle that demotes the fastest and frailest of five equally useful
+    // partners in favour of the two bulkiest is the weights doing what they
+    // were changed to do.
     expect(first.map(({ varietyName }) => varietyName)).toEqual([
       'archaludon',
-      'dragapult',
       'ursaluna',
       'goodra-hisui',
+      'dragapult',
       'mamoswine'
     ]);
     // Pin the tie itself, so a change that makes these five genuinely separable

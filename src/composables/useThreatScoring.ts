@@ -1,10 +1,15 @@
 import { computed, shallowRef } from 'vue';
-import { measureDamageFromBounds, measureDamageToBounds } from '../lib/damageBounds';
 import { DEFAULT_BASE_SCORE } from '../lib/pokedexScoring';
 import { getCatalogBaseTypes } from '../lib/pokemonCatalogScan';
 import { loadPokemonCatalog } from '../lib/pokemonCatalogLoader';
 import { getRegulation } from '../lib/regulations';
-import { getDefenderCensus, getThreatWeights, getTypeMatchupValues } from '../lib/threatPool';
+import {
+  getDamageFromBounds,
+  getDamageToBounds,
+  getDefenderCensus,
+  getThreatWeights,
+  getTypeMatchupValues
+} from '../lib/threatPool';
 import { ALL_TYPES, useMetaFilters } from './useMetaFilters';
 import { useWorkspaceState } from './useWorkspaceState';
 import type { ThreatScoring } from '../lib/pokemonEntry';
@@ -69,28 +74,21 @@ export function useThreatScoring() {
     if (!catalog.value) return undefined;
 
     const cupTypes = selectedTypes.value.length === ALL_TYPES.length ? [] : selectedTypes.value;
-    const weights = getThreatWeights(catalog.value, {
+    const selection = {
       regulation: getRegulation(regulation.value),
       cupTypes,
       baseScore: DEFAULT_BASE_SCORE
-    });
-
-    const census = getDefenderCensus(catalog.value, {
-      regulation: getRegulation(regulation.value),
-      cupTypes,
-      baseScore: DEFAULT_BASE_SCORE
-    });
+    };
 
     return {
-      weights,
-      census,
-      typeValues: getTypeMatchupValues(catalog.value, {
-        regulation: getRegulation(regulation.value),
-        cupTypes,
-        baseScore: DEFAULT_BASE_SCORE
-      }),
-      toBounds: measureDamageToBounds(census, DEFAULT_BASE_SCORE),
-      bounds: measureDamageFromBounds(baseTypesFor(catalog.value), DEFAULT_BASE_SCORE, weights)
+      weights: getThreatWeights(catalog.value, selection),
+      census: getDefenderCensus(catalog.value, selection),
+      typeValues: getTypeMatchupValues(catalog.value, selection),
+      // One selection, one pool, one set of ranges. The scan derives these from
+      // its regulation and this derives them again from the same regulation, so
+      // a cached scan re-scores onto exactly the scale it was written on.
+      toBounds: getDamageToBounds(catalog.value, selection),
+      bounds: getDamageFromBounds(catalog.value, selection, baseTypesFor(catalog.value))
     };
   });
 

@@ -389,7 +389,7 @@ const q = (row, { wo, wb, ws, tmO, tmD, fm }) => {
 };
 const SHIPPING = {
   wo: MEMBER_WEIGHTS.offense, wb: MEMBER_WEIGHTS.bulk, ws: MEMBER_WEIGHTS.speed,
-  tmO: TYPE_MODULATION, tmD: TYPE_MODULATION, fm: FIREPOWER_MODULATION
+  tmO: TYPE_MODULATION.offensive, tmD: TYPE_MODULATION.defensive, fm: FIREPOWER_MODULATION
 };
 console.log('\n=== ablation (suspects, not weights — see the header) ===');
 console.log('  configuration                        vs usage   vs win');

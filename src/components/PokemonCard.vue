@@ -72,20 +72,23 @@ const offenseScore = computed(() => props.pokemon.normalizedDamageToScore.toFixe
 const defenseHint = computed(() => [
   `Defense ${defenseScore.value} out of 1 // lower is better`,
   '',
-  'Measures this typing and selected ability against all 18 attacking types.',
+  'Measures this typing and selected ability against all 18 attacking types,',
+  'weighted by how much of this format can actually attack with each.',
   'Weaknesses raise the score; 4x weaknesses raise it further.',
   'Resistances and immunities lower it.',
   '',
-  'Normalized across real defensive profiles: 0 is strongest, 1 is weakest.'
+  'Normalized across the defensive profiles this format fields:',
+  '0 is the strongest available here, 1 the weakest.'
 ].join('\n'));
 const offenseHint = computed(() => [
   `Offense ${offenseScore.value} out of 1 // higher is better`,
   '',
-  'Measures this Pokemon\'s STAB typing against all 18 defending types.',
+  'Measures this Pokemon\'s STAB typing against the typings this format fields.',
   'Super-effective targets raise the score; resisted and immune targets lower it.',
   '',
   'Reachable move coverage is shown separately below and does not change this score.',
-  'Normalized across real offensive typings: 0 is narrowest, 1 is broadest.'
+  'Normalized across the offensive typings available here:',
+  '0 is narrowest, 1 is broadest.'
 ].join('\n'));
 const toggleStats = () => {
   showStats.value = !showStats.value;
