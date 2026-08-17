@@ -12,7 +12,10 @@ const emit = defineEmits<{
   (e: 'update:selected-ability-name', pokemonName: string, abilityName: string): void;
 }>();
 
-const visibleCount = ref(20);
+/** Cards revealed per page, and the count a new result set starts at. */
+const PAGE_SIZE = 20;
+
+const visibleCount = ref(PAGE_SIZE);
 const searchQuery = ref('');
 const searchInputId = `pokemon-browser-search-${useId().replace(/:/g, '')}`;
 
@@ -29,12 +32,28 @@ const filteredPokemon = computed(() => {
   });
 });
 
-watch([() => props.pokemon, searchQuery], () => {
-  visibleCount.value = 20;
+/**
+ * Which Pokemon are on the list, deliberately blind to what order they are in.
+ *
+ * The list arrives already ranked, and it is re-ranked live: picking an ability
+ * on a card re-scores that Pokemon and re-sorts everything around it. Watching
+ * the array identity treated that as a new result set and sent the user back to
+ * the first twenty cards — so changing an ability on card 70 scrolled the card
+ * being edited out of existence. Sorting the names makes a re-rank invisible
+ * here while a genuine change of pool still resets the page.
+ */
+const membershipKey = computed(() => {
+  const names = props.pokemon.map((entry) => entry.name);
+  names.sort();
+  return names.join('|');
+});
+
+watch([membershipKey, searchQuery], () => {
+  visibleCount.value = PAGE_SIZE;
 });
 
 const showMore = () => {
-  visibleCount.value += 20;
+  visibleCount.value += PAGE_SIZE;
 };
 
 const clearSearch = () => {
