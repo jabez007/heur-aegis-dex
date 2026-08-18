@@ -8,6 +8,7 @@ import {
   SYNERGY_BONUS_WEIGHTS_BY_FORMAT,
   composeTeamScore,
   getTeamSynergyBreakdown,
+  offenseStatTerm,
   scoreMemberQuality,
   scoreTeamSynergy
 } from './teamScoring';
@@ -42,6 +43,30 @@ describe('teamScoring weights', () => {
 
   it('splits the composite score entirely between quality and synergy', () => {
     expect(COMPOSITE_WEIGHTS.memberQuality + COMPOSITE_WEIGHTS.synergy).toBeCloseTo(1);
+  });
+});
+
+describe('offenseStatTerm', () => {
+  it('is the same number the offence term inside member quality uses', () => {
+    // `candidatePriority` prices reachable coverage by this, so if the two ever
+    // came apart the ranking would contradict the quality score it is built on.
+    // Bulk and Speed are held at zero so the remaining quality is the offence
+    // term alone, times its weight: the typing modulator is 1 at a perfect
+    // offensive score, and an unknown variety scores full firepower.
+    const stats = statsOf({ hp: 1, attack: 150, defense: 1, 'special-attack': 40, 'special-defense': 1, speed: 0 });
+    const quality = scoreMemberQuality({
+      stats,
+      normalizedDamageToScore: 1,
+      normalizedDamageFromScore: 1
+    });
+
+    expect(offenseStatTerm(stats)).toBeCloseTo(quality / MEMBER_WEIGHTS.offense, 10);
+  });
+
+  it('reads the ability, because some abilities change what a stat line is worth', () => {
+    const stats = statsOf({ hp: 90, attack: 120, defense: 90, 'special-attack': 60, 'special-defense': 90, speed: 80 });
+
+    expect(offenseStatTerm(stats, 'purifying-salt')).toBeGreaterThan(offenseStatTerm(stats));
   });
 });
 

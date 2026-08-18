@@ -39,9 +39,9 @@
 import { loadPokemonCatalog } from '../src/lib/pokemonCatalogLoader.ts';
 import { getCatalogResistantTypes } from '../src/lib/pokemonCatalogScan.ts';
 import { flattenToPokemon } from '../src/lib/pokemonEntry.ts';
-import { candidatePriority, CANDIDATE_WEIGHTS } from '../src/lib/rosterGeneration.ts';
+import { candidatePriority, CANDIDATE_WEIGHTS, MOVE_COVERAGE_MODULATION } from '../src/lib/rosterGeneration.ts';
 import { coverageBeyondStab } from '../src/lib/coverageMoves.ts';
-import { scoreMemberQuality } from '../src/lib/teamScoring.ts';
+import { offenseStatTerm, scoreMemberQuality } from '../src/lib/teamScoring.ts';
 import { getStabPower } from '../src/lib/stabPower.ts';
 import { hpAdjustedBulk } from '../src/lib/statMetrics.ts';
 import { getDamageFromBounds, getDamageToBounds, getDefenderCensus, getThreatWeights } from '../src/lib/threatPool.ts';
@@ -82,6 +82,14 @@ const percentile = (values, p) => {
  * Read off the entries rather than recomputed, so this measures the pipeline
  * that runs rather than a copy of it.
  */
+/** What `candidatePriority` actually pays a Pokemon for reach beyond STAB. */
+const reachValue = (offenseTerm) =>
+  (1 - MOVE_COVERAGE_MODULATION) + (MOVE_COVERAGE_MODULATION * offenseTerm);
+const coverageCharge = (entry) =>
+  coverageBeyondStab(entry.coverages, entry.moveCoverages).length
+  * CANDIDATE_WEIGHTS.moveCoverage
+  * reachValue(offenseStatTerm(entry.stats, entry.abilityName));
+
 const inputs = pool.map((entry) => ({
   name: entry.name,
   bulk: hpAdjustedBulk(entry.stats),
@@ -92,8 +100,11 @@ const inputs = pool.map((entry) => ({
   offensiveTyping: entry.normalizedDamageToScore,
   stab: getStabPower(entry.name, entry.stats),
   priority: candidatePriority(entry, FORMAT),
-  // The two adjunct terms are additive, so their contribution needs no ablation:
-  // the weight times the value *is* the contribution.
+  // `role` is additive, so its contribution needs no ablation: the weight times
+  // the value *is* the contribution. `coverage` stopped being additive when the
+  // charge was modulated by the offence term, so it is carried as a raw count
+  // here and ablated below with offence held at the median, like every other
+  // input that shares a factor with another.
   role: candidatePriority(entry, FORMAT)
     - 100 * scoreMemberQuality({
       stats: entry.stats,
@@ -102,9 +113,9 @@ const inputs = pool.map((entry) => ({
       abilityName: entry.abilityName,
       varietyName: entry.name
     })
-    - coverageBeyondStab(entry.coverages, entry.moveCoverages).length * CANDIDATE_WEIGHTS.moveCoverage,
-  coverage: coverageBeyondStab(entry.coverages, entry.moveCoverages).length
-    * CANDIDATE_WEIGHTS.moveCoverage
+    - coverageCharge(entry),
+  coverage: coverageBeyondStab(entry.coverages, entry.moveCoverages).length,
+  offenseTerm: offenseStatTerm(entry.stats, entry.abilityName)
 }));
 
 const at = (key, p) => percentile(inputs.map((row) => row[key]).filter((v) => v !== null), p);
@@ -186,7 +197,15 @@ const terms = [
   ['offensive typing', ablate('offensiveTyping'), ''],
   ['speed', ablate('speed'), ''],
   ['support role', at('role', 0.95) - at('role', 0.05), ''],
-  ['reachable coverage', at('coverage', 0.95) - at('coverage', 0.05), '']
+  // Offence held at the pool median, so this is the swing of *reach*, not of the
+  // attacking stat that now prices it. The modulator's own swing is reported
+  // separately below rather than folded in here, because it belongs to the
+  // offence input and counting it twice is the mistake this whole script exists
+  // to catch.
+  ['reachable coverage',
+    CANDIDATE_WEIGHTS.moveCoverage
+    * reachValue(at('offenseTerm', 0.5))
+    * (at('coverage', 0.95) - at('coverage', 0.05)), '']
 ];
 const movement = terms.reduce((total, [, swing]) => total + swing, 0);
 
@@ -330,8 +349,24 @@ console.log(`\n  of the ${withCoverage.length} entries with move-coverage data, 
 console.log('  — which is why the `coverage` row above counts only what STAB does not');
 console.log('  already reach. Charging the full list paid for that reach twice, once');
 console.log('  through the offence term and again at a flat rate per type.');
-console.log('\n  what is still unrepaired: the charge is stat-independent, paying a weak');
-console.log('  attacker per type at the same rate as a strong one. See CANDIDATE_WEIGHTS.');
+
+// The second half of the same repair. The charge used to be flat per type, so a
+// wall with a wide movepool collected the same points as a sweeper with one.
+// It is now modulated by the offence term, and the two numbers below are what
+// that has to be watched for: the charge must gain stat-dependence without
+// giving back the anti-correlation with offensive typing that subtracting STAB
+// bought, which is the thing that makes it a distinct input rather than a third
+// copy of "is a good attacker".
+const charges = pool.map((entry) => coverageCharge(entry));
+const paidAt = (p) => CANDIDATE_WEIGHTS.moveCoverage
+  * at('coverage', 0.5)
+  * reachValue(at('offenseTerm', p));
+console.log(`\n  reach is priced by offence at depth ${MOVE_COVERAGE_MODULATION}: median reach earns`
+  + ` ${paidAt(0.05).toFixed(2)} pts at the p05 attacking stat and ${paidAt(0.95).toFixed(2)} at the p95`);
+console.log(`  the charge tracks offence at ${rho(charges, inputs.map((row) => row.offense)).toFixed(2)}`
+  + ` and offensive typing at ${rho(charges, inputs.map((row) => row.offensiveTyping)).toFixed(2)}`
+  + ' — the second must stay clearly negative, or this has become a third');
+console.log('  measure of "is a good attacker" rather than of reach its typing lacks');
 
 // The premise stated as a score, deliberately naive: equal parts of the three
 // things the tool was built to find, each on the pool's own range. It is a

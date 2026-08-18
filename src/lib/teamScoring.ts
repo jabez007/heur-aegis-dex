@@ -24,6 +24,17 @@ import { BATTLE_FORMATS, DEFAULT_BATTLE_FORMAT, type BattleFormat } from './batt
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 /**
+ * Puts a normalized stat term on its own reachable range rather than on 0..1.
+ *
+ * Every one of these terms has a floor well above zero — an unusable 85 Attack
+ * collected 52% of the offence term before this — so a nominal 0..1 credited
+ * every Pokemon for stats no Pokemon in the pool actually lacks. See
+ * OBSERVED_STAT_TERMS.
+ */
+const rescaleStatTerm = (value: number, { min, max }: { min: number; max: number }): number =>
+  clamp01((clamp01(value) - min) / (max - min));
+
+/**
  * Practical ceilings used to normalize base stats.
  *
  * These are competitive ceilings rather than the theoretical 255 per stat.
@@ -1142,6 +1153,39 @@ export interface MemberQualityInput {
 }
 
 /**
+ * How much attacking stat a Pokemon has, on the pool-relative 0..1 scale the
+ * offence term inside `scoreMemberQuality` uses.
+ *
+ * Exported because a second caller needs the same number and must not compute
+ * its own. `candidatePriority` prices reachable coverage by it: a move that can
+ * be learned is only a threat if something can be hurt with it, and the two
+ * places that ask "how hard does this hit" have to agree on the answer or the
+ * ranking contradicts the quality score it is built on.
+ *
+ * This is the stat alone. It deliberately excludes the two things the offence
+ * term multiplies it by:
+ *
+ * - `offensiveTyping`, because that measures STAB reach, and non-STAB coverage
+ *   is precisely the complement of it. Folding it in here would reintroduce the
+ *   double count `coverageBeyondStab` was written to remove.
+ * - `firepower`, because that is the base power of the best *STAB* move, and a
+ *   coverage move does not get STAB. The coverage table records only that a
+ *   qualifying move exists at `COVERAGE_MOVE_MIN_POWER` or better, so there is
+ *   no honest per-move power to substitute.
+ *
+ * @param stats Base stats of the form the Pokemon fights in.
+ * @param abilityName Selected ability, whose offence multiplier applies as it does in member quality.
+ * @returns The rescaled offence term, 0..1.
+ */
+export function offenseStatTerm(stats: PokemonStats, abilityName?: string): number {
+  const ability = getQualityMultipliers(abilityName, stats);
+  return rescaleStatTerm(
+    (effectiveOffense(stats) / STAT_CEILINGS.offense) * ability.offense,
+    OBSERVED_STAT_TERMS.offense
+  );
+}
+
+/**
  * Scores a single team member's raw quality.
  *
  * @param member Base stats plus the normalized type scores that modulate them.
@@ -1157,22 +1201,14 @@ export function scoreMemberQuality(member: MemberQualityInput): number {
   // gives an already-fast Speed Boost carrier less credit than a slow one.
   const ability = getQualityMultipliers(member.abilityName, stats);
 
-  // Each term is put on its own reachable range, not on 0..1. Every one of them
-  // has a floor well above zero — an unusable 85 Attack collected 52% of the
-  // offence term before this — so a nominal 0..1 credited every Pokemon for
-  // stats no Pokemon in the pool actually lacks. See OBSERVED_STAT_TERMS.
-  const rescale = (value: number, { min, max }: { min: number; max: number }) =>
-    clamp01((clamp01(value) - min) / (max - min));
-
-  const offense = rescale(
-    (effectiveOffense(stats) / STAT_CEILINGS.offense) * ability.offense,
-    OBSERVED_STAT_TERMS.offense
-  );
-  const bulk = rescale(
+  // Each term is put on its own reachable range, not on 0..1 — see
+  // `rescaleStatTerm` and OBSERVED_STAT_TERMS.
+  const offense = offenseStatTerm(stats, member.abilityName);
+  const bulk = rescaleStatTerm(
     (hpAdjustedBulk(stats) / STAT_CEILINGS.bulk) * ability.bulk,
     OBSERVED_STAT_TERMS.bulk
   );
-  const speed = rescale(
+  const speed = rescaleStatTerm(
     (stats.speed / STAT_CEILINGS.speed) * ability.speed,
     OBSERVED_STAT_TERMS.speed
   );

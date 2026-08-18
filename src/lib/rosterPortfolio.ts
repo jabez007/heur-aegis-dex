@@ -35,6 +35,7 @@
  * | 2026-08-17 | best off-roster       | 1.17 | **2.39** | 4.02 |
  * | 2026-08-17 | best off-roster       | 0.98 | **2.47** | 4.47 |
  * | 2026-08-17 | best off-roster       | 0.86 | **1.85** | 3.84 |
+ * | 2026-08-18 | best off-roster       | 0.88 | **2.25** | 3.97 |
  *
  * ## The counterfactual was wrong, and the drift is how it showed
  *
@@ -250,13 +251,35 @@
  * the lowest recorded and is the cost of the fall — still comfortably above the
  * 38% at a margin of 1 that the supply assertion exists to keep away from.
  *
+ * ## Pricing reach by the stat behind it, and most of that fall coming back
+ *
+ * Re-measured 2026-08-18 after `candidatePriority` began modulating the
+ * reachable-coverage charge by `offenseStatTerm`. 1.85 to **2.25**, which
+ * recovers about two thirds of the previous day's drop.
+ *
+ * Read together, the pair is the clearest evidence this file has that the
+ * mechanism named above is the right one. Both changes act only on the coverage
+ * term and only through pruning. The first *widened* the candidate pool's
+ * usefulness — it stopped overpaying Pokemon whose typing already covered the
+ * format, letting genuinely distinct ones in — and the constant fell. The
+ * second *narrows* it again, because a wall with a wide movepool no longer
+ * prices its way into the pool on reach it cannot use, so the marginal
+ * candidate is once more a worse substitute for a roster member. The constant
+ * rose. Same term, opposite directions, each matching what the change did to
+ * the supply of alternatives rather than to the score of any roster.
+ *
+ * Clearance against the 2.786 ceiling is 0.536, or 4.5x the largest recorded
+ * drift. Supply at 2.25 is a table row rather than an interpolation: 98% of
+ * scenarios offer two or more diverse options and 86% offer three, both above
+ * anything recorded since the counterfactual was corrected.
+ *
  * Reasoned against a measurement rather than validated against how many
  * alternatives people actually pick — the standing of `MEMBER_WEIGHTS` and
  * `TYPE_MODULATION`. Rerun the script after anything that moves roster scores,
  * **including anything that moves `candidatePriority`**, which prunes the pool
  * this is measured over.
  */
-export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 1.85;
+export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.25;
 export const ROSTER_PORTFOLIO_LIMIT = 6;
 export const MINIMUM_ROSTER_REPLACEMENTS = 2;
 

@@ -7,9 +7,11 @@ import {
   countUnansweredWeaknesses,
   DEFAULT_UNANSWERED_WEAKNESS_SLACK,
   generateRosters,
-  CANDIDATE_WEIGHTS
+  CANDIDATE_WEIGHTS,
+  MOVE_COVERAGE_MODULATION
 } from './rosterGeneration';
 import { DEFAULT_BASE_SCORE, normalizeDamageFromScore } from './pokedexScoring';
+import { offenseStatTerm } from './teamScoring';
 import type { PokemonEntry } from './pokemonEntry';
 
 const stats = { hp: 80, attack: 100, defense: 90, 'special-attack': 100, 'special-defense': 90, speed: 80 };
@@ -147,6 +149,52 @@ describe('candidatePriority', () => {
     });
 
     expect(candidatePriority(reachesFurther)).toBeGreaterThan(candidatePriority(stabOnly));
+  });
+
+  it('pays for reach by the attacking stat behind it', () => {
+    // "Can learn" is not "can threaten". The charge used to be flat per type, so
+    // a wall with a wide movepool collected the same points as a sweeper with
+    // the same movepool — the objection that removed the `coverage` weight,
+    // still standing on the term that replaced it.
+    //
+    // Both of these reach four types their STAB does not, and differ only in
+    // attacking stats, so the whole gap between the two coverage charges is the
+    // modulation.
+    const reach = {
+      coverages: ['grass', 'ice'],
+      moveCoverages: ['fire', 'grass', 'ice', 'rock', 'steel', 'water']
+    };
+    const hitsHard = mon('hits-hard', {
+      ...reach,
+      stats: { ...stats, attack: 140, 'special-attack': 140 }
+    });
+    const hitsSoftly = mon('hits-softly', {
+      ...reach,
+      stats: { ...stats, attack: 50, 'special-attack': 50 }
+    });
+    const barren = (name: string, source: PokemonEntry) =>
+      mon(name, { stats: source.stats, coverages: reach.coverages, moveCoverages: reach.coverages });
+
+    const hardGain = candidatePriority(hitsHard) - candidatePriority(barren('hard-barren', hitsHard));
+    const softGain = candidatePriority(hitsSoftly) - candidatePriority(barren('soft-barren', hitsSoftly));
+
+    expect(hardGain).toBeGreaterThan(softGain);
+
+    // Not to zero, though. The offence term is rescaled against what the pool
+    // actually reaches, so its floor means "worst attacker in the format", not
+    // "cannot attack" — and a wall that can still click a super-effective move
+    // has done something. MOVE_COVERAGE_MODULATION is the size of that claim.
+    const charged = (source: PokemonEntry) => 4 * CANDIDATE_WEIGHTS.moveCoverage
+      * ((1 - MOVE_COVERAGE_MODULATION)
+        + (MOVE_COVERAGE_MODULATION * offenseStatTerm(source.stats, source.abilityName)));
+
+    expect(hardGain).toBeCloseTo(charged(hitsHard), 10);
+    expect(softGain).toBeCloseTo(charged(hitsSoftly), 10);
+
+    // 50 attacking on both sides sits at the very floor of the pool's offence
+    // range, and still keeps half the charge: 0.53 of the 0.99 the 140 line
+    // earns. That floor is deliberate and is what the depth buys.
+    expect(softGain).toBeGreaterThan(0.5 * hardGain);
   });
 
   it('still rates a stronger stat line above a weaker one at equal typing', () => {

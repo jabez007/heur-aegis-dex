@@ -44,7 +44,7 @@
 import { coverageBeyondStab } from './coverageMoves';
 import { evaluateRoster, scoreBring, type RosterEvaluation, type RosterMember } from './rosterScoring';
 import type { TypeMatchupValues } from './teamCoverage';
-import { MOVE_ROLE_CREDIT, PRANKSTER_ROLE_CREDIT, scoreMemberQuality } from './teamScoring';
+import { MOVE_ROLE_CREDIT, offenseStatTerm, PRANKSTER_ROLE_CREDIT, scoreMemberQuality } from './teamScoring';
 import { getMoveSourcedRoles } from './utilityMoves';
 import { DEFAULT_BASE_SCORE } from './pokedexScoring';
 import {
@@ -307,24 +307,110 @@ export const CANDIDATE_WEIGHTS = {
    * for. Correlation with STAB power falls from 0.36 to 0.15 over the same
    * change.
    *
-   * ## What is still wrong with it, recorded rather than fixed
+   * ## It is no longer stat-independent, and the pair that argued for that was
+   * the wrong pair
    *
-   * It is **stat-independent**. Klefki reaching seven extra types off an 80
-   * Special Attack is paid at the same rate as Kingambit reaching seven, which
-   * is word-for-word the objection that removed the `coverage` weight below.
-   * The old note's "already read against the attacker's stats" is half true:
-   * `getAttackerBias` picks the physical or special move list, so the *types*
-   * are right for the attacker, but the *value* is not scaled by whether it can
-   * hurt anything with them.
+   * The note here used to read: "Klefki reaching seven extra types off an 80
+   * Special Attack is paid at the same rate as Kingambit reaching seven." That
+   * example does not survive being looked up. Measured in Regulation M-B:
    *
-   * Not fixed here because the fix is a different decision. Routing it through
-   * the offence term, which is what was done for `coverage`, would make this a
-   * factor of a product rather than a tiebreak beside one, and 0.2 per type was
-   * chosen for the second shape. Removing the double count is a defect repair;
-   * changing the shape is a design change, and they should not ride together.
+   * | Pokemon   | attack stats | STAB reach | move reach | **extra** | paid |
+   * | Klefki    | 80 / 80      | 6          | 10         | **4**     | 0.80 |
+   * | Kingambit | 135 / 60     | 5          | 15         | **10**    | 2.00 |
+   *
+   * They are not paid the same rate; Kingambit is paid 2.5x more, and they sit
+   * 199 places apart. The sentence was carried word for word from the removed
+   * `coverage` weight below, where it was a claim about STAB `coverages` — and
+   * even there the numbers are 6 and 5, not seven and seven. It was a slogan
+   * that outlived its measurement. Kingambit is also not in the default view at
+   * all: Dark/Steel is 4x weak to Fighting, so the pair can only be seen side by
+   * side with the type filters opened.
+   *
+   * The **defect** it named is real; only its exemplars were wrong. The honest
+   * pair is Audino and Snorlax. Both reach 18 types beyond STAB — the widest in
+   * the pool, and the largest payment this term makes anywhere at 3.6 points —
+   * off offence terms of 0.119 and 0.512. Aegislash-Shield collects 2.2 points
+   * of reach on an offence term of 0.02.
+   *
+   * So the charge is now scaled by `offenseStatTerm`, through
+   * MOVE_COVERAGE_MODULATION. Reach that nothing can be done with is not a
+   * threat, which is the same argument that removed the `coverage` weight and
+   * the same argument behind the damage-class split in `coverageMoves.ts`.
+   *
+   * ## Why 0.26 rather than 0.2
+   *
+   * Modulating multiplies by a number below 1 for everyone but the very top of
+   * the offence range, so applying it at the old weight would have shrunk the
+   * term for the whole pool — a quiet weight cut wearing a repricing's clothes,
+   * which is the exact side effect that forced TYPE_MODULATION to be split into
+   * an offensive and a defensive half. The weight is raised to keep the term
+   * worth what it was worth to a *median* Pokemon, so the change rotates the
+   * term about the median instead of shrinking it: the p05-to-p95 swing of
+   * reach lands at 2.37 points against the 2.40 it was, and the term holds its
+   * 4.6% share of what decides the order. Measured, not derived: see the sweep
+   * in MOVE_COVERAGE_MODULATION.
    */
-  moveCoverage: 0.2
+  moveCoverage: 0.26
 } as const;
+
+/**
+ * How strongly `offenseStatTerm` modulates the reachable-coverage charge.
+ *
+ * Same shape as TYPE_MODULATION: `(1 - depth) + depth * term`, so 0 is the old
+ * stat-independent flat charge and 1 makes coverage worth literally nothing to
+ * a Pokemon at the floor of the offence range. Neither end is right. The floor
+ * is *pool-relative* — OBSERVED_STAT_TERMS.offense starts at 0.32 of the stat
+ * ceiling, so a term of 0 means "worst attacker in the format", not "cannot
+ * attack" — and a wall that can still click a super-effective move has done
+ * something, even if not much.
+ *
+ * Swept over the Regulation M-B pool with the type filters opened, 236 entries,
+ * on 2026-08-18. `rho(cov, offTyp)` is the anti-correlation the previous fix
+ * bought and this one must not spend: a Pokemon whose STAB already covers the
+ * format has less left to gain from a coverage move.
+ *
+ * | depth | rho(cov, offTerm) | rho(cov, offTyp) | Audino | Lopunny | Sinistcha |
+ * | 0.00  | 0.070             | **-0.308**       | 157    | 193     | 60        |
+ * | 0.30  | 0.204             | -0.287           | 164    | 199     | 59        |
+ * | 0.40  | 0.260             | -0.272           | 165    | 201     | 56        |
+ * | 0.50  | 0.320             | **-0.254**       | 169    | 202     | 55        |
+ * | 0.60  | 0.389             | -0.226           | 171    | 203     | 55        |
+ * | 0.75  | 0.501             | -0.175           | 177    | 205     | 55        |
+ * | 1.00  | 0.684             | **-0.070**       | 180    | 208     | 53        |
+ *
+ * The right-hand column is why this stops at 0.5. Past it the term starts
+ * turning back into a proxy for the offence stat and hands back the sign the
+ * double-count repair was worth doing for: at depth 1 the anti-correlation with
+ * offensive typing has almost vanished, which would leave the term measuring
+ * "is a good attacker" — something two other terms already measure — rather
+ * than "has reach its typing does not give it". 0.5 buys most of the
+ * stat-dependence for a fifth of that cost, and matches TYPE_MODULATION.defensive.
+ *
+ * ## What this is worth, which is not much, recorded so it is not overclaimed
+ *
+ * Top-20 churn in the default view is **zero** at every depth swept, and zero
+ * in the opened view too. The Pokemon this repricing demotes — Audino,
+ * Lopunny, Aegislash-Shield, Bastiodon, Pikachu — are almost all filtered out
+ * of the default browser view already, by the damage-from ceiling and the
+ * quadruple-weakness filter. The defect was real and is now fixed, but the
+ * product's own filters were already hiding most of it, and the correction is
+ * worth about ten places in the middle of an opened list.
+ *
+ * That is the honest size of it. It is recorded here rather than in a commit
+ * message because the next person tempted to reach for this term to fix a
+ * ranking they dislike should know it cannot move one.
+ *
+ * ## And it costs something, which is the reason to keep the depth low
+ *
+ * Premise alignment falls from 0.692 to **0.683**, top-20 overlap unchanged at
+ * 12/20. That is the expected direction and it is a real cost: attacking stat
+ * is not one of the three things the tool was built to find, so pricing any
+ * term by it pulls the order a little away from the premise order. The trade is
+ * taken because the alternative is a term that pays for threats that do not
+ * exist, and a premise score that rewards fictional threats is not measuring
+ * the premise either. It is also the second reason not to go deeper than 0.5.
+ */
+export const MOVE_COVERAGE_MODULATION = 0.5;
 
 // There is deliberately no `coverage` term in CANDIDATE_WEIGHTS.
 //
@@ -797,9 +883,16 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
   // charged for most of that a second time. See `coverageBeyondStab`.
   const extraCoverage = coverageBeyondStab(entry.coverages, entry.moveCoverages);
 
+  // And priced by what could be done with it. A move that can be learned is
+  // only a threat if the Pokemon has an attacking stat to fire it off, so the
+  // charge is modulated by the same offence term `quality` is built on rather
+  // than paid flat. See MOVE_COVERAGE_MODULATION.
+  const reachValue = (1 - MOVE_COVERAGE_MODULATION) +
+    (MOVE_COVERAGE_MODULATION * offenseStatTerm(entry.stats, entry.abilityName));
+
   return (quality * w.quality) +
     (roleValue * w.supportRole) +
-    (extraCoverage.length * w.moveCoverage);
+    (extraCoverage.length * w.moveCoverage * reachValue);
 }
 
 /**
