@@ -124,7 +124,7 @@ export { effectiveOffense, SECONDARY_OFFENSE_WEIGHT } from './statMetrics';
  * Pokemon that cannot KO has stopped expressing the premise rather than
  * expressing it harder.
  *
- * The frontier those assertions draw, measured by sweeping:
+ * The frontier those assertions drew, measured by sweeping:
  *
  * | guard                                | binds at                       |
  * | ------------------------------------ | ------------------------------ |
@@ -132,18 +132,48 @@ export { effectiveOffense, SECONDARY_OFFENSE_WEIGHT } from './statMetrics';
  * | bulky attackers beat walls (team)    | bulk >= 0.55, or def mod >= 0.7|
  * | Feraligatr beats Skarmory on quality | def mod >= 0.65                |
  *
- * These weights sit inside all three with room. The Azumarill pair — the
- * binding one — clears its threshold by 16% here, a ratio of 9.28 against the 8
- * required, where the alternative at 0.50 / 0.15 with a 0.55 modulation cleared
- * by 3% and was rejected for being a knife edge rather than a setting.
+ * ## That frontier was measured with firepower switched off, and is wrong
  *
- * Whether that guard is still the right
- * guard is a real question — it demands two Pokemon stay close because what
- * distinguishes them (Belly Drum) is invisible to the model, while the thing
- * now separating them is a typing difference the model can see and that the
- * guard's own comment calls legitimate. Relitigating it is a deliberate
- * decision about the fixture, not a side effect of a weight change, so it has
- * not been taken here.
+ * Superseded 2026-08-18. `scoringValidation.test.ts` called
+ * `scoreMemberQuality(mon(name))` with a `PokemonEntry`, which carries no
+ * `varietyName` — so every quality assertion bounding these weights scored at
+ * full firepower for every Pokemon. Production never does; see the `quality`
+ * helper there. The table above is what the fixture said with FIREPOWER_MODULATION
+ * effectively at 0 for the pool it was measuring, and two of its three rows do
+ * not survive the correction:
+ *
+ * - **Feraligatr beats Skarmory** is gone. Skarmory's Brave Bird at 120 off 80
+ *   Attack out-damages Liquidation at 85 off 105 — 9,600 to 8,925 — so the
+ *   judgement was wrong rather than the model, and it was resting on "25 more
+ *   Attack" as though Attack were damage.
+ * - **Azumarill/Blastoise** has inverted. With firepower on, Blastoise leads,
+ *   and the old symmetric expression stopped constraining a bulk *ceiling* at
+ *   all: it reads 13.0 at these weights, 25.6 at bulk 0.54, 97.1 at 0.57 and
+ *   2.5e+08 at 0.60, because an absolute-gap guard reports its best number
+ *   exactly where two Pokemon swap places. It is now a directional floor and
+ *   binds on Speed instead.
+ *
+ * The frontier as it actually stands, re-swept by running the fixture at each
+ * point rather than by reasoning about it:
+ *
+ * | guard                                | binds at                        |
+ * | ------------------------------------ | ------------------------------- |
+ * | Azumarill floor (Speed it can answer)| speed >= 0.21                   |
+ * | bulky attackers beat walls (team)    | bulk >= 0.55 at def mod 0.5     |
+ * |                                      | bulk >= 0.52 at def mod 0.7     |
+ * |                                      | def mod >= 0.75 at bulk 0.50    |
+ *
+ * Two things follow that are worth stating plainly. The Speed weight is now
+ * bounded from *below* by this fixture, and 0.15 sits inside that bound with
+ * 0.20 as the last passing value — which is the weight this file shipped until
+ * 2026-08-17, reached there from measured term swings and reached here from a
+ * judgement about Belly Drum. And the headroom above these weights is roughly
+ * double what the old table claimed: bulk can reach 0.54, or
+ * `TYPE_MODULATION.defensive` can reach 0.7, before the one remaining ceiling —
+ * the team gate that a roster which cannot KO does not win — binds. That
+ * headroom has not been spent here. Spending it is a weight decision and this
+ * was a fixture repair; they should not ride together, which is the same rule
+ * that kept the coverage double-count repair separate from repricing it.
  *
  * Reasoned against measured term swings and bounded by the validation fixture,
  * not validated against match outcomes. Rerun `measure:composite-bounds`,
@@ -429,6 +459,20 @@ export const PRANKSTER_ROLE_CREDIT = 0.75;
  * absolute terms — 0.271 is a better ranking, not a good one. This raises the
  * term from "reasoned" to "reasoned and not contradicted", which is a lower bar
  * than it sounds and still more than any other constant here has.
+ *
+ * ## The validation fixture could not see this term until 2026-08-18
+ *
+ * `scoringValidation.test.ts` scored member quality without a `varietyName`, so
+ * every judgement in the file bounding these constants was made with firepower
+ * resolved to 1 for every Pokemon. Switching it on moved three assertions and
+ * rewrote the frontier recorded under MEMBER_WEIGHTS.
+ *
+ * That the fixture was blind to it is a fixture bug, not evidence against the
+ * constant, and the direction matters: this is the one value here with support
+ * from outside the codebase, and the judgements it collided with have none. So
+ * the judgements moved. Recorded because the reverse — softening a measured
+ * constant until unmeasured judgements pass — is the tempting repair and is
+ * exactly backwards.
  *
  * ## Singles is unvalidated, and the reason is worth reading
  *

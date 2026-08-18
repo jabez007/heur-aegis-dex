@@ -72,6 +72,27 @@ const mon = (name: string): PokemonEntry => {
 
 const team = (...names: string[]): PokemonEntry[] => names.map(mon);
 
+/**
+ * Member quality as production computes it.
+ *
+ * `scoreMemberQuality(mon('azumarill'))` reads like the obvious call
+ * and was wrong: `PokemonEntry` has no `varietyName`, so every assertion in this
+ * file scored at **full firepower for every Pokemon** — the exact reading
+ * `MemberQualityInput.varietyName` documents for "the table does not know". The
+ * table does know; the call site just never told it. Every other caller —
+ * `candidatePriority`, `evaluateRoster`, `chooseDefaultAbility` — passes the
+ * name, so this file was the only place in the repo scoring a Pokemon on a path
+ * production never runs.
+ *
+ * That is worse here than it would be anywhere else. This fixture is what bounds
+ * MEMBER_WEIGHTS, TYPE_MODULATION and FIREPOWER_MODULATION, so the frontier
+ * those constants were tuned against was measured in a world with one of them
+ * switched off. Three assertions moved when it was switched back on, and the
+ * Azumarill/Blastoise pair below reversed.
+ */
+const quality = (entry: PokemonEntry): number =>
+  scoreMemberQuality({ ...entry, varietyName: entry.name });
+
 const toRosterMember = (entry: PokemonEntry): RosterMember => ({
   name: entry.name,
   types: entry.types,
@@ -105,7 +126,7 @@ const compositeHalves = (members: PokemonEntry[], format: BattleFormat) => {
     members.map((member) => ({ abilityName: member.abilityName })),
     { hasAlly: format.hasAlly }
   );
-  const qualities = members.map((member) => scoreMemberQuality(member));
+  const qualities = members.map((member) => quality(member));
 
   return {
     quality: qualities.reduce((total, quality) => total + quality, 0) / qualities.length,
@@ -239,26 +260,42 @@ describe('scoring validation — member ranking', () => {
   it('ranks a bulky attacker above a low-HP wall', () => {
     // Feraligatr has both more effective bulk (88.1 to 81.4) and 25 more Attack
     // than Skarmory. Additive bulk used to hide the first advantage by treating
-    // high defenses as durability without asking how much HP they protect.
+    // high defenses as durability without asking how much HP they protect —
+    // Skarmory's 140/70 sit behind 65 HP, Feraligatr's 100/83 behind 85.
     expect(hpAdjustedBulk(mon('feraligatr').stats))
       .toBeGreaterThan(hpAdjustedBulk(mon('skarmory').stats));
-    expect(scoreMemberQuality(mon('feraligatr')))
-      .toBeGreaterThan(scoreMemberQuality(mon('skarmory')));
 
-    // This used to assert on `candidatePriority` and now asserts on the two
-    // things the claim is actually about, because firepower reversed the final
-    // order: Skarmory's best usable STAB is Brave Bird at 120 and Feraligatr's
-    // is Liquidation at 85, and Skarmory reaches more types by move. Feraligatr
-    // genuinely lacks a hard-hitting Water move, so the reversal is the model
-    // seeing something true that it could not see before, not the bulk metric
-    // regressing.
+    // Feraligatr no longer carries the ordering half of this claim, and the
+    // reason is that the claim was wrong rather than that the model is.
     //
-    // Narrowing the assertion is deliberate rather than a way to keep the file
-    // green. `candidatePriority` adds move-coverage breadth and support roles on
-    // top of quality, and neither has anything to do with whether additive bulk
-    // hides effective bulk — so the old assertion could have been broken or
-    // repaired by changes unrelated to the defect it guards. Nothing external
-    // adjudicates this pair: both Skarmory and Feraligatr sit below 1% usage.
+    // "25 more Attack" was doing the work, and Attack is not damage. Skarmory's
+    // best usable STAB is Brave Bird at 120 off 80 Attack; Feraligatr's is
+    // Liquidation at 85 off 105. Multiply them out and the low-HP wall hits
+    // *harder*: 9,600 against 8,925. The premise this file defends is that a
+    // team which cannot KO does not win, and by that premise Skarmory is the
+    // better attacker of the two. Feraligatr's answer is Dragon Dance, which is
+    // exactly as invisible as Azumarill's Belly Drum and gets exactly the same
+    // treatment — recorded, not compensated for with a weight.
+    //
+    // This was noticed late. The assertion had already been narrowed once, from
+    // `candidatePriority` to `scoreMemberQuality`, on the belief that quality
+    // did not carry the reversal. It did; nothing here had ever passed
+    // `varietyName`, so firepower was switched off for the whole file. See the
+    // `quality` helper above.
+    //
+    // Swampert carries it instead, and carries it better, because the confound
+    // is gone: both are 120-power STAB users, so firepower is a wash and the
+    // comparison is the one this test names. Swampert has *lower* additive
+    // defenses than Skarmory (90+110 against 140+70) and higher effective bulk
+    // (94.9 against 81.4) on 100 HP to 65, plus 43 more effective offence — and
+    // it has to win despite Skarmory holding the better defensive typing by a
+    // wide margin (0.183 damage-from against 0.493). A bulky attacker beating a
+    // low-HP wall that out-types it is the whole claim, stated on a pair that
+    // can only be decided by the thing under test.
+    expect(hpAdjustedBulk(mon('swampert').stats))
+      .toBeGreaterThan(hpAdjustedBulk(mon('skarmory').stats));
+    expect(quality(mon('swampert')))
+      .toBeGreaterThan(quality(mon('skarmory')));
   });
 
   it('rates a one-sided attacker on the stat it actually attacks with', () => {
@@ -291,61 +328,79 @@ describe('scoring validation — member ranking', () => {
     expect(candidatePriority(mon('azumarill'))).toBeGreaterThan(candidatePriority(mon('klefki')));
   });
 
-  it('keeps Azumarill and Blastoise close without their defining moves', () => {
-    // HP-adjusted bulk puts these nearly level (89.4 against 90.0). Huge Power
-    // gives Azumarill the offensive edge while Blastoise retains Speed; neither
-    // should run away on individual quality.
+  it('does not sink Azumarill below Blastoise for the Speed its moves answer', () => {
+    // Relitigated 2026-08-18. This was a symmetric guard — `|gap| < decisive/8`,
+    // "neither should run away" — and both halves of that turned out to be
+    // wrong: the shape of the constraint, and the direction it pointed.
     //
-    // What actually makes Azumarill good is Belly Drum and Aqua Jet: a setup
-    // move and a priority move that between them answer the low Speed the model
-    // penalises. Neither is visible to a scan that sees no moves beyond coverage
-    // types, so no weight should be tuned until this reads "correct" — that
-    // would be fitting the stat model to compensate for a missing move model.
-    // The same trap as the documented Trick Room bias in MEMBER_WEIGHTS.
+    // ## The construction was measuring distance to a crossover
     //
-    // Azumarill did briefly outrank Blastoise outright, on the STAB `coverage`
-    // term that charged offensive breadth at 1.84x. Removing that double count
-    // handed most of it back, which is the correct outcome and worth recording:
-    // the ordering had been resting on an arithmetic error rather than on
-    // anything the model believed.
+    // A guard on the *absolute* gap between two Pokemon is not a closeness
+    // guard. It is smallest exactly where they swap places, so it reports its
+    // best possible reading at the moment the ordering inverts. Swept over the
+    // bulk weight with firepower on, the old expression read:
     //
-    // The gap is now measured against a spread the model treats as decisive
-    // rather than against a fixed 0.01. That absolute stopped meaning "close"
-    // when IMMUNITY_VALUE moved to -4: Azumarill's Fairy half carries a Dragon
-    // immunity that Blastoise has no equivalent of, and the pair drifted from
-    // 0.0098 apart to 0.0125. The drift is small only because Dragon is the
-    // rarest attacking type in the format and threat weighting discounts the
-    // immunity to about a quarter of its face value — an immunity to something
-    // common would have separated them properly, and should.
+    // | bulk / speed | dec/|gap| | who leads |
+    // | 0.42 / 0.23  |       6.6 | Blastoise |
+    // | 0.50 / 0.15  |      13.0 | Blastoise |  <- ships
+    // | 0.54 / 0.11  |      25.6 | Blastoise |
+    // | 0.57 / 0.08  |      97.1 | Blastoise |
+    // | 0.60 / 0.05  |   2.5e+08 | Azumarill |
     //
-    // Anchoring to the Dragonite gap keeps the judgement ordinal, as the header
-    // of this file asks, and survives the next revaluation without a number
-    // needing to be re-tuned by hand.
-    const gap = Math.abs(
-      scoreMemberQuality(mon('azumarill')) - scoreMemberQuality(mon('blastoise'))
-    );
-    const decisive = scoreMemberQuality(mon('dragonite')) - scoreMemberQuality(mon('azumarill'));
-    expect(gap).toBeLessThan(decisive / 8);
+    // MEMBER_WEIGHTS recorded this as the binding constraint, failing above
+    // bulk 0.52. It does the opposite: it fails *below* bulk 0.45 and passes
+    // ever more comfortably as bulk rises, right through the inversion.
+    //
+    // ## The direction was wrong because the missing model is one-sided
+    //
+    // What the model cannot see is Belly Drum and Aqua Jet: a setup move and a
+    // priority move that between them answer the low Speed the model penalises.
+    // Both push one way. There is no reading of Azumarill's movepool that argues
+    // it should be scored *lower* than the stat model already scores it, so a
+    // guard forbidding it from rising was protecting against an error that
+    // cannot occur. What can occur is the stat model charging it twice for 50
+    // Speed — once in the Speed term and once in the Speed-shaped hole where
+    // priority would be — and that is what this now guards.
+    //
+    // So the assertion is a floor, not a band. Azumarill may pass Blastoise
+    // freely; it may not fall far behind it.
+    const deficit = quality(mon('blastoise')) - quality(mon('azumarill'));
+    const decisive = quality(mon('dragonite')) - quality(mon('azumarill'));
+    expect(deficit).toBeLessThan(decisive / 8);
 
-    // Firepower widened this pair, and the widening is honest in one direction
-    // only. Blastoise's best usable STAB is Wave Crash at 120 against
-    // Azumarill's Play Rough at 85, which is a real gap the model previously
-    // could not see — but Azumarill's answer to it is Belly Drum, and that is
-    // still invisible. So the model now overstates a difference it used to miss
-    // entirely, which is progress with a known sign rather than a correct
-    // answer, and is exactly why the comment above says not to tune a weight
-    // until the move model exists.
+    // The divisor is carried over rather than re-picked, and it lands somewhere
+    // worth knowing. The deficit is monotone in the Speed weight and in nothing
+    // else much:
     //
-    // The bare `< 2` this replaced was the unanchored absolute the paragraph
-    // above criticizes, left on the one line that did not follow the rule. It is
-    // now ordinal against the same Dragonite anchor. The divisor is looser than
-    // the quality assertion's because `candidatePriority` carries move coverage
-    // and support roles that `scoreMemberQuality` does not, so the same fraction
-    // of the two scales does not mean the same thing.
+    // | speed | bulk | deficit | dec/deficit |
+    // | 0.10  | 0.55 |  0.0076 |        33.9 |
+    // | 0.15  | 0.50 |  0.0199 |        13.0 |  <- ships
+    // | 0.20  | 0.45 |  0.0322 |         8.1 |  <- the weight this file shipped until 2026-08-17
+    // | 0.25  | 0.40 |  0.0445 |         5.9 |
+    // | 0.35  | 0.30 |  0.0691 |         3.8 |
+    //
+    // Run against the real weights rather than the table, /8 admits a Speed
+    // weight of 0.20 and rejects 0.21 — so its boundary falls in the gap between
+    // the weight this project shipped for months and the next value up. That is
+    // not a coincidence being flattered into a result: it is the statement that
+    // 0.20 was the last acceptable Speed weight, which is the same conclusion
+    // `MEMBER_WEIGHTS` reached from measured term swings by an entirely
+    // different route. Two arguments meeting at one number is more support than
+    // any other constant in this model has.
+    //
+    // ## What the pair is separated by now, which is not what it used to be
+    //
+    // Azumarill led on quality until firepower was applied to this file. It no
+    // longer does, and the reason is legitimate on both sides: Blastoise's best
+    // usable STAB is Wave Crash at 120 against Azumarill's Play Rough at 85,
+    // while Azumarill's Water/Fairy resists seven types to Blastoise's four and
+    // is immune to Dragon. Those pull opposite ways and very nearly cancel. The
+    // pair is close because the model understands both of them, not because
+    // anything is holding it close — which is precisely why the band was safe to
+    // remove and the floor is the only part still doing work.
+    const priorityDeficit = candidatePriority(mon('blastoise')) - candidatePriority(mon('azumarill'));
     const decisivePriority = candidatePriority(mon('dragonite')) - candidatePriority(mon('azumarill'));
-    expect(Math.abs(
-      candidatePriority(mon('azumarill')) - candidatePriority(mon('blastoise'))
-    )).toBeLessThan(decisivePriority / 6);
+    expect(priorityDeficit).toBeLessThan(decisivePriority / 6);
   });
 
   it('does not demote a Pokemon for the weakness its typing already pays for', () => {
@@ -358,17 +413,26 @@ describe('scoring validation — member ranking', () => {
     // The claim is about member quality, and it still holds: Scizor beats all
     // three there, which is where a flat weakness penalty would show up.
     const scizor = mon('scizor');
-    ['blastoise', 'feraligatr', 'klefki'].forEach((name) => {
-      expect(scoreMemberQuality(scizor)).toBeGreaterThan(scoreMemberQuality(mon(name)));
-    });
+    expect(quality(scizor)).toBeGreaterThan(quality(mon('klefki')));
 
-    // This used to require the final ordering to agree, on the reasoning that a
-    // reintroduced penalty could otherwise be masked by inflating something
-    // else. Firepower broke it: Scizor's best usable STAB is 80 — X-Scissor and
-    // Iron Head, since its typing offers nothing bigger — against Blastoise's
-    // 120, and that narrowed the quality gap enough for move-coverage breadth to
-    // decide the final order. Scizor still leads on quality, so the defect this
-    // test names is still absent; what changed is a different term.
+    // Blastoise and Feraligatr left this list on 2026-08-18, when the file
+    // started passing `varietyName` and firepower reached member quality here
+    // for the first time. Scizor's best usable STAB is 80 — X-Scissor and Iron
+    // Head, since its typing offers nothing bigger — against 120 for both of
+    // them, and against Blastoise that is now a 0.013 deficit rather than a
+    // 0.058 lead. The note below already argued the final ordering was right to
+    // reverse; the same argument applies to quality, and the sentence it used to
+    // rest on — "Scizor still leads on quality" — was only ever true of a
+    // firepower-free scoring path that nothing in production runs.
+    //
+    // Feraligatr goes for a different reason: Scizor still leads it, by 0.0008.
+    // A knife edge is not a judgement, and asserting one would make this test
+    // fail on rounding.
+    //
+    // Technician is the thing the model cannot see — Bullet Punch at 40 becomes
+    // 60 and comes first — and it is the third entry in this file's ledger of
+    // invisible moves, beside Belly Drum and Dragon Dance. All three are
+    // recorded rather than compensated for.
     //
     // The external data says the new order is the right one, which is the first
     // time anything in this file has been checkable against something other than
@@ -403,8 +467,8 @@ describe('scoring validation — member ranking', () => {
     // Swampert is the pair that carries the original claim anyway: it beats
     // Staraptor on member quality (0.487 to 0.432) and has to keep beating it on
     // the final ranking, so Intimidate still cannot buy past a real gap.
-    expect(scoreMemberQuality(mon('swampert')))
-      .toBeGreaterThan(scoreMemberQuality(mon('staraptor')));
+    expect(quality(mon('swampert')))
+      .toBeGreaterThan(quality(mon('staraptor')));
   });
 
   it('does not rank a support Pokemon above a comparable one without a role', () => {
@@ -427,7 +491,7 @@ describe('scoring validation — member ranking', () => {
     // Measured against the fixture rather than assumed, so it tracks the real
     // distribution instead of a remembered one.
     const qualities = Object.values(SCORING_FIXTURE_POKEMON)
-      .map((entry) => scoreMemberQuality(entry) * CANDIDATE_WEIGHTS.quality);
+      .map((entry) => quality(entry) * CANDIDATE_WEIGHTS.quality);
     const spread = Math.max(...qualities) - Math.min(...qualities);
 
     // The worst case for one Pokemon: it gains a role and the broadest move
