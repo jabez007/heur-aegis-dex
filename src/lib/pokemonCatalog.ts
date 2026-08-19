@@ -42,9 +42,18 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * damage class the Pokemon reads its best move from. So `selected_ability_name`
  * and everything derived from it can differ from what a cache holds.
  *
+ * 16: the defensive modulation deepened from 0.5 to 0.6. Same mechanism as 15,
+ * and this time the varieties are named: Carracosta, Naclstack and Nacli all
+ * move off Sturdy — to Solid Rock, Purifying Salt and Purifying Salt — because
+ * a resistance is now worth more relative to the stats an ability moves. Three
+ * of 957, so a cache held under version 15 is mostly right and precisely wrong,
+ * which is the case a version number exists for.
+ *
  * 15: the speed/bulk transfer and the split type modulation. `MEMBER_WEIGHTS`
- * moved to 0.35 / 0.57 / 0.08 and `TYPE_MODULATION` became 0.4 offensive / 0.7
- * defensive, which changes what `scoreMemberQuality` returns — and
+ * moved to 0.35 / 0.50 / 0.15 and `TYPE_MODULATION` became 0.4 offensive / 0.5
+ * defensive. (This entry read 0.57 / 0.08 and 0.7 until 2026-08-18: those are
+ * the values the sweep started from and `MEMBER_WEIGHTS` rejected, not the ones
+ * that shipped.) That changes what `scoreMemberQuality` returns — and
  * `chooseDefaultAbility` picks the default ability by comparing profiles through
  * exactly that function. A deeper defensive modulation raises what a resistance
  * or immunity is worth relative to the stats an ability moves, so an entry
@@ -75,7 +84,7 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * merge whitelist, so cached entries hold Hero's stats for a Pokemon now scored
  * on Zero's. The stats themselves changed, not just a score derived from them.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 15 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 16 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [

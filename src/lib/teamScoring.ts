@@ -160,20 +160,30 @@ export { effectiveOffense, SECONDARY_OFFENSE_WEIGHT } from './statMetrics';
  * | ------------------------------------ | ------------------------------- |
  * | Azumarill floor (Speed it can answer)| speed >= 0.21                   |
  * | bulky attackers beat walls (team)    | bulk >= 0.55 at def mod 0.5     |
- * |                                      | bulk >= 0.52 at def mod 0.7     |
- * |                                      | def mod >= 0.75 at bulk 0.50    |
+ * | discounts rather than erases         | def mod >= 0.70                 |
  *
- * Two things follow that are worth stating plainly. The Speed weight is now
- * bounded from *below* by this fixture, and 0.15 sits inside that bound with
- * 0.20 as the last passing value — which is the weight this file shipped until
- * 2026-08-17, reached there from measured term swings and reached here from a
- * judgement about Belly Drum. And the headroom above these weights is roughly
- * double what the old table claimed: bulk can reach 0.54, or
- * `TYPE_MODULATION.defensive` can reach 0.7, before the one remaining ceiling —
- * the team gate that a roster which cannot KO does not win — binds. That
- * headroom has not been spent here. Spending it is a weight decision and this
- * was a fixture repair; they should not ride together, which is the same rule
- * that kept the coverage double-count repair separate from repricing it.
+ * The Speed weight is now bounded from *below* by this fixture, and 0.15 sits
+ * inside that bound with 0.20 as the last passing value — the weight this file
+ * shipped until 2026-08-17, reached there from measured term swings and reached
+ * here from a judgement about Belly Drum.
+ *
+ * ## A correction to the row this table used to carry
+ *
+ * It read `def mod >= 0.75 at bulk 0.50`, from a sweep that changed the
+ * modulation and ran the fixture without re-measuring COMPOSITE_BOUNDS. Those
+ * bounds are downstream of the modulation — deepening it narrows the quality
+ * range, and refreshing them re-expands what the composite score can see — so
+ * the sweep was reading an intermediate state that would never ship. Refreshed
+ * at every point, the team gate does not bind until 0.85, and the guard that
+ * actually stops this is `teamScoring.test.ts`'s erase check at 0.70. The
+ * ordering rule that catches this is already written down under
+ * OBSERVED_STAT_TERMS: measure the stat terms, then the composite bounds, then
+ * the roster margin. A frontier sweep has to obey it too.
+ *
+ * `TYPE_MODULATION.defensive` was raised 0.5 -> 0.6 on 2026-08-18 against this
+ * frontier; see that constant. The bulk headroom is untouched: 0.50 against a
+ * ceiling of 0.54, and spending it is a separate decision from spending the
+ * modulation's.
  *
  * Reasoned against measured term swings and bounded by the validation fixture,
  * not validated against match outcomes. Rerun `measure:composite-bounds`,
@@ -586,28 +596,69 @@ export const FIREPOWER_MODULATION = 0.4;
  * The table is the argument for splitting. It is **not** the argument for 0.7,
  * which is where the sweep started and is not what shipped.
  *
- * ## Why 0.5 and not the 0.7 the sweep preferred
+ * ## Why it was 0.5, and why three of those four reasons are gone
  *
- * Because `scoringValidation.test.ts` rejected everything above it, and the
- * assertions it rejected them with are the premise stated as test cases. At 0.65
- * the model puts Skarmory above Feraligatr on quality — a wall with 80 Attack
- * over a Pokemon with more effective bulk and 25 more Attack — and at 0.7 with
- * bulk at 0.57 a whole team of walls outscores a team of bulky attackers. The
- * premise is a pipeline whose third gate is a real attacking stat, and a
- * defensive modulation deep enough to skip that gate is not a stronger reading
- * of the premise. It is a different premise.
+ * The case for stopping at 0.5 was: `scoringValidation.test.ts` rejected
+ * everything above it — at 0.65 the model put Skarmory above Feraligatr on
+ * quality, and at 0.7 with bulk at 0.57 a team of walls outscored a team of
+ * bulky attackers — the Azumarill/Blastoise pair cleared by 16% at 0.5 against
+ * 3% at 0.55, and the modulator spanning 0.5..1 left the worst typing half its
+ * bearer's bulk.
  *
- * 0.5 is the last value that clears every guard with room: the binding one, the
- * Azumarill/Blastoise pair, clears by 16% here against 3% at 0.55. See
- * `MEMBER_WEIGHTS` for the frontier the sweep mapped and for what it would take
- * to move it.
+ * Three of those four did not survive 2026-08-18:
  *
- * The peer intent stated above survives the change, which is the other reason
- * to stop here. At 0.5 the modulator spans 0.5..1, so the worst defensive typing
- * in the pool keeps half its bearer's bulk, and defensive typing swings 6.30
- * points against bulk's 14.76 — able to decide between close Pokemon, unable to
- * overturn a large bulk gap. That is the shape this constant has always claimed.
- * What changed is that it is now 12.2% of the Browser's order rather than 8.7%.
+ * - **Skarmory above Feraligatr is no longer a failure.** Brave Bird at 120 off
+ *   80 Attack out-damages Liquidation at 85 off 105 — 9,600 to 8,925 — so the
+ *   judgement was treating Attack as damage. The assertion was re-argued onto
+ *   Swampert, a pair with matched STAB power.
+ * - **The Azumarill/Blastoise pair never constrained this from above.** Its
+ *   expression measured distance to a crossover, so it reported its best number
+ *   exactly where the two swapped places. It is now a directional floor on the
+ *   Speed weight and has nothing to say about this constant.
+ * - **The team-of-walls result was measured against stale COMPOSITE_BOUNDS.**
+ *   Those bounds are downstream of this modulation: deepening it narrows the
+ *   quality range, and re-measuring re-expands the differences the composite
+ *   score sees. Sweeping without refreshing them was measuring an intermediate
+ *   state nobody would ship. Refreshed at every point, that gate does not bind
+ *   until 0.85.
+ *
+ * ## What binds now, which is a design claim rather than a judgement
+ *
+ * The fourth reason is the one that survived, and it turns out to be encoded
+ * already: `teamScoring.test.ts` asserts that a bad typing **discounts rather
+ * than erases** the stats behind it, at `badTyping > goodTyping * 0.5`. That is
+ * this constant's own stated shape, written as a test, and it is now the
+ * binding guard:
+ *
+ * | depth | bad/good | team-of-walls margin | clears erase by |
+ * | ----- | -------- | -------------------- | --------------- |
+ * | 0.50  | 0.5977   | 0.863                | 20%             |
+ * | 0.60  | 0.5440   | 0.692                | **8.8%**        |
+ * | 0.65  | 0.5171   | 0.604                | 3.4%            |
+ * | 0.70  | 0.4903   | 0.511                | fails           |
+ * | 0.75  | 0.4634   | 0.407                | fails           |
+ * | 0.85  | ~0.42    | ~0.0                 | fails           |
+ *
+ * 0.6 is taken and 0.65 is not, on the precedent this file already set: 0.55 was
+ * rejected at 3% clearance for being a knife edge rather than a setting, and
+ * 0.65 clears by 3.4%. 0.6 clears by 8.8% and leaves the team gate — the premise
+ * gate that a roster which cannot KO does not win — clearing by 0.692 of a
+ * margin that was 0.863 before the change.
+ *
+ * One argument for going further was considered and not taken. The erase guard
+ * scores a Pokemon at `normalizedDamageFromScore` of exactly 1, and no Pokemon
+ * in a default view reaches it — the pool maxes at 0.672, so the *realized*
+ * floor at 0.6 is 0.597 rather than the nominal 0.40. By that reading the guard
+ * is an unanchored absolute of the kind this repo has removed elsewhere. It was
+ * left standing because the opened view does reach 1.000, the validation fixture
+ * is deliberately scoped to the unfiltered ranking, and relitigating a second
+ * guard in the same change as spending the headroom the first one freed is how
+ * a model ends up with no guards at all.
+ *
+ * At 0.6 defensive typing swings 7.56 points against bulk's 14.13 — able to
+ * decide between close Pokemon, still unable to overturn a large bulk gap, which
+ * is the shape this constant has always claimed. It is now 14.4% of the
+ * Browser's order against 12.1% at 0.5 and 8.7% before the split.
  *
  * The offensive half stays at 0.4 and keeps its argument-by-analogy with
  * `FIREPOWER_MODULATION`, which is now a real analogy rather than a shared
@@ -615,32 +666,67 @@ export const FIREPOWER_MODULATION = 0.4;
  *
  * ## The shipping figures
  *
- * At `MEMBER_WEIGHTS` 0.35 / 0.50 / 0.15 and 0.4 / 0.5 here, `measure:
+ * At `MEMBER_WEIGHTS` 0.35 / 0.50 / 0.15 and 0.4 / 0.6 here, `measure:
  * ranking-terms` reads:
  *
- * | input              | pts   | share | was   |
- * | ------------------ | ----- | ----- | ----- |
- * | effective bulk     | 14.76 | 28.4% | 26.4% |
- * | speed              | 9.23  | 17.8% | 23.7% |
- * | effective offence  | 8.88  | 17.1% | 17.1% |
- * | defensive typing   | 6.30  | 12.1% | 8.7%  |
- * | STAB power         | 5.33  | 10.3% | 10.2% |
- * | offensive typing   | 3.52  | 6.8%  | 6.8%  |
- * | reachable coverage | 2.40  | 4.6%  | 4.2%  |
- * | support role       | 1.50  | 2.9%  | 2.9%  |
+ * | input              | pts   | share | at 0.5 | before the split |
+ * | ------------------ | ----- | ----- | ------ | ---------------- |
+ * | effective bulk     | 14.13 | 26.9% | 28.4%  | 26.4%            |
+ * | speed              | 9.23  | 17.6% | 17.8%  | 23.7%            |
+ * | effective offence  | 8.88  | 16.9% | 17.1%  | 17.1%            |
+ * | defensive typing   | 7.56  | 14.4% | 12.1%  | 8.7%             |
+ * | STAB power         | 5.33  | 10.1% | 10.3%  | 10.2%            |
+ * | offensive typing   | 3.52  | 6.7%  | 6.8%   | 6.8%             |
+ * | reachable coverage | 2.37  | 4.5%  | 4.6%   | 4.2%             |
+ * | support role       | 1.50  | 2.9%  | 2.9%   | 2.9%             |
  *
- * The three premise terms decide 50.8% of the order against 45.4% before, and
- * premise alignment rose from 0.634 to 0.692 with top-20 overlap 11/20 -> 12/20.
+ * The three premise terms decide 51.4% of the order against 50.9% at 0.5 and
+ * 45.4% before the split, and premise alignment is 0.706 against 0.683 and
+ * 0.634. Top-20 overlap holds at 12/20 throughout.
  *
- * (Coverage and the shares around it include the later repair to
- * `CANDIDATE_WEIGHTS.moveCoverage`, which stopped it charging for reach the
- * offence term had already scored. The five stat and typing figures are
- * untouched by that; it is a separate additive term.)
+ * Note what the offence column does across a change that raised defensive typing
+ * by 1.26 points: nothing. That is the split doing its job — the whole cost is
+ * paid out of the bulk term this modulates, which is the term it is supposed to
+ * come out of.
  *
- * Speed is still second, which is the honest summary of how far this got. The
- * order the premise asks for — bulk, then defensive typing, then offence, speed
- * near the bottom — is reachable and was measured; it is on the far side of the
- * validation fixture. `MEMBER_WEIGHTS` records the frontier.
+ * ## Speed is still second, and this lever cannot fix that
+ *
+ * The order the premise asks for is bulk, then defensive typing, then offence,
+ * with speed near the bottom. Defensive typing needs 9.23 points to pass speed
+ * and reaches 7.56 here. Extrapolating the sweep it would need a depth near
+ * 0.735 — well past where the erase guard fails at 0.70 — so **the ordering is
+ * not reachable on this constant alone**, at any depth this model's own design
+ * claim permits.
+ *
+ * The lever that reaches it is `MEMBER_WEIGHTS.speed`, which is bounded above at
+ * 0.20 by the Azumarill floor and not bounded below by anything in the fixture.
+ * That is a different decision and has not been taken here; recorded so the next
+ * person reaching for this constant to close the gap knows it will not close.
+ *
+ * ## The ladder disagrees, and that was priced in
+ *
+ * `measure:usage-correlation` after the change: `candidatePriority` against
+ * usage 0.253 -> 0.246, against win rate 0.277 -> 0.251. Both fell.
+ *
+ * This is not a surprise and not a reason to revert. On the same 166,311
+ * battles, defensive typing on its own correlates with win rate at **-0.159** —
+ * a better defensive typing predicts a slightly *worse* record in this
+ * fortnight's metagame. Weighting it more therefore has to cost correlation,
+ * arithmetically, whatever else it does.
+ *
+ * That trade is the project's stated order of priorities rather than an
+ * accident. The premise is a preference about what the Browser should surface,
+ * usage is a description of what one ladder played over two weeks, and a Pokemon
+ * that does poorly today can do well tomorrow as the field around it changes.
+ * Premise alignment rose 0.683 -> 0.706 in the same change. Where the two
+ * measures point opposite ways this model follows the premise, which is exactly
+ * why `measure-usage-correlation` documents itself as the secondary check.
+ *
+ * The contrast with FIREPOWER_MODULATION is worth holding onto. That constant
+ * was kept because the ladder supported it and nothing in the premise objected.
+ * This one is moved because the premise asks for it and the ladder's objection
+ * is small, understood, and about a different question. Neither is "the data
+ * decides"; both are the same rule applied to different evidence.
  *
  * One thing the sweep established that is worth keeping: this constant
  * **redistributes within the premise rather than growing it**. Holding
@@ -651,7 +737,7 @@ export const FIREPOWER_MODULATION = 0.4;
  */
 export const TYPE_MODULATION = {
   offensive: 0.4,
-  defensive: 0.5
+  defensive: 0.6
 } as const;
 
 /**
@@ -1163,11 +1249,11 @@ export const COMPOSITE_WEIGHTS = {
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.1457, max: 0.6328 },
+    quality: { min: 0.1437, max: 0.6191 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1251, max: 0.6426 },
+    quality: { min: 0.1239, max: 0.6297 },
     synergy: { min: -1, max: 0.8247 }
   }
 } as const;

@@ -36,6 +36,7 @@
  * | 2026-08-17 | best off-roster       | 0.98 | **2.47** | 4.47 |
  * | 2026-08-17 | best off-roster       | 0.86 | **1.85** | 3.84 |
  * | 2026-08-18 | best off-roster       | 0.88 | **2.25** | 3.97 |
+ * | 2026-08-18 | best off-roster       | 0.89 | **2.18** | 3.62 |
  *
  * ## The counterfactual was wrong, and the drift is how it showed
  *
@@ -273,13 +274,33 @@
  * scenarios offer two or more diverse options and 86% offer three, both above
  * anything recorded since the counterfactual was corrected.
  *
+ * ## Deepening the defensive modulation, and the quietest reading yet
+ *
+ * Re-measured 2026-08-18 after `TYPE_MODULATION.defensive` rose 0.5 to 0.6.
+ * 2.25 to **2.18**, a move of 0.07 — smaller than any recorded here since the
+ * counterfactual was corrected, and smaller than the 0.12 largest drift.
+ *
+ * Worth a line because the size is the finding. A change that moves the Browser
+ * order visibly, lifts defensive typing from 12.1% to 14.4% of what decides it
+ * and shifts premise alignment 0.683 to 0.706 barely touches this constant. That
+ * is what a *scoring* change is supposed to do to it: re-ranking the pool does
+ * not change how good the next-best candidate for a roster slot is, because the
+ * beam search draws from the same top of the same pool either way. The two large
+ * moves above it, 2.47 to 1.85 and back to 2.25, both came from changes to
+ * `candidatePriority`'s coverage term, which is what decides *which* Pokemon the
+ * pool contains. Scoring moves it a little; pruning moves it a lot.
+ *
+ * Clearance against the 2.786 ceiling is 0.606, or 5.1x the largest recorded
+ * drift. Supply at 2.18 sits between the 2 and 2.25 rows: 98% of scenarios offer
+ * two or more diverse options and 79% to 86% offer three.
+ *
  * Reasoned against a measurement rather than validated against how many
  * alternatives people actually pick — the standing of `MEMBER_WEIGHTS` and
  * `TYPE_MODULATION`. Rerun the script after anything that moves roster scores,
  * **including anything that moves `candidatePriority`**, which prunes the pool
  * this is measured over.
  */
-export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.25;
+export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.18;
 export const ROSTER_PORTFOLIO_LIMIT = 6;
 export const MINIMUM_ROSTER_REPLACEMENTS = 2;
 
