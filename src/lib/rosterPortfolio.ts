@@ -37,6 +37,7 @@
  * | 2026-08-17 | best off-roster       | 0.86 | **1.85** | 3.84 |
  * | 2026-08-18 | best off-roster       | 0.88 | **2.25** | 3.97 |
  * | 2026-08-18 | best off-roster       | 0.89 | **2.18** | 3.62 |
+ * | 2026-08-18 | best off-roster       | 0.91 | **2.19** | 3.51 |
  *
  * ## The counterfactual was wrong, and the drift is how it showed
  *
@@ -294,13 +295,32 @@
  * drift. Supply at 2.18 sits between the 2 and 2.25 rows: 98% of scenarios offer
  * two or more diverse options and 79% to 86% offer three.
  *
+ * ## The speed cut, and the section above holding up
+ *
+ * Re-measured 2026-08-18 after `MEMBER_WEIGHTS` went to 0.38 / 0.52 / 0.10.
+ * 2.18 to **2.19** — a move of 0.01, the smallest reading this constant has
+ * produced, on a change that moved 133 of the 146 entries in a default Browser
+ * view.
+ *
+ * Two scoring changes in a row now, both large in the Browser and both invisible
+ * here. That is the claim from the previous section surviving a second test
+ * rather than a coincidence: re-ranking the pool does not change how good the
+ * next-best candidate for a roster slot is. Only changes to what the pool
+ * *contains* move this number, and both of those came from `candidatePriority`'s
+ * coverage term.
+ *
+ * Clearance against the 2.786 ceiling is 0.596, or 5.0x the largest recorded
+ * drift. Supply at 2.19 sits between the 2 and 2.25 rows: 100% of scenarios
+ * offer two or more diverse options and 88% offer three — the best figures
+ * recorded since the counterfactual was corrected.
+ *
  * Reasoned against a measurement rather than validated against how many
  * alternatives people actually pick — the standing of `MEMBER_WEIGHTS` and
  * `TYPE_MODULATION`. Rerun the script after anything that moves roster scores,
  * **including anything that moves `candidatePriority`**, which prunes the pool
  * this is measured over.
  */
-export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.18;
+export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.19;
 export const ROSTER_PORTFOLIO_LIMIT = 6;
 export const MINIMUM_ROSTER_REPLACEMENTS = 2;
 

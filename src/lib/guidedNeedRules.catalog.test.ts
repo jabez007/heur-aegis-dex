@@ -129,12 +129,29 @@ describe.each(['singles', 'doubles'] as const)('guided catalog recommendations: 
     // Excadrill at B and Mamoswine at C while this model had them the other way
     // round, and declined to fix it by raising a weight. Removing a double count
     // fixed part of it without one.
+    //
+    // Both remaining moves happened at once on 2026-08-18, when
+    // `TYPE_MODULATION.defensive` rose to 0.6 and `MEMBER_WEIGHTS` went to
+    // 0.38 / 0.52 / 0.10. Dragapult fell again, third to fourth, and this is the
+    // third time it has moved down for the same reason — 142 Speed on 81.2
+    // HP-adjusted bulk, in a model that keeps deciding Speed matters less than
+    // it used to. Goodra-Hisui passed it: Steel/Dragon, 99.5 bulk and a
+    // damage-from score of 0.163, which is the second best on this list.
+    //
+    // Excadrill left and Golurk replaced it, and that one is not tie-break
+    // noise about Speed. Excadrill is Ground/Steel at 0.313 damage-from with
+    // 82.9 bulk; Golurk is Ground/Ghost at 0.294 with 84.4. Golurk was behind on
+    // both before this change and is ahead on quality after it, 0.480 to 0.474,
+    // because a deeper defensive modulation rewards the better typing more than
+    // the raised bulk weight rewards the slightly bulkier Pokemon. Two changes
+    // pointing the same way, at a pair the previous ordering separated by less
+    // than they moved.
     expect(first.map(({ varietyName }) => varietyName)).toEqual([
       'archaludon',
       'ursaluna',
-      'dragapult',
       'goodra-hisui',
-      'excadrill'
+      'dragapult',
+      'golurk'
     ]);
     // Pin the tie itself, so a change that makes these five genuinely separable
     // shows up as this assertion failing rather than as a reshuffled list whose

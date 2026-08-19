@@ -42,6 +42,14 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * damage class the Pokemon reads its best move from. So `selected_ability_name`
  * and everything derived from it can differ from what a cache holds.
  *
+ * 17: the speed cut. `MEMBER_WEIGHTS` went to 0.38 / 0.52 / 0.10, and Naclstack
+ * and Nacli go straight back to Sturdy from the Purifying Salt they took one
+ * version ago — that ability's value is an offence and Speed multiplier, and
+ * cutting the Speed weight by a third takes back what deepening the defensive
+ * modulation had given it. Two entries in a row moving the same two Pokemon in
+ * opposite directions is worth reading as a warning: these two sit on a
+ * knife edge between the abilities and any weight change will flip them.
+ *
  * 16: the defensive modulation deepened from 0.5 to 0.6. Same mechanism as 15,
  * and this time the varieties are named: Carracosta, Naclstack and Nacli all
  * move off Sturdy — to Solid Rock, Purifying Salt and Purifying Salt — because
@@ -84,7 +92,7 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * merge whitelist, so cached entries hold Hero's stats for a Pokemon now scored
  * on Zero's. The stats themselves changed, not just a score derived from them.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 16 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 17 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [
