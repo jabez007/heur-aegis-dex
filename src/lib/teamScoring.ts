@@ -161,6 +161,8 @@ export { effectiveOffense, SECONDARY_OFFENSE_WEIGHT } from './statMetrics';
  * | Azumarill floor (Speed it can answer)| speed >= 0.21                   |
  * | bulky attackers beat walls (team)    | bulk >= 0.55 at def mod 0.5     |
  * |                                      | def mod >= 0.80 at these weights|
+ * |                                      | (0.7 ships; 0.75 is inside the  |
+ * |                                      |  drift a weight change causes)  |
  * | a typing must not out-swing its term | def mod >= 0.98, off mod >= 0.87|
  *
  * The third row replaced `discounts rather than erases | def mod >= 0.70` on
@@ -251,17 +253,24 @@ export { effectiveOffense, SECONDARY_OFFENSE_WEIGHT } from './statMetrics';
  * anti-correlates too, at -0.114, so cutting its weight moves the other way.
  * Across the pair:
  *
- * | measure                        | before | after 0.6 | after the cut |
- * | `scoreMemberQuality` vs usage  | 0.255  | 0.253     | 0.253         |
- * | `scoreMemberQuality` vs win    | 0.277  | 0.270     | **0.293**     |
- * | `candidatePriority` vs usage   | 0.253  | 0.246     | 0.249         |
- * | `candidatePriority` vs win     | 0.277  | 0.251     | **0.273**     |
+ * | measure                        | before | after 0.6 | after the cut | at 0.7 |
+ * | `scoreMemberQuality` vs usage  | 0.255  | 0.253     | 0.253         | 0.246  |
+ * | `scoreMemberQuality` vs win    | 0.277  | 0.270     | **0.293**     | 0.278  |
+ * | `candidatePriority` vs usage   | 0.253  | 0.246     | 0.249         | 0.239  |
+ * | `candidatePriority` vs win     | 0.277  | 0.251     | **0.273**     | 0.260  |
  *
- * The win-rate column is the highest this model has recorded. That is a pleasant
+ * The third column is the highest this model has recorded. That was a pleasant
  * result and not the reason for the change — the premise ordering was, and it
  * would have shipped against a worse number the same way the modulation did.
  * Recorded because the honest version of "usage is the secondary check" includes
  * reporting it when it agrees, not only when it is being overruled.
+ *
+ * The fourth column is `TYPE_MODULATION.defensive` going to 0.7, and it gives
+ * most of that back: still above where the model sat before any of this, and
+ * below the peak. Same arithmetic as the first move — defensive typing
+ * anti-correlates with win rate at -0.159, so weighting it further has to cost.
+ * Premise alignment went 0.707 to 0.726 across the same change. The order of
+ * priorities has not changed and neither has what it costs.
  *
  * Reasoned against measured term swings and bounded by the validation fixture,
  * not validated against match outcomes. Rerun `measure:composite-bounds`,
@@ -284,9 +293,9 @@ export const MEMBER_WEIGHTS = {
  *
  * | term    | floor | ceiling | realized share | nominal |
  * | ------- | ----- | ------- | -------------- | ------- |
- * | offense | 0.320 | 0.992   | 0.403          | 0.38    |
- * | bulk    | 0.264 | 0.785   | 0.438          | 0.52    |
- * | speed   | 0.133 | 1.000   | 0.159          | 0.10    |
+ * | offense | 0.320 | 0.992   | 0.404          | 0.38    |
+ * | bulk    | 0.264 | 0.785   | 0.436          | 0.52    |
+ * | speed   | 0.133 | 1.000   | 0.160          | 0.10    |
  *
  * The two right-hand columns are as of 2026-08-18, at `MEMBER_WEIGHTS`
  * 0.38 / 0.52 / 0.10; the floors and ceilings are the measurement this constant
@@ -739,26 +748,52 @@ export const FIREPOWER_MODULATION = 0.4;
  * suggested at the top and looser at the bottom. Swept at `MEMBER_WEIGHTS`
  * 0.38 / 0.52 / 0.10 with COMPOSITE_BOUNDS refreshed at every point:
  *
- * | depth | team-of-walls margin |
- * | ----- | -------------------- |
- * | 0.60  | **0.471**  <- ships  |
- * | 0.65  | 0.377                |
- * | 0.70  | 0.272                |
- * | 0.75  | 0.144                |
- * | 0.80  | 0.015                |
+ * | depth | attackers - walls | balance - next | defensive typing |
+ * | ----- | ----------------- | -------------- | ---------------- |
+ * | 0.60  | 0.471             | 1.460          | 7.87             |
+ * | 0.65  | 0.377             | ~1.36          | 8.52             |
+ * | 0.70  | **0.272**  ships  | **1.272**      | **9.18**         |
+ * | 0.75  | 0.144             | 1.163          | 9.83             |
+ * | 0.80  | 0.015             | 1.054          | —                |
  *
- * 0.6 stays. It was chosen against a guard that has since been withdrawn, so it
- * is worth saying plainly that the withdrawal does not retroactively justify it
- * — what justifies it now is that it keeps 68% of the gate margin the previous
- * setting had, on the same reasoning that picked the weights around it. The
- * headroom the relitigation opens, to roughly 0.70, has not been spent: that is
- * a separate decision from repairing a guard, which is the rule this file has
- * followed three times and the rule the withdrawn guard's own note appealed to.
+ * ## Why 0.7 and not 0.75, which is the tempting one
  *
- * At 0.6 defensive typing swings 7.87 points against bulk's 14.69 — able to
+ * 0.75 is where defensive typing finally passes effective offence — 9.83 to
+ * 9.64 — and produces the exact term ordering this project's premise asks for:
+ * bulk, defensive typing, offence, speed. It measures better on every summary
+ * figure: premise share 55.5%, alignment 0.733 against 0.726 here.
+ *
+ * It is not taken, on one number. The attackers-versus-walls margin falls to
+ * 0.144, and a single ordinary weight change moves that margin by more than
+ * that — `MEMBER_WEIGHTS` going 0.35/0.50/0.15 to 0.38/0.52/0.10 moved it 0.221
+ * at a fixed depth. Shipping inside one change's worth of drift means the next
+ * unrelated adjustment flips a premise gate, and whoever hits it will be
+ * relitigating that gate under pressure rather than on its merits. 0.272 clears
+ * that drift; 0.144 does not.
+ *
+ * The honest summary is therefore uncomfortable and worth stating: **the term
+ * ordering the premise asks for sits just past the point where the fixture stops
+ * holding it.** The crossover is near depth 0.735 and the drift threshold is
+ * near 0.72. There is no comfortable setting that delivers the ordering, and
+ * that is a fact about the model rather than a scheduling problem — closing it
+ * needs the attackers/walls pair re-argued on its merits, which is its own
+ * decision.
+ *
+ * Two things about that margin belong here rather than in the argument above.
+ * It is small in absolute terms even at the setting this replaces: 0.471 against
+ * a fixture team-score spread of 27.4 points, or 1.7%. And the test's own
+ * comment says it should be — "the margin should stay narrow, and the assertion
+ * below deliberately does not demand otherwise. Both teams fail the pipeline, in
+ * opposite directions." So it is a sign check, and the drift argument above is
+ * about keeping the sign, not about the size meaning anything on its own. The
+ * margin the file itself calls the test that matters — `balance` above every
+ * one-sided team — is 1.272 here against 1.460 before, holding 87%.
+ *
+ * At 0.7 defensive typing swings 9.18 points against bulk's 14.03 — able to
  * decide between close Pokemon, still unable to overturn a large bulk gap, which
- * is the shape this constant has always claimed. It is now 15.2% of the
- * Browser's order against 12.1% at 0.5 and 8.7% before the split.
+ * is the shape this constant has always claimed. It is now 17.5% of the
+ * Browser's order against 15.2% at 0.6, 12.1% at 0.5 and 8.7% before the split,
+ * and it is second among the premise terms rather than third.
  *
  * The offensive half stays at 0.4 and keeps its argument-by-analogy with
  * `FIREPOWER_MODULATION`, which is now a real analogy rather than a shared
@@ -766,25 +801,25 @@ export const FIREPOWER_MODULATION = 0.4;
  *
  * ## The shipping figures
  *
- * At `MEMBER_WEIGHTS` 0.38 / 0.52 / 0.10 and 0.4 / 0.6 here, `measure:
+ * At `MEMBER_WEIGHTS` 0.38 / 0.52 / 0.10 and 0.4 / 0.7 here, `measure:
  * ranking-terms` reads:
  *
  * | input              | pts   | share | at 0.5 | before the split |
  * | ------------------ | ----- | ----- | ------ | ---------------- |
- * | effective bulk     | 14.69 | 28.3% | 28.4%  | 26.4%            |
- * | effective offence  | 9.64  | 18.6% | 17.1%  | 17.1%            |
- * | defensive typing   | 7.87  | 15.2% | 12.1%  | 8.7%             |
- * | speed              | 6.15  | 11.9% | 17.8%  | 23.7%            |
- * | STAB power         | 5.78  | 11.2% | 10.3%  | 10.2%            |
- * | offensive typing   | 3.82  | 7.4%  | 6.8%   | 6.8%             |
- * | reachable coverage | 2.37  | 4.6%  | 4.6%   | 4.2%             |
+ * | effective bulk     | 14.03 | 26.7% | 28.4%  | 26.4%            |
+ * | effective offence  | 9.64  | 18.4% | 17.1%  | 17.1%            |
+ * | defensive typing   | 9.18  | 17.5% | 12.1%  | 8.7%             |
+ * | speed              | 6.15  | 11.7% | 17.8%  | 23.7%            |
+ * | STAB power         | 5.78  | 11.0% | 10.3%  | 10.2%            |
+ * | offensive typing   | 3.82  | 7.3%  | 6.8%   | 6.8%             |
+ * | reachable coverage | 2.37  | 4.5%  | 4.6%   | 4.2%             |
  * | support role       | 1.50  | 2.9%  | 2.9%   | 2.9%             |
  *
  * (The "at 0.5" column is this constant at 0.5 under the *old* weights, so it
- * differs from the shipping column by both changes. The three premise terms
- * decide 54.7% of the order against 50.9% then and 45.4% before the split;
- * premise alignment is 0.707 against 0.706 and 0.634; top-20 overlap 13/20
- * against 12/20.)
+ * differs from the shipping column by every change since. The three premise
+ * terms decide 55.2% of the order against 50.9% then and 45.4% before the
+ * split; premise alignment is 0.726 against 0.706 and 0.634; top-20 overlap
+ * 14/20 against 12/20.)
  *
  * Note what the offence column does across a change that raised defensive typing
  * by 1.26 points: nothing. That is the split doing its job — the whole cost is
@@ -802,11 +837,14 @@ export const FIREPOWER_MODULATION = 0.4;
  * `MEMBER_WEIGHTS` was the lever, and it was pulled the same day: speed 0.15 to
  * 0.10, which drops it to fourth. Defensive typing is third, above speed and
  * below offence, which is the order the premise asks for except that offence and
- * defensive typing are the wrong way round. Closing *that* gap needs defensive
- * typing above 9.64, which is 0.735 again and still on the wrong side of the
- * erase guard. So the note stands in a narrower form: this constant got
- * defensive typing past speed by making room, not by out-swinging it, and it
- * cannot pass offence at all.
+ * defensive typing are the wrong way round.
+ *
+ * Closing *that* gap needs defensive typing above 9.64, which is depth 0.735.
+ * The erase guard that put it out of reach has since been withdrawn, and 0.735
+ * is now merely expensive rather than forbidden — see the frontier above and the
+ * paragraph on why 0.75 was not taken. So the note ends where it started, with a
+ * different reason: this constant got defensive typing past speed by making
+ * room, and passing offence costs more gate margin than one number is worth.
  *
  * ## The ladder disagrees, and that was priced in
  *
@@ -842,7 +880,7 @@ export const FIREPOWER_MODULATION = 0.4;
  */
 export const TYPE_MODULATION = {
   offensive: 0.4,
-  defensive: 0.6
+  defensive: 0.7
 } as const;
 
 /**
@@ -1354,11 +1392,11 @@ export const COMPOSITE_WEIGHTS = {
  */
 export const COMPOSITE_BOUNDS = {
   doubles: {
-    quality: { min: 0.1336, max: 0.6256 },
+    quality: { min: 0.1315, max: 0.6120 },
     synergy: { min: -1, max: 0.8124 }
   },
   singles: {
-    quality: { min: 0.1115, max: 0.6390 },
+    quality: { min: 0.1093, max: 0.6257 },
     synergy: { min: -1, max: 0.8247 }
   }
 } as const;

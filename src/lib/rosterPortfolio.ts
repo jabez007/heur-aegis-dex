@@ -38,6 +38,7 @@
  * | 2026-08-18 | best off-roster       | 0.88 | **2.25** | 3.97 |
  * | 2026-08-18 | best off-roster       | 0.89 | **2.18** | 3.62 |
  * | 2026-08-18 | best off-roster       | 0.91 | **2.19** | 3.51 |
+ * | 2026-08-18 | best off-roster       | 0.70 | **1.93** | 3.84 |
  *
  * ## The counterfactual was wrong, and the drift is how it showed
  *
@@ -314,13 +315,40 @@
  * offer two or more diverse options and 88% offer three — the best figures
  * recorded since the counterfactual was corrected.
  *
+ * ## The deeper modulation, and the first scoring change that does move this
+ *
+ * Re-measured 2026-08-18 after `TYPE_MODULATION.defensive` rose 0.6 to 0.7.
+ * 2.19 to **1.93**, and the p25 falls harder than the median — 0.91 to 0.70 —
+ * while the p75 *rises*, 3.51 to 3.84.
+ *
+ * The two sections above both concluded that scoring changes barely move this
+ * and only pruning does. This one moves it, and the shape says why: the
+ * distribution has spread rather than shifted. A deeper defensive modulation
+ * sorts rosters harder into ones whose typings answer the format and ones whose
+ * do not. Where a roster's members are the obvious answer to a defensive need,
+ * the next-best candidate is now much closer behind them (the p25 collapse);
+ * where a member is carrying a typing nothing else in the pool has, replacing it
+ * costs more than before (the p75 rise). That is the modulation doing exactly
+ * what it was deepened to do, read off a constant that measures something else.
+ *
+ * The earlier conclusion still stands in its narrow form: a change that only
+ * *re-ranks* leaves this alone. This one changes how far apart the pool's
+ * members are, not just their order.
+ *
+ * Clearance against the 2.786 ceiling is 0.856, or 7.1x the largest recorded
+ * drift. Supply at 1.93 sits between the 1.75 and 2 rows: 88% to 95% of
+ * scenarios offer two or more diverse options and 74% to 79% offer three. The
+ * second figure is the lowest since the 69% recorded at 1.85, and is the cost of
+ * the fall — still well clear of the 38% at a margin of 1 that the supply
+ * assertion exists to keep away from.
+ *
  * Reasoned against a measurement rather than validated against how many
  * alternatives people actually pick — the standing of `MEMBER_WEIGHTS` and
  * `TYPE_MODULATION`. Rerun the script after anything that moves roster scores,
  * **including anything that moves `candidatePriority`**, which prunes the pool
  * this is measured over.
  */
-export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 2.19;
+export const ROSTER_ALTERNATIVE_SCORE_MARGIN = 1.93;
 export const ROSTER_PORTFOLIO_LIMIT = 6;
 export const MINIMUM_ROSTER_REPLACEMENTS = 2;
 

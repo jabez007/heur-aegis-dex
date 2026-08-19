@@ -42,6 +42,12 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * damage class the Pokemon reads its best move from. So `selected_ability_name`
  * and everything derived from it can differ from what a cache holds.
  *
+ * 18: the defensive modulation deepened again, 0.6 to 0.7. Five varieties move:
+ * Palpitoad off Swift Swim to Water Absorb, Tirtouga off Sturdy to Solid Rock,
+ * and Garganacl, Naclstack and Nacli off Sturdy to Purifying Salt. The two
+ * Naclstack-line entries have now moved on three consecutive versions, which is
+ * the warning entry 17 gave arriving on schedule.
+ *
  * 17: the speed cut. `MEMBER_WEIGHTS` went to 0.38 / 0.52 / 0.10, and Naclstack
  * and Nacli go straight back to Sturdy from the Purifying Salt they took one
  * version ago — that ability's value is an offence and Speed multiplier, and
@@ -92,7 +98,7 @@ export const POKEMON_CATALOG_REGULATION_DIGEST =
  * merge whitelist, so cached entries hold Hero's stats for a Pokemon now scored
  * on Zero's. The stats themselves changed, not just a score derived from them.
  */
-export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 17 as const;
+export const POKEMON_SCAN_ENGINE_CACHE_VERSION = 18 as const;
 export const POKEMON_SCAN_CACHE_REVISION =
   `scan-${POKEMON_SCAN_ENGINE_CACHE_VERSION}_${POKEMON_CATALOG_CONTENT_HASH}_${POKEMON_CATALOG_REGULATION_DIGEST}` as const;
 export const ELEMENTAL_TYPES = [
