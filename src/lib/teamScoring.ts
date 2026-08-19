@@ -160,7 +160,14 @@ export { effectiveOffense, SECONDARY_OFFENSE_WEIGHT } from './statMetrics';
  * | ------------------------------------ | ------------------------------- |
  * | Azumarill floor (Speed it can answer)| speed >= 0.21                   |
  * | bulky attackers beat walls (team)    | bulk >= 0.55 at def mod 0.5     |
- * | discounts rather than erases         | def mod >= 0.70                 |
+ * |                                      | def mod >= 0.80 at these weights|
+ * | a typing must not out-swing its term | def mod >= 0.98, off mod >= 0.87|
+ *
+ * The third row replaced `discounts rather than erases | def mod >= 0.70` on
+ * 2026-08-18, when that guard was relitigated and withdrawn; see
+ * `TYPE_MODULATION` and the test that replaced it. The row it left behind binds
+ * nothing, which is the honest state of it — the team gate is the only ceiling
+ * on the defensive modulation that a real setting runs into.
  *
  * The Speed weight is now bounded from *below* by this fixture, and 0.15 sits
  * inside that bound with 0.20 as the last passing value — the weight this file
@@ -701,42 +708,56 @@ export const FIREPOWER_MODULATION = 0.4;
  *   state nobody would ship. Refreshed at every point, that gate does not bind
  *   until 0.85.
  *
- * ## What binds now, which is a design claim rather than a judgement
+ * ## What binds now
  *
- * The fourth reason is the one that survived, and it turns out to be encoded
- * already: `teamScoring.test.ts` asserts that a bad typing **discounts rather
- * than erases** the stats behind it, at `badTyping > goodTyping * 0.5`. That is
- * this constant's own stated shape, written as a test, and it is now the
- * binding guard:
+ * The fourth reason survived the day it was written and not much longer. It was
+ * encoded as `teamScoring.test.ts`'s erase guard, `badTyping > goodTyping * 0.5`,
+ * which failed at 0.70 and so was the binding constraint when 0.6 was chosen.
+ * The section here recorded one objection to it — that it scores a Pokemon at
+ * `normalizedDamageFromScore` of exactly 1, which no default view contains —
+ * and declined to act on it, on the grounds that relitigating a second guard in
+ * the same change as spending the headroom the first one freed is how a model
+ * ends up with no guards.
  *
- * | depth | bad/good | team-of-walls margin | clears erase by |
- * | ----- | -------- | -------------------- | --------------- |
- * | 0.50  | 0.5977   | 0.863                | 20%             |
- * | 0.60  | 0.5440   | 0.692                | **8.8%**        |
- * | 0.65  | 0.5171   | 0.604                | 3.4%            |
- * | 0.70  | 0.4903   | 0.511                | fails           |
- * | 0.75  | 0.4634   | 0.407                | fails           |
- * | 0.85  | ~0.42    | ~0.0                 | fails           |
+ * Relitigated on its own on 2026-08-18, and the one objection turned out to be
+ * the least of four. The comment on the replacement test carries them; the short
+ * version is that its verdict depended on which synthetic stat line it used (a
+ * wall reads 0.4406 and "fails" at these same constants), it flipped both typing
+ * axes at once so the offensive constant moved a guard being read as a statement
+ * about the defensive one, and the corner it scored is 0.540 away from the
+ * nearest real Pokemon. The structural claim it was named for needs no
+ * threshold: `(1 - depth) + depth * quality` is bounded below by `1 - depth`, so
+ * a typing scales a term and can never gate it, for any depth under 1.
  *
- * 0.6 is taken and 0.65 is not, on the precedent this file already set: 0.55 was
- * rejected at 3% clearance for being a knife edge rather than a setting, and
- * 0.65 clears by 3.4%. 0.6 clears by 8.8% and leaves the team gate — the premise
- * gate that a roster which cannot KO does not win — clearing by 0.692 of a
- * margin that was 0.863 before the change.
+ * What replaced it is the same claim stated per axis and against the pool: a
+ * modulator must not swing the composite further than the stat term it
+ * multiplies. Measured over the fixture, the defensive ratio reaches 1 at a
+ * depth near 0.98 and the offensive at 0.87, so neither binds anything now.
  *
- * One argument for going further was considered and not taken. The erase guard
- * scores a Pokemon at `normalizedDamageFromScore` of exactly 1, and no Pokemon
- * in a default view reaches it — the pool maxes at 0.672, so the *realized*
- * floor at 0.6 is 0.597 rather than the nominal 0.40. By that reading the guard
- * is an unanchored absolute of the kind this repo has removed elsewhere. It was
- * left standing because the opened view does reach 1.000, the validation fixture
- * is deliberately scoped to the unfiltered ranking, and relitigating a second
- * guard in the same change as spending the headroom the first one freed is how
- * a model ends up with no guards at all.
+ * The binding ceiling is therefore the team gate — the premise gate that a
+ * roster which cannot KO does not win — and it is tighter than the erase guard
+ * suggested at the top and looser at the bottom. Swept at `MEMBER_WEIGHTS`
+ * 0.38 / 0.52 / 0.10 with COMPOSITE_BOUNDS refreshed at every point:
  *
- * At 0.6 defensive typing swings 7.56 points against bulk's 14.13 — able to
+ * | depth | team-of-walls margin |
+ * | ----- | -------------------- |
+ * | 0.60  | **0.471**  <- ships  |
+ * | 0.65  | 0.377                |
+ * | 0.70  | 0.272                |
+ * | 0.75  | 0.144                |
+ * | 0.80  | 0.015                |
+ *
+ * 0.6 stays. It was chosen against a guard that has since been withdrawn, so it
+ * is worth saying plainly that the withdrawal does not retroactively justify it
+ * — what justifies it now is that it keeps 68% of the gate margin the previous
+ * setting had, on the same reasoning that picked the weights around it. The
+ * headroom the relitigation opens, to roughly 0.70, has not been spent: that is
+ * a separate decision from repairing a guard, which is the rule this file has
+ * followed three times and the rule the withdrawn guard's own note appealed to.
+ *
+ * At 0.6 defensive typing swings 7.87 points against bulk's 14.69 — able to
  * decide between close Pokemon, still unable to overturn a large bulk gap, which
- * is the shape this constant has always claimed. It is now 14.4% of the
+ * is the shape this constant has always claimed. It is now 15.2% of the
  * Browser's order against 12.1% at 0.5 and 8.7% before the split.
  *
  * The offensive half stays at 0.4 and keeps its argument-by-analogy with

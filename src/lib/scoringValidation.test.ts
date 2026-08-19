@@ -471,6 +471,100 @@ describe('scoring validation — member ranking', () => {
       .toBeGreaterThan(quality(mon('staraptor')));
   });
 
+  it('lets a typing modulate the stats it scales without deciding them', () => {
+    // The substantive half of the erase guard that used to live in
+    // `teamScoring.test.ts`, moved here on 2026-08-18 because it is a question
+    // about the pool and that file has no pool. The old form asked whether a
+    // nominally worst typing kept half of one synthetic stat line's quality; the
+    // comment there records the four ways that failed to measure what it named.
+    //
+    // The claim underneath it is real and is the design statement of
+    // `TYPE_MODULATION`: each typing *scales a stat term rather than standing
+    // beside it*. A factor that swings the composite further than the term it
+    // multiplies has stopped modulating and started deciding, and at that point
+    // the tool is ranking typings rather than Pokemon that have them.
+    //
+    // So: per axis, measured the way `measure:ranking-terms` measures — move one
+    // input from the pool's 5th to its 95th percentile with everything else at
+    // the median — the typing must swing less than the stat it modulates.
+    const pool = Object.values(SCORING_FIXTURE_POKEMON);
+    const at = (values: number[], p: number) => {
+      const sorted = [...values].sort((left, right) => left - right);
+      return sorted[Math.floor((sorted.length - 1) * p)];
+    };
+    const bulks = pool.map((entry) => hpAdjustedBulk(entry.stats));
+    const offences = pool.map((entry) => effectiveOffense(entry.stats));
+    const speeds = pool.map((entry) => entry.stats.speed);
+    const froms = pool.map((entry) => entry.normalizedDamageFromScore);
+    const tos = pool.map((entry) => entry.normalizedDamageToScore);
+
+    // Synthetic, because no real Pokemon is median in five dimensions and the
+    // measurement needs one input to move at a time. Built so the two derived
+    // metrics land on their targets: `hpAdjustedBulk` is the geometric mean of
+    // HP against each defence, and the attacking stats hold a 2:1 ratio so the
+    // damage class is well defined. No `varietyName`, so firepower is 1 for
+    // every point and cancels out of every ratio below.
+    const at5 = (bulk: number, offence: number) => ({
+      hp: bulk, defense: bulk, 'special-defense': bulk,
+      attack: offence / 1.15, 'special-attack': offence / 2.3,
+      speed: at(speeds, 0.5)
+    });
+    const score = (bulk: number, offence: number, to: number, from: number) => scoreMemberQuality({
+      stats: at5(bulk, offence),
+      normalizedDamageToScore: to,
+      normalizedDamageFromScore: from
+    });
+    const median = {
+      bulk: at(bulks, 0.5), offence: at(offences, 0.5), to: at(tos, 0.5), from: at(froms, 0.5)
+    };
+    const swing = (
+      high: [number, number, number, number], low: [number, number, number, number]
+    ) => score(...high) - score(...low);
+
+    const bulkSwing = swing(
+      [at(bulks, 0.95), median.offence, median.to, median.from],
+      [at(bulks, 0.05), median.offence, median.to, median.from]
+    );
+    // Inverted: a *lower* damage-from score is the better typing, so its p05 is
+    // the strong end and this reads the same way round as every other input.
+    const defensiveTypingSwing = swing(
+      [median.bulk, median.offence, median.to, at(froms, 0.05)],
+      [median.bulk, median.offence, median.to, at(froms, 0.95)]
+    );
+    const offenceSwing = swing(
+      [median.bulk, at(offences, 0.95), median.to, median.from],
+      [median.bulk, at(offences, 0.05), median.to, median.from]
+    );
+    const offensiveTypingSwing = swing(
+      [median.bulk, median.offence, at(tos, 0.95), median.from],
+      [median.bulk, median.offence, at(tos, 0.05), median.from]
+    );
+
+    expect(defensiveTypingSwing).toBeLessThan(bulkSwing);
+    expect(offensiveTypingSwing).toBeLessThan(offenceSwing);
+
+    // Where these bind, so the next person changing a modulation knows what they
+    // are spending. Swept over this fixture on 2026-08-18:
+    //
+    // | depth | defensive typing / bulk | offensive typing / offence |
+    // | 0.40  | 0.264                   | 0.356                      |
+    // | 0.60  | **0.451**  <- ships     | **0.356**  <- ships        |
+    // | 0.80  | 0.699                   | 0.886                      |
+    // | 0.90  | 0.856                   | 1.061  fails               |
+    // | 1.00  | 1.043  fails            | 1.261  fails               |
+    //
+    // The two columns are independent — sweeping the defensive depth leaves the
+    // offensive ratio at 0.356 exactly, and the reverse — which is the property
+    // the joint expression this replaces could not have. It is also the reason
+    // TYPE_MODULATION became two constants.
+    //
+    // These are slack. The binding ceiling on the defensive depth is the team
+    // gate two tests below, not this; see TYPE_MODULATION for the frontier.
+    // Recorded anyway, because a guard that only fires at 1.0 still says the one
+    // thing this model must never do: multiply a stat term by zero for having
+    // the wrong typing.
+  });
+
   it('does not rank a support Pokemon above a comparable one without a role', () => {
     // Intimidate should be worth something, but not enough to invert a real
     // gap in stats and typing.
