@@ -25,7 +25,8 @@ describe('useWorkspaceState', () => {
       minimumBulk: 75,
       allowMegas: true,
       includeAbilityImmunities: false,
-      includeMoveCoverage: false
+      includeMoveCoverage: false,
+      limitQuadrupleDamage: false
     });
 
     expect(workspace.snapshotScan()).toEqual({
@@ -35,9 +36,26 @@ describe('useWorkspaceState', () => {
       minimumBulk: 75,
       allowMegas: true,
       includeAbilityImmunities: false,
-      includeMoveCoverage: false
+      includeMoveCoverage: false,
+      limitQuadrupleDamage: false
     });
     expect(workspace.regulationSelectionRequired.value).toBe(false);
+  });
+
+  it('restores the quadruple-weakness filter to on when a workspace predates it', () => {
+    // Workspaces saved while the filter was hardcoded carry no opinion on it.
+    // Defaulting to on reopens them showing what they were saved showing.
+    workspace.restoreScan({
+      inPokedex: 'national',
+      regulation: null,
+      minimumAttacks: 80,
+      minimumBulk: 70,
+      allowMegas: false,
+      includeAbilityImmunities: true,
+      includeMoveCoverage: true
+    });
+
+    expect(workspace.limitQuadrupleDamage.value).toBe(true);
   });
 
   it('requires an explicit choice when no regulation is active', () => {

@@ -19,6 +19,12 @@ export interface WorkspaceSnapshotV1 {
     allowMegas: boolean;
     includeAbilityImmunities: boolean;
     includeMoveCoverage: boolean;
+    /**
+     * Optional because workspaces saved before the filter was offerable have no
+     * opinion on it. Absent restores to the default rather than to `false`, so
+     * an older workspace reopens showing what it showed when it was saved.
+     */
+    limitQuadrupleDamage?: boolean;
   };
   meta: {
     selectedTypes: string[];
@@ -111,6 +117,8 @@ export function isWorkspaceSnapshot(value: unknown): value is WorkspaceSnapshotV
     typeof scan.allowMegas === 'boolean' &&
     typeof scan.includeAbilityImmunities === 'boolean' &&
     typeof scan.includeMoveCoverage === 'boolean' &&
+    (scan.limitQuadrupleDamage === undefined ||
+      typeof scan.limitQuadrupleDamage === 'boolean') &&
     isStringArray(meta.selectedTypes) &&
     typeof meta.requireAllTypes === 'boolean' &&
     isAbilityOverrides(abilityOverrides) &&

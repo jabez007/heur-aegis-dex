@@ -127,6 +127,15 @@
               >
               Include Mega Evolutions
             </label>
+            <label class="gba-label checkbox-label">
+              <input
+                v-model="limitQuadrupleDamage"
+                type="checkbox"
+                class="gba-checkbox"
+                @change="fetchTypesDebounced"
+              >
+              Limit Quadruple Weaknesses
+            </label>
             <label class="gba-label">
               Min Attacks:
               <input
@@ -150,6 +159,11 @@
             <p class="filter-hint">
               Both floors are required. Attack uses the higher of Attack and Special Attack.
               Effective Bulk averages sqrt(HP x Defense) and sqrt(HP x Special Defense).
+            </p>
+            <p class="filter-hint">
+              Limit Quadruple Weaknesses hides typings with a 4x weakness alongside any
+              other weakness. It filters what you can register, never what you are scored
+              against: Garchomp and Kingambit still count as opponents either way.
             </p>
           </div>
         </section>
@@ -301,6 +315,7 @@ const {
   allowMegas,
   includeAbilityImmunities,
   includeMoveCoverage,
+  limitQuadrupleDamage,
   selectedAbilityNames,
   regulationSelectionRequired,
   snapshotScan,
@@ -402,7 +417,7 @@ const fetchTypes = async (): Promise<boolean> => {
     // documentation in resistantTypeScan.ts.
     maxDamageFromScore: false,
     allowQuadrupleDamage: true,
-    limitQuadrupleDamage: true,
+    limitQuadrupleDamage: limitQuadrupleDamage.value,
   };
   const statsFilters = {
     minimumAttacks: minAttacks.value,
@@ -419,7 +434,7 @@ const fetchTypes = async (): Promise<boolean> => {
   // Every filter that changes the result must appear in the key. The prefix
   // covers result shape; the scan revision covers catalog, regulation and rule
   // changes that leave the shape intact.
-  const key = `heur_aegis_dex_v21_${POKEMON_SCAN_CACHE_REVISION}_types_${inPokedex.value}_${minAttacks.value}_${minBulk.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
+  const key = `heur_aegis_dex_v21_${POKEMON_SCAN_CACHE_REVISION}_types_${inPokedex.value}_${minAttacks.value}_${minBulk.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${limitQuadrupleDamage.value}_${regulation.value || 'any'}`;
 
   const cached: unknown = lscache.get(key);
   if (isResistantTypeResultList(cached)) {
