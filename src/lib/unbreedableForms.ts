@@ -61,6 +61,12 @@ export interface UnbreedableFormRule {
  * enough to survive `collapseIndistinctVarieties`. The overwhelming majority are
  * regional forms, Rotom appliances, Gourgeist sizes and gender forms, all of
  * them ordinary and breedable; only the entries below needed a decision.
+ *
+ * Re-walked on 2026-10-03 for the 23 species Regulation M-C adds. They bring
+ * eight non-default varieties: Galarian Farfetch'd, Galarian Mr. Mime, Alolan
+ * Persian, three Squawkabilly plumages, female Indeedee and Low Key Toxtricity.
+ * None is event-only. Indeedee and Toxtricity are recorded below because they
+ * survive collapsing; the rest are regional or cosmetic forms bred normally.
  */
 export const UNBREEDABLE_FORMS: readonly UnbreedableFormRule[] = [
   {
@@ -110,11 +116,29 @@ export const UNBREEDABLE_FORMS: readonly UnbreedableFormRule[] = [
       + 'Rockruff with Own Tempo, which was only ever event-distributed — but unlike Battle Bond, Own Tempo passes to '
       + 'offspring, so one event Rockruff reproduces indefinitely. That makes it obtainable-then-breedable rather than '
       + 'distribution-only, which is the line this table draws. If that reading is wrong, this is the entry to revisit.'
+  },
+  {
+    variety: 'indeedee-female',
+    species: 'indeedee',
+    breedable: true,
+    reason:
+      'A gender form, obtained and bred exactly as the male is. Kept for the same reason as Basculegion: the spreads '
+      + 'differ (70 HP / 55 Attack / 65 Defense / 95 Special Attack / 105 Special Defense / 85 Speed against the male\'s '
+      + '60 / 65 / 55 / 105 / 95 / 95), and Own Tempo replaces Inner Focus, so it reads as a distinct Pokemon.'
+  },
+  {
+    variety: 'toxtricity-low-key',
+    species: 'toxtricity',
+    breedable: true,
+    reason:
+      'The form is fixed when Toxel evolves, by its nature, not by anything event-only. Toxel hatches from an ordinary '
+      + 'egg, so any player can produce either form. Kept because Minus replaces Plus, the same reasoning that keeps '
+      + 'female Meowstic separate from the male.'
   }
 ] as const;
 
-/** Date the M-B roster's varieties were last walked against PokeAPI. */
-export const VERIFIED_ON = '2026-07-27';
+/** Date the roster's varieties were last walked against PokeAPI. */
+export const VERIFIED_ON = '2026-10-03';
 
 /**
  * Distinct species across every regulation at the time of that walk.
@@ -132,7 +156,7 @@ export const VERIFIED_ON = '2026-07-27';
  * with `allowMegas: false` and the default stat floors — and update both values
  * together with whatever the walk turned up.
  */
-export const VERIFIED_SPECIES_COUNT = 208;
+export const VERIFIED_SPECIES_COUNT = 231;
 
 export const SOURCES: readonly string[] = [
   'https://pokeapi.co/api/v2/pokemon-species/',

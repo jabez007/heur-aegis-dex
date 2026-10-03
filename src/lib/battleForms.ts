@@ -62,7 +62,7 @@ export interface BattleFormRule {
 }
 
 /**
- * Every battle-only form carried by a Regulation M-B legal species, Gigantamax
+ * Every battle-only form carried by a regulation-legal species, Gigantamax
  * and Mega excluded — those are handled as their own mechanics.
  *
  * Enumerated from PokeAPI on 2026-07-27 by walking the M-B roster's varieties
@@ -147,7 +147,7 @@ export const BATTLE_FORMS: readonly BattleFormRule[] = [
 ] as const;
 
 /** Date the table was enumerated from PokeAPI and checked against the mechanics. */
-export const VERIFIED_ON = '2026-07-27';
+export const VERIFIED_ON = '2026-10-03';
 
 /**
  * Distinct species across every regulation at the time of that walk.
@@ -165,8 +165,13 @@ export const VERIFIED_ON = '2026-07-27';
  * entry names Rainy and Snowy explicitly, and Mimikyu-Totem-Busted is a Totem
  * form, which `collapseIndistinctVarieties` handles. That is the sense in which
  * this table is complete: one rule per species, not per variety.
+ *
+ * Re-walked on 2026-10-03 for the 23 species Regulation M-C adds. Their
+ * battle-only varieties are Gigantamax (Cinderace, Inteleon, Rillaboom, both
+ * Toxtricity forms) or Mega (Salamence, Golisopod, Baxcalibur), so nothing new
+ * belongs here.
  */
-export const VERIFIED_SPECIES_COUNT = 208;
+export const VERIFIED_SPECIES_COUNT = 231;
 
 export const SOURCES: readonly string[] = [
   'https://pokeapi.co/api/v2/pokemon-form/',

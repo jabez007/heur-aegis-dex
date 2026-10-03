@@ -12,6 +12,7 @@ import { getBattleFormat } from './battleFormats';
 
 const mA = getRegulation('M-A')!;
 const mB = getRegulation('M-B')!;
+const mC = getRegulation('M-C')!;
 
 describe('regulation rosters', () => {
   it('records the published roster sizes', () => {
@@ -55,6 +56,31 @@ describe('regulation rosters', () => {
     });
   });
 
+  it('treats M-C as a strict superset of M-B, adding exactly 23 species', () => {
+    const removed = [...mB.legalSpecies].filter((species) => !mC.legalSpecies.has(species));
+    const added = [...mC.legalSpecies].filter((species) => !mB.legalSpecies.has(species));
+
+    expect(removed).toEqual([]);
+    expect(added).toHaveLength(23);
+    expect(mC.legalSpecies.size).toBe(231);
+  });
+
+  it('keeps every M-B Mega and adds Salamence, Golisopod and Baxcalibur in M-C', () => {
+    const lost = [...mB.megaCapableSpecies].filter((species) => !mC.megaCapableSpecies.has(species));
+    const gained = [...mC.megaCapableSpecies].filter((species) => !mB.megaCapableSpecies.has(species));
+
+    expect(lost).toEqual([]);
+    expect(gained.sort()).toEqual(['baxcalibur', 'golisopod', 'salamence']);
+    expect([...mC.megaCapableSpecies].filter((species) => !mC.legalSpecies.has(species))).toEqual([]);
+  });
+
+  it('recognises the M-C additions under their PokeAPI names', () => {
+    ['rillaboom', 'pawmot', 'farfetchd', 'sirfetchd', 'mr-mime', 'indeedee'].forEach((species) => {
+      expect(isSpeciesLegal(mB, species)).toBe(false);
+      expect(isSpeciesLegal(mC, species)).toBe(true);
+    });
+  });
+
   it('recognises the M-B additions', () => {
     ['gholdengo', 'annihilape', 'metagross', 'blaziken', 'sceptile', 'swampert'].forEach((species) => {
       expect(isSpeciesLegal(mA, species)).toBe(false);
@@ -73,6 +99,14 @@ describe('regulation lookup', () => {
   it('resolves the regulation active on a given date', () => {
     expect(getActiveRegulation(new Date('2026-05-01T00:00:00Z'))?.id).toBe('M-A');
     expect(getActiveRegulation(new Date('2026-07-27T00:00:00Z'))?.id).toBe('M-B');
+    expect(getActiveRegulation(new Date('2026-10-03T00:00:00Z'))?.id).toBe('M-C');
+  });
+
+  it('leaves the week between M-B and M-C uncovered', () => {
+    expect(getActiveRegulation(new Date('2026-09-05T00:00:00Z'))).toBeUndefined();
+    expect(getActiveRegulation(new Date('2026-09-09T01:59:59Z'))).toBeUndefined();
+    expect(getActiveRegulation(new Date('2026-09-09T02:00:00Z'))?.id).toBe('M-C');
+    expect(getActiveRegulation(new Date('2026-12-02T01:59:00Z'))).toBeUndefined();
   });
 
   it('treats regulation boundaries as half-open so they never overlap', () => {
