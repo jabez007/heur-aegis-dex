@@ -5,7 +5,7 @@ export const POKEMON_CATALOG_SCHEMA_VERSION = 1 as const;
 export const POKEMON_CATALOG_CONTENT_HASH =
   'ab1cd34ca0fc4fd13481ea610dbb7ddb4bdd890dbe21525c556dffebe41ee1f0' as const;
 export const POKEMON_CATALOG_REGULATION_DIGEST =
-  'd7526351fb644511b27bc142e2e6a43f045a7fd2580ce2f9e28ec3fb21e7e09d' as const;
+  'e7e3df57bd1442155a4891da4712d12928465a52a41f66c0339324bbb192f41e' as const;
 /**
  * Bump whenever scan rules change without changing catalog or regulation data.
  *
