@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import TypeBadge from './TypeBadge.vue';
 import StatBar from './StatBar.vue';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
+import { coverageBeyondStab } from '../lib/coverageMoves';
 import type { PokemonEntry } from '../lib/pokemonEntry';
 
 const props = defineProps<{
@@ -13,7 +14,14 @@ const emit = defineEmits<{
   (e: 'update:selected-ability-name', abilityName: string): void;
 }>();
 
-const { addPokemon, hasSpecies, roster, maxRosterSize } = useTeamBuilder();
+const {
+  addPokemon,
+  hasSpecies,
+  roster,
+  maxRosterSize,
+  isExcludedFromGeneration,
+  toggleGenerationExclusion
+} = useTeamBuilder();
 
 const selectedAbilityName = ref(props.pokemon.abilityName);
 const showStats = ref(false);
@@ -51,20 +59,38 @@ const statAbilityNote = computed(() => {
 });
 const isOnRoster = computed(() => hasSpecies(props.pokemon.speciesName));
 const rosterIsFull = computed(() => roster.value.length >= maxRosterSize.value);
+const isExcluded = computed(() => isExcludedFromGeneration(props.pokemon.name));
 
 const displayWeaknesses = computed(() => props.pokemon.weaknesses);
 const displayQuadrupleWeaknesses = computed(() => props.pokemon.quadrupleWeaknesses);
 const displayCoverages = computed(() => props.pokemon.coverages);
 const displayMoveCoverages = computed(() =>
-  props.pokemon.moveCoverages.filter((type) => !props.pokemon.coverages.includes(type))
+  coverageBeyondStab(props.pokemon.coverages, props.pokemon.moveCoverages)
 );
 
 const defenseScore = computed(() => props.pokemon.normalizedDamageFromScore.toFixed(2));
 const offenseScore = computed(() => props.pokemon.normalizedDamageToScore.toFixed(2));
-const scoreSummary = computed(() =>
-  `Defense score ${defenseScore.value}, offense score ${offenseScore.value}, lower defense is better`
-);
-
+const defenseHint = computed(() => [
+  `Defense ${defenseScore.value} out of 1 // lower is better`,
+  '',
+  'Measures this typing and selected ability against all 18 attacking types,',
+  'weighted by how much of this format can actually attack with each.',
+  'Weaknesses raise the score; 4x weaknesses raise it further.',
+  'Resistances and immunities lower it.',
+  '',
+  'Normalized across the defensive profiles this format fields:',
+  '0 is the strongest available here, 1 the weakest.'
+].join('\n'));
+const offenseHint = computed(() => [
+  `Offense ${offenseScore.value} out of 1 // higher is better`,
+  '',
+  'Measures this Pokemon\'s STAB typing against the typings this format fields.',
+  'Super-effective targets raise the score; resisted and immune targets lower it.',
+  '',
+  'Reachable move coverage is shown separately below and does not change this score.',
+  'Normalized across the offensive typings available here:',
+  '0 is narrowest, 1 is broadest.'
+].join('\n'));
 const toggleStats = () => {
   showStats.value = !showStats.value;
 };
@@ -72,12 +98,16 @@ const toggleStats = () => {
 const handleAddToRoster = () => {
   addPokemon(props.pokemon, selectedAbilityName.value);
 };
+
+const handleToggleExclusion = () => {
+  toggleGenerationExclusion(props.pokemon.name);
+};
 </script>
 
 <template>
   <div
     class="type-card"
-    :class="{ rostered: isOnRoster }"
+    :class="{ rostered: isOnRoster, excluded: isExcluded }"
   >
     <div class="card-header">
       <img
@@ -119,18 +149,21 @@ const handleAddToRoster = () => {
       <div class="score-grid">
         <p
           class="score"
-          :aria-label="`Defense score ${defenseScore}, lower is better`"
+          tabindex="0"
+          :title="defenseHint"
+          :aria-label="defenseHint"
         >
           Def: {{ defenseScore }}
         </p>
         <p
           class="score"
-          :aria-label="`Offense score ${offenseScore}`"
+          tabindex="0"
+          :title="offenseHint"
+          :aria-label="offenseHint"
         >
           Off: {{ offenseScore }}
         </p>
       </div>
-      <span class="sr-only">{{ scoreSummary }}</span>
 
       <div
         v-if="displayWeaknesses.length - displayQuadrupleWeaknesses.length > 0"
@@ -223,6 +256,17 @@ const handleAddToRoster = () => {
           {{ showStats ? 'Hide' : 'Stats' }}
         </button>
         <button
+          class="gba-btn mini-btn exclude-btn"
+          :class="{ active: isExcluded }"
+          :aria-pressed="isExcluded"
+          :aria-label="isExcluded
+            ? `Allow ${pokemon.name} in generated rosters`
+            : `Exclude ${pokemon.name} from generated rosters`"
+          @click="handleToggleExclusion"
+        >
+          {{ isExcluded ? 'Excluded' : 'Exclude' }}
+        </button>
+        <button
           class="gba-btn mini-btn party-btn"
           :disabled="rosterIsFull || isOnRoster"
           :aria-label="isOnRoster ? `${pokemon.name} is already on the roster` : `Add ${pokemon.name} to roster`"
@@ -280,23 +324,23 @@ const handleAddToRoster = () => {
   outline-offset: 2px;
 }
 
+.type-card.excluded {
+  border-color: var(--gba-accent-magenta);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255,255,255,0.1) 0,
+      rgba(255,255,255,0.1) 8px,
+      rgba(255,0,128,0.06) 8px,
+      rgba(255,0,128,0.06) 16px
+    );
+}
+
 .ability-single {
   font-family: var(--gba-font-body);
   font-size: 0.75rem;
   opacity: 0.8;
   margin: 4px 0;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .type-card {
@@ -307,6 +351,17 @@ const handleAddToRoster = () => {
   flex-direction: column;
   align-items: center;
   text-align: center;
+}
+
+.score[tabindex] {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.score[tabindex]:focus-visible {
+  outline: 3px solid var(--gba-accent-cyan);
+  outline-offset: 2px;
 }
 
 .type-header {
@@ -438,9 +493,19 @@ const handleAddToRoster = () => {
   background-color: var(--gba-accent-yellow);
 }
 
+.exclude-btn {
+  background-color: rgba(255,255,255,0.45);
+}
+
+.exclude-btn.active {
+  color: white;
+  background-color: var(--gba-accent-magenta);
+}
+
 .poke-actions {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 4px;
   margin-top: 8px;
 }

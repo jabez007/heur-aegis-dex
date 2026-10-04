@@ -2,7 +2,196 @@
 
 ## Unreleased
 
+### Changed
+
+- **The browser shows every typing, ranked, instead of filtering on the neutral
+  line.** `maxDamageFromScore` dropped typings scoring worse than `baseScore`,
+  and its justification was that the line is principled rather than tuned. That
+  held while the defensive score was quantised: every score was a multiple of
+  0.25, 14 of the 171 combinations sat exactly on the line, and the cut fell on a
+  natural plateau.
+
+  Threat weighting made the score continuous and **no typing lands on the line
+  any more** — 0 of 171, with 60 sitting within 0.6 of it. The same cut now
+  slices a dense band at a point nothing distinguishes: pure Water scores 18.069
+  and was dropped, Ghost/Grass scores 17.782 and was kept. In practice that
+  removed every mono-Water and mono-Fire Pokemon from the browser — Palafin at
+  650 base stats, Blastoise, Vaporeon, Arcanine, Milotic — and admitted
+  Gourgeist, Trevenant and Runerigus in their place, which is what made weak
+  Ghost types look like they had climbed.
+
+  Ranking already expresses what the filter approximated, and expresses it
+  without a cliff: a poor defensive typing sinks in the order rather than
+  vanishing. The browser goes from 72 candidates to 147 under Regulation M-B,
+  Palafin returns to first, Gourgeist sits at 125th and Cofagrigus at 145th. The
+  best generated roster improves from 86.45 to 87.63, since the search was being
+  denied genuinely good options. The option remains for callers that want the old
+  behaviour; nothing turns it on by default.
+
+### Fixed
+
+- **The alternatives margin is derived instead of assumed.**
+  `ROSTER_ALTERNATIVE_SCORE_MARGIN` shipped as 3 with no recorded derivation —
+  the only constant in the scoring without one — and it sat exactly on a
+  structural ceiling. A roster registers six and brings four, so its worst member
+  is never brought and reaches the score only through the brings it would spoil,
+  which caps what an entirely wasted slot can cost at about three points. A
+  margin of 3 therefore could not exclude *any* sixth member. The symptom was a
+  test that flipped four times across four consecutive recalibrations, measuring
+  3.010, 2.950, 3.072 and 2.967 against a constant of 3.
+
+  It is now **2.13**: one roster member's worth of quality, measured by
+  `npm run measure:alternative-margin` as the score cost of replacing exactly one
+  member of a pool's best roster with that pool's median candidate — 129 such
+  downgrades across 42 scenarios covering seven pools, both formats and the
+  seeded cases of one and two locked favourites. Since an alternative has to
+  replace at least two members to count as one, a margin of one member's worth
+  means those swaps can only ever be close to lateral.
+
+  Two checks are reported alongside and neither is the derivation. Supply: about
+  92% of scenarios still offer two or more genuinely different options at 2.13
+  and 80% offer three, where widening to 3 buys the remainder only from cups too
+  narrow to supply diversity honestly. Exclusion: 2.13 clears the lowest wasted
+  slot ever measured by 0.84, roughly seven times the drift any recalibration has
+  caused, so the guarantee holds for a reason rather than by luck.
+
+- **Normal was the heaviest attacking type in the model, and nothing is weak to
+  it.** Threat weighting counted any learnable move of a type as evidence that
+  type gets brought. Normal is the one type that hits *nothing* super-effectively
+  anywhere on the chart, yet 187 of the 208 legal species can click a qualifying
+  Normal move — Body Slam, Facade, Hyper Voice, the filler everything learns. So
+  Normal took the maximum weight of 1.000, ahead of Dark and Fighting.
+
+  Because nothing is weak to Normal, that weight could only ever be spent on the
+  resistance side. Once a true immunity was worth -4, every Ghost type collected
+  the single largest term in the model for being immune to filler: Annihilape's
+  Normal immunity alone contributed -4.000, more than its four weaknesses
+  combined, and it rose to the best defensive typing in the format.
+
+  A coverage slot is spent to hit something super-effectively, so a move type
+  that buys no coverage no longer competes for one. STAB is unaffected — a
+  Normal-type still clicks its Normal moves. Normal falls from 1.000 to 0.266,
+  the lowest of the eighteen, which is what a STAB-only threat carried by a tenth
+  of the pool should look like; Dark takes the maximum, and since things are weak
+  to Dark, a weakness can now reach a full weight of 1. Annihilape's credit is
+  now led by its Fighting immunity with Normal a minor perk, and it sits fifth
+  rather than first.
+
+  The rule is general rather than a Normal special case, derived from the chart
+  so it stays correct if the chart changes. `COMPOSITE_BOUNDS` re-measured;
+  `OBSERVED_DAMAGE_FROM` deliberately not, since it is measured with uniform
+  weights and only the threat weights moved.
+
 ### Added
+
+- **A true immunity is now worth twice a weakness, not the mirror of one.**
+  *(Shipped at -4 first, through a unit error in its own derivation — the log
+  reading it was borrowed from prices a resistance at twice what this scale does,
+  so carrying the number across unconverted made an immunity worth eight single
+  resistances instead of four. The symptom was that the defensive score
+  correlated -0.824 with a typing's raw immunity count and only -0.049 with its
+  resistance count: ten Steel resistances had stopped competing with two
+  immunities at all. At -2 those read -0.321 and -0.402 on the scanned pool.)*
+  Every bucket in the defensive score was priced at `multiplier - 1`, which reads
+  as damage taken: 2x adds one type's worth, and 0x removes one. That made a
+  weakness and an immunity exact opposites, so Normal — weak to Fighting, immune
+  to Ghost — netted to precisely the neutral line. Correct about damage, wrong
+  about value: an immunity is a threshold, not a quantity. The matchup becomes
+  free rather than cheap, a stronger attacker cannot break it, and the switch it
+  enables costs nothing.
+
+  `IMMUNITY_VALUE` is -2, borrowed from the hits-survived reading where the
+  coefficient is `log2(multiplier)`: the lowest non-zero multiplier reachable
+  anywhere in the ability × typing cross product is 0.125, so immunity sits one
+  rung below it at -3 — then converted into this scale's units, which price a
+  resistance at half what the log reading does. Only the immunity coefficient
+  moved. Adopting the full log scale
+  would also have doubled every resistance and softened a 4x weakness from +3 to
+  +2 — a rank correlation of 0.797 against the old scale where this is 0.831 —
+  and none of that was the question being asked.
+
+  Normal now scores 17 rather than 18, and 105 of the 171 typings move while the
+  other 66 have no immunity and are untouched. Ghost-typed combinations gain most,
+  since Normal and Fighting are both common attacks they ignore outright.
+
+  Consequences, measured. `OBSERVED_DAMAGE_FROM` widened from 11.25..26 to
+  8.25..26, the floor set by Ghost/Steel with Earth Eater and its four
+  immunities; `TYPE_MODULATION` needed no retuning; `COMPOSITE_BOUNDS` was
+  re-measured and landed within 0.01 of where it sat before any of this; and 24
+  of 24 competitive judgements in the scoring fixture still pass.
+
+  The visible cost is the default scan filter. `maxDamageFromScore` admits
+  typings at or under the neutral line, and that is now 82 of 171 where it was
+  56. The filter is still the line rather than a tuned threshold, but it is
+  looser, and whether the default scan wants one that admits 48% of typings is
+  left open.
+
+- **A weakness now costs what the metagame can actually charge for it.** Every
+  type weakness was priced identically, so a Pokemon weak only to Fighting scored
+  the same whether or not anything in the format could click a Fighting move.
+  `damage_from_score` now scales each bucket — weaknesses, resistances and
+  immunities alike — by how much of the pool can attack with that type.
+
+  The measure is **availability, not typing prevalence**, and the two are close
+  to inverted. Across the 208 legal species of Regulation M-B, Water is the most
+  common typing (12.5%) and one of the rarest attacks (28.9% can bring one),
+  while 63.5% can bring a Fighting move against 10.1% that are Fighting-type.
+  Strip every Fighting-type out of the format and Fighting is still a heavier
+  threat than Dragon or Fairy, because Close Combat and Body Press do not care
+  what their user is typed. A weight built on typing would have called that free.
+
+  Weights are derived, never stored: a scan measures its regulation, and the
+  browser re-derives the same numbers when it flattens a cached result. Selecting
+  a cup in the browser re-prices everything live against that cup, which is where
+  this earns its keep — in a Boulder Cup of Rock, Ground, Steel and Fighting,
+  Annihilape's Ghost immunity to Fighting moves it from fifth to second.
+
+  Both halves of the calibration moved with it. `OBSERVED_DAMAGE_FROM` is now
+  derived per weighting from the same 3,078-profile cross product the
+  measurement script uses, with a test pinning the uniform case to its published
+  11.25..26; `COMPOSITE_BOUNDS` was re-measured, moving doubles quality from
+  0.154..0.6137 to 0.1559..0.6249. Live PokeAPI scans stay unweighted, since
+  they cannot measure a pool before they have fetched one.
+
+- **Fresh roster generation now offers meaningfully different alternatives.**
+  The strongest roster remains first, then `Try Another` steps through up to six
+  rosters within three score points of it. Alternatives preferentially replace
+  at least two Pokemon and maximize their distance from choices already shown;
+  closer substitutions remain available when the search finds nothing broader.
+  A persistent Workbench readout shows the option number, score gap, and Pokemon
+  swapped out and in.
+
+- **Published packages are built and verified as one artifact.** `npm pack` now
+  builds the library through `prepack`, bundles format-specific declarations for
+  bundler, NodeNext ESM and Node16 CommonJS consumers, and smoke-tests the
+  installed tarball before release. npm, GitHub Packages and the GitHub release
+  receive that same tarball, including the GPL license and PokeAPI data notice.
+
+- **A deterministic Pokemon catalog foundation.** A pinned-source generator now
+  emits a content-addressed catalog containing 18 types, 1,025 species and 1,351
+  varieties. The generator verifies the authoritative source indexes; semantic
+  tests verify joins, regulation coverage, curated forms and hashes. Runtime
+  scans now lazy-load and verify this artifact, recomputing all scores locally;
+  live PokeAPI acquisition remains only for development parity checks.
+
+- **Regulation expiry fails closed.** Fresh sessions with no active regulation
+  must explicitly choose a known regulation or unrestricted play before scanning.
+  A 21-day freshness check runs during verification and on a weekly schedule.
+
+- **Critical browser orchestration now has component coverage.** App-level tests
+  exercise malformed scan caches and recovery after another tab repairs workspace
+  storage. The real browser dependency check also runs in CI instead of remaining
+  a manual command.
+
+- **Support exclusions can be measured before changing the model.**
+  `npm run measure:support-eligibility -- M-B` compares the strict and floorless
+  pools and reports every rejected ability profile with its failed floors and any
+  support role the engine can currently measure.
+
+- **The Pokemon Browser can be searched by species or form.** Results filter as
+  the user types without changing their candidate-quality order. Search is
+  case-insensitive, accepts space-separated form names, resets pagination, and
+  includes match counts, an empty state, and a clear action.
 
 - **Speed Boost and Protean are scored.** An audit of every ability the 208 legal species carry found 182 distinct abilities, of which 30 were modelled and applied. Most of the remainder genuinely do nothing this tool can measure — Keen Eye, Gluttony, Frisk — but four Pokémon were carrying Speed Boost and two Protean with no credit at all.
 
@@ -57,6 +246,30 @@
   **It found a real defect on its first run.** `supportRole: 12` and `quadrupleWeakness: 15` were carried over from the previous formula, whose terms ran to 44. The rework compressed the base to a roughly 30-point spread, so those adjuncts could swing 27 points against it — enough to rank Arbok above Garchomp. Rescaled to 4 and 5, with `coverage` to 0.75 and `moveCoverage` to 0.2. A structural assertion now pins the invariant: the largest single-Pokemon adjustment must stay under half the observed spread of member quality, measured from the fixture rather than assumed.
 
 ### Changed
+
+- **Eligibility and ranking now agree on HP-adjusted bulk.** The scan requires a
+  best attacking stat of 80 and effective bulk of 70, where bulk is the mean of
+  `sqrt(HP x Defense)` and `sqrt(HP x Special Defense)`. Browser sorting and
+  Workbench member quality previously went back to `HP + Defense + Special
+  Defense`, which overrated low-HP Pokemon for defenses they could not convert
+  into comparable durability. On the 67-variety default doubles pool, the old
+  and new `candidatePriority` rankings have Spearman correlation 0.864 and share
+  17 of their top 20 entries.
+
+  Stat-floor eligibility is now evaluated one ability profile at a time. The old
+  check stacked every listed unconditional stat ability, allowing mutually
+  exclusive abilities to clear different halves of the gate. A Pokemon now
+  qualifies when at least one real ability profile clears both floors; profiles
+  that fail either floor remain selectable after the variety is admitted. No
+  Regulation M-B species currently combines two modeled unconditional stat
+  abilities, so this is a correctness guard rather than a default-pool change.
+
+  The pinned M-B calibration over 208 legal species moves
+  `OBSERVED_STAT_TERMS.bulk` to 0.2642-0.8760 and exact quality bounds to
+  0.1450-0.5670 in doubles and 0.1289-0.5770 in singles. The default scan contains
+  67 varieties, below the candidate-pruning limit. Hard floors still exclude
+  support specialists such as Whimsicott before role scoring can value them. See
+  `docs/audits/2026-07-29-stat-floors-and-bulk.md`.
 
 - **Generated rosters no longer spend a slot on a type they already carry.** Reported case: seeding Goodra-Hisui and filling the roster added Excadrill. They are not the same typing, so the duplicate-typing rule did not catch it — they share only Steel.
 
@@ -304,6 +517,20 @@
   `DEFAULT_STATS_FILTERS` is exported, and `getResistantTypes` now derives its defaults from it. Previously an omitted `statsFilters` produced `500 / 90 / 80` from one default while a partial object was merged against a different `480 / 80 / 80` — two disagreeing sources for the same setting.
 
 ### Fixed
+
+- **Malformed scan caches are treated as misses instead of application data.** A
+  corrupt `lscache` value can no longer reach `flattenToPokemon` and crash startup.
+
+- **Workspace persistence recovers after cross-tab repair.** A valid storage
+  event now clears the prior read error and re-enables draft and named saves.
+
+- **Regulations with complete Mega data enforce it.** Enabling Megas no longer
+  admits a Mega form absent from the selected regulation's verified roster;
+  regulations that explicitly mark the roster incomplete retain the permissive
+  behavior rather than treating unknown data as an empty roster.
+
+- **`cycleBringLine` rejects fractional steps.** The published composable now
+  remains total for the integer input contract documented by the function.
 
 - **The workbench scores the quadruple weaknesses it was blind to.** `PartyMember` never carried `quadrupleWeaknesses`, so `toRosterMember` emitted no `quadruple_weaknesses` and every member reached `analyzeTeamCoverage` with none. All three penalty terms that key on it — `quadrupleWeakness`, `sharedQuadrupleWeakness` and `uncoveredQuadrupleWeakness` — read zero for any roster built or displayed in the workbench.
 

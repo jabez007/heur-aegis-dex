@@ -29,6 +29,12 @@ export default tseslint.config(
     },
   },
   {
+    files: ['**/*.{test,spec}.{js,jsx,ts,tsx}'],
+    rules: {
+      'vue/one-component-per-file': 'off',
+    },
+  },
+  {
     rules: {
       'vue/multi-word-component-names': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',

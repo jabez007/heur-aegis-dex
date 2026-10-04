@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import MetaControls from './MetaControls.vue';
 import TeamWorkbench from './TeamWorkbench.vue';
 import MetaAnalysisGrid from './MetaAnalysisGrid.vue';
 import { useMetaFilters } from '../composables/useMetaFilters';
 import { useTeamBuilder } from '../composables/useTeamBuilder';
+import { useThreatScoring } from '../composables/useThreatScoring';
+import { useWorkspaceState } from '../composables/useWorkspaceState';
 import { flattenToPokemon, withAbility } from '../lib/pokemonEntry';
 import { candidatePriority } from '../lib/rosterGeneration';
 import type { ResistantTypeResult } from '../lib/pokedexTypes';
@@ -18,12 +20,22 @@ const { selectedTypes, requireAllTypes } = useMetaFilters();
 // format re-orders the browser the same way it re-scores the roster.
 const { format } = useTeamBuilder();
 
-/** Ability overrides, keyed by Pokemon rather than by typing. */
-const selectedAbilityNames = ref<Record<string, string>>({});
+/** Ability overrides are app-scoped so scans and workspace loads do not discard them. */
+const { selectedAbilityNames, setSelectedAbilityName } = useWorkspaceState();
+
+/**
+ * The cup being built decides how much each weakness costs, so it is applied to
+ * the whole browse list rather than only the filtered one. Someone building for
+ * a Boulder Cup wants every Pokemon judged against Boulder Cup attackers, not
+ * just the ones legal in it.
+ */
+const { scoring } = useThreatScoring();
 
 // The scan is still organised by type combination, so it is flattened once into
 // Pokemon. Everything downstream browses Pokemon; typings are just a filter.
-const allPokemon = computed(() => flattenToPokemon(props.allDataTypes));
+const allPokemon = computed(() =>
+  flattenToPokemon(props.allDataTypes, { scoring: scoring.value })
+);
 
 const filteredPokemon = computed(() => {
   if (selectedTypes.value.length === 0) return [];
@@ -37,6 +49,8 @@ const filteredPokemon = computed(() => {
         ? matches.length === selectedTypes.value.length
         : matches.length > 0;
     })
+    // The cup's weighting rides on the entry from `flattenToPokemon`, so an
+    // ability swap stays on the same scale without repeating it here.
     .map((pokemon) => withAbility(pokemon, selectedAbilityNames.value[pokemon.name]))
     // Ranked by the same priority the roster generator uses, so the browser
     // shows what generation would reach for first — including the format, since
@@ -48,10 +62,7 @@ const filteredPokemon = computed(() => {
 });
 
 const updateSelectedAbilityName = (pokemonName: string, abilityName: string) => {
-  selectedAbilityNames.value = {
-    ...selectedAbilityNames.value,
-    [pokemonName]: abilityName
-  };
+  setSelectedAbilityName(pokemonName, abilityName);
 };
 </script>
 

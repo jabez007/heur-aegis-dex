@@ -1,10 +1,12 @@
-import type { DamageRelations, NamedResource } from './pokedexTypes';
+import type { DamageRelations, DamageResidual, NamedResource } from './pokedexTypes';
 import {
+  calculateDamageFromResidual,
   calculateDamageFromScore,
-  calculateDamageToScore,
   cloneDamageRelations,
   createTypeSummary
 } from './pokedexScoring';
+import { UNIFORM_TYPE_THREAT } from './typeThreat';
+import type { TypeThreatWeights } from './typeThreat';
 
 const ABILITY_IMMUNITIES: Record<string, string> = {
   'dry-skin': 'water',
@@ -19,6 +21,170 @@ const ABILITY_IMMUNITIES: Record<string, string> = {
   'water-absorb': 'water',
   'well-baked-body': 'fire'
 };
+
+/**
+ * Rules for abilities that *reduce* incoming damage without zeroing it.
+ *
+ * These used to be flat multipliers on the bulk term in `abilityEffects.ts`, and
+ * that was wrong twice over. Thick Fat's worth depends on the typing it is
+ * attached to — Appletun gains six times what Azumarill does, because Water
+ * already resists both Fire and Ice — but a bulk multiplier scales
+ * `hpAdjustedBulk`, so the award tracked how bulky the Pokemon already was and
+ * came out close to inverted. The magnitude was wrong too: the constants paid
+ * about four times what the type data says the abilities are worth.
+ *
+ * Modelling them here instead makes the answer fall out of each Pokemon's own
+ * damage relations, exactly as the immunities above already do, and no constant
+ * is needed.
+ */
+interface DamageTakenRule {
+  /** Types whose incoming damage is scaled. Omitted when `superEffectiveOnly`. */
+  readonly types?: readonly string[];
+  /** Applies to whatever the Pokemon happens to be weak to, whatever that is. */
+  readonly superEffectiveOnly?: boolean;
+  readonly multiplier: number;
+  readonly reason: string;
+}
+
+const ABILITY_DAMAGE_TAKEN: Record<string, DamageTakenRule> = {
+  'thick-fat': {
+    types: ['fire', 'ice'],
+    multiplier: 0.5,
+    reason: 'Halves Fire and Ice damage.'
+  },
+  heatproof: {
+    types: ['fire'],
+    multiplier: 0.5,
+    reason: 'Halves Fire damage. Also halves burn damage, which is not modelled.'
+  },
+  'water-bubble': {
+    types: ['fire'],
+    multiplier: 0.5,
+    reason:
+      'Halves Fire damage and blocks burn. The offensive half — doubled Water moves — stays out, because it needs '
+      + 'a Water move in the set and movesets are not modelled.'
+  },
+  'purifying-salt': {
+    types: ['ghost'],
+    multiplier: 0.5,
+    reason:
+      'Halves Ghost damage. The status immunity is the larger half of this ability and is not a typing effect, so '
+      + 'it stays recorded in abilityEffects.ts.'
+  },
+  'solid-rock': {
+    superEffectiveOnly: true,
+    multiplier: 0.75,
+    reason: 'Reduces super-effective damage by a quarter, against whatever the Pokemon is weak to.'
+  },
+  filter: {
+    superEffectiveOnly: true,
+    multiplier: 0.75,
+    reason: 'Identical to Solid Rock.'
+  }
+};
+
+/**
+ * The damage multiplier each bucket represents.
+ *
+ * `calculateDamageFromScore` weights the first four at exactly `multiplier - 1`
+ * — 4x scores +3, 2x scores +1, 0.5x scores -0.5, 0.25x scores -0.75. That
+ * identity is what lets a reduction be applied as arithmetic rather than as a
+ * bucket shuffle, and it is why Solid Rock's 0.75x can be modelled at all: it
+ * lands between buckets, and the residual below carries it exactly.
+ *
+ * **0x is the exception**: it scores `IMMUNITY_VALUE`, currently -2 rather than
+ * the -1 the identity would give, because an immunity is a threshold and not a
+ * quantity of damage. The exception is safe precisely here, and the reason is
+ * worth stating rather than trusting. A reduction rule multiplies an existing
+ * multiplier down, so it can only produce a residual when the result lands
+ * between two buckets — and 0x is the floor, reachable only from 0x itself,
+ * where `before` and `after` are both zero and no residual is emitted. No
+ * arithmetic in this file ever crosses the 0x coefficient, so breaking the
+ * identity there costs nothing that depends on it.
+ */
+const DAMAGE_FROM_BUCKETS = [
+  { key: 'quadruple_damage_from', multiplier: 4 },
+  { key: 'double_damage_from', multiplier: 2 },
+  { key: 'half_damage_from', multiplier: 0.5 },
+  { key: 'quarter_damage_from', multiplier: 0.25 },
+  { key: 'no_damage_from', multiplier: 0 }
+] as const;
+
+/** Incoming damage multiplier for a type; 1 when it sits in no bucket. */
+const getDamageTakenMultiplier = (dr: DamageRelations, typeName: string): number => {
+  const bucket = DAMAGE_FROM_BUCKETS.find(
+    (b) => (dr[b.key] || []).some((resource) => resource.name === typeName)
+  );
+  return bucket ? bucket.multiplier : 1;
+};
+
+/**
+ * Moves a type to the bucket for `multiplier`, when one exists.
+ *
+ * @returns True when the multiplier landed on a real bucket. False means the
+ *   value falls between buckets and the caller must carry the difference as a
+ *   score residual instead.
+ */
+const setDamageTakenMultiplier = (dr: DamageRelations, typeName: string, multiplier: number): boolean => {
+  const target = DAMAGE_FROM_BUCKETS.find((b) => b.multiplier === multiplier);
+  if (!target && multiplier !== 1) return false;
+
+  DAMAGE_FROM_BUCKETS.forEach((bucket) => {
+    dr[bucket.key] = removeType(dr[bucket.key], typeName);
+  });
+  if (target) dr[target.key] = (dr[target.key] || []).concat({ name: typeName });
+  return true;
+};
+
+/**
+ * Applies a damage-reduction ability to a set of damage relations.
+ *
+ * @returns The residuals to add to the bucket-derived score, one per type whose
+ *   reduction landed between buckets. Left unpriced here: threat weighting is
+ *   applied when the residuals are summed, so a scan's residuals stay correct
+ *   after a cup re-weights them.
+ */
+const applyDamageTakenRule = (dr: DamageRelations, rule: DamageTakenRule): DamageResidual[] => {
+  const affected = rule.superEffectiveOnly
+    ? (dr.quadruple_damage_from || []).concat(dr.double_damage_from).map((resource) => resource.name)
+    : (rule.types || []);
+
+  const residuals: DamageResidual[] = [];
+  // Snapshot first: `superEffectiveOnly` reads the weakness buckets, and
+  // rewriting them while iterating would drop types out from under the loop.
+  [...new Set(affected)].forEach((typeName) => {
+    const before = getDamageTakenMultiplier(dr, typeName);
+    const after = before * rule.multiplier;
+    if (!setDamageTakenMultiplier(dr, typeName, after)) {
+      // Bucket unchanged; carry the exact score difference, since the bucket
+      // weight is `multiplier - 1` and the constant terms cancel.
+      residuals.push({ name: typeName, delta: after - before });
+    }
+  });
+  return residuals;
+};
+
+/**
+ * Reports whether an ability is modelled as a damage reduction here.
+ *
+ * @param abilityName PokeAPI ability name.
+ * @returns True when the type layer already prices this ability.
+ */
+export const isDamageTakenAbility = (abilityName: string | undefined | null): boolean =>
+  !!abilityName && abilityName in ABILITY_DAMAGE_TAKEN;
+
+/**
+ * Every ability that changes a typing's damage relations, immunity or reduction.
+ *
+ * Exported for `measure-damage-bounds.mjs`, which crosses these with all 171
+ * type combinations to bound `damage_from_score`. The bound is only a superset
+ * of what a real Pokemon reaches if this list is complete, so anything added to
+ * either table above must appear here — which it does, by construction.
+ */
+export const TYPING_ABILITIES: readonly string[] = [
+  ...Object.keys(ABILITY_IMMUNITIES),
+  ...Object.keys(ABILITY_DAMAGE_TAKEN)
+];
 
 const removeType = (arr: NamedResource[] | undefined, typeName: string): NamedResource[] =>
   (arr || []).filter(resource => resource.name !== typeName);
@@ -48,7 +214,8 @@ const buildDamageRelations = (
   dr: DamageRelations,
   abilityName: string,
   baseScore: number,
-  respectImmunities: boolean
+  respectImmunities: boolean,
+  weights: TypeThreatWeights
 ): DamageRelations => {
   const immunityType = respectImmunities ? ABILITY_IMMUNITIES[abilityName] : undefined;
   const nextDamageRelations = cloneDamageRelations(dr);
@@ -64,13 +231,30 @@ const buildDamageRelations = (
     }
   }
 
-  nextDamageRelations.damage_from_score = calculateDamageFromScore(nextDamageRelations, baseScore);
-  nextDamageRelations.damage_to_score = calculateDamageToScore(nextDamageRelations, baseScore);
+  // Reductions run under the same flag as immunities: both are ability effects
+  // on the typing, and the raw profile exists to show the typing without them.
+  const reduction = respectImmunities ? ABILITY_DAMAGE_TAKEN[abilityName] : undefined;
+  const residuals = reduction ? applyDamageTakenRule(nextDamageRelations, reduction) : [];
+  nextDamageRelations.damage_from_residuals = residuals.length > 0 ? residuals : undefined;
+
+  nextDamageRelations.damage_from_score =
+    calculateDamageFromScore(nextDamageRelations, baseScore, weights)
+    + calculateDamageFromResidual(nextDamageRelations, weights);
+  // `damage_to_score` is carried through, not recomputed. Every ability the
+  // model prices changes what a Pokemon takes and none changes what it deals,
+  // so the recompute that used to sit here always reproduced its own input —
+  // which only became visible when the offensive score started needing the
+  // attacker's types and the field, neither of which an ability rule has.
   return nextDamageRelations;
 };
 
-export const createAbilityProfile = (dr: DamageRelations, abilityName: string, baseScore: number) => {
-  const damageRelations = buildDamageRelations(dr, abilityName, baseScore, true);
+export const createAbilityProfile = (
+  dr: DamageRelations,
+  abilityName: string,
+  baseScore: number,
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
+) => {
+  const damageRelations = buildDamageRelations(dr, abilityName, baseScore, true, weights);
   return {
     ability_name: abilityName,
     damage_relations: damageRelations,
@@ -78,8 +262,13 @@ export const createAbilityProfile = (dr: DamageRelations, abilityName: string, b
   };
 };
 
-export const createRawAbilityProfile = (dr: DamageRelations, abilityName: string, baseScore: number) => {
-  const damageRelations = buildDamageRelations(dr, abilityName, baseScore, false);
+export const createRawAbilityProfile = (
+  dr: DamageRelations,
+  abilityName: string,
+  baseScore: number,
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
+) => {
+  const damageRelations = buildDamageRelations(dr, abilityName, baseScore, false, weights);
   return {
     ability_name: abilityName,
     damage_relations: damageRelations,
@@ -87,9 +276,15 @@ export const createRawAbilityProfile = (dr: DamageRelations, abilityName: string
   };
 };
 
-export const applyAbilityModifiers = (dr: DamageRelations, abilityNames: string[], baseScore: number) => {
+export const applyAbilityModifiers = (
+  dr: DamageRelations,
+  abilityNames: string[],
+  baseScore: number,
+  weights: TypeThreatWeights = UNIFORM_TYPE_THREAT
+) => {
   const candidateAbilities = abilityNames.length > 0 ? abilityNames : [''];
-  const abilityProfiles = candidateAbilities.map((abilityName) => createAbilityProfile(dr, abilityName, baseScore));
+  const abilityProfiles = candidateAbilities.map((abilityName) =>
+    createAbilityProfile(dr, abilityName, baseScore, weights));
 
   const bestProfile = abilityProfiles.reduce<ReturnType<typeof createAbilityProfile> | null>((best, profile) => {
     if (!best) return profile;
@@ -98,6 +293,6 @@ export const applyAbilityModifiers = (dr: DamageRelations, abilityNames: string[
 
   return {
     abilityProfiles,
-    bestProfile: bestProfile || createAbilityProfile(dr, '', baseScore)
+    bestProfile: bestProfile || createAbilityProfile(dr, '', baseScore, weights)
   };
 };

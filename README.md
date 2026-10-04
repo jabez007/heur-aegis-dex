@@ -11,8 +11,9 @@ An advanced Pokémon meta-analysis and team building engine designed with a retr
 - **Dynamic Cup Builder:** Define custom meta-games by selecting specific type pools and region constraints.
 - **Pokémon Browser:** Every eligible Pokémon, ranked by balance of coverage against vulnerability, filtered by type and with a per-Pokémon ability selector.
 - **Team Workbench:** Register a roster of up to six, then bring three (singles) or four (doubles). The workbench suggests the strongest bring and analyses the team that actually takes the field.
+- **Local Workspaces:** Automatically recover the current draft or save named workspace snapshots containing scan settings, filters, roster choices, abilities, and generation exclusions.
 - **Retro Aesthetic:** Fully themed GBA-style UI with pixel-perfect sprites and custom components.
-- **High Performance:** Client-side caching and optimized recursive team generation algorithms.
+- **High Performance:** Client-side caching and pruned beam-search roster generation.
 
 ### Regulations
 
@@ -21,6 +22,24 @@ Champions publishes legality as a whitelist per regulation set, so `src/lib/regu
 Legality is kept **independent** of the breedable-only rule the scan also applies. A Pokémon must satisfy both to appear: being tournament legal does not make it something you want to raise, and being breedable does not make it legal. Selecting "Any" drops the legality filter and leaves the breedable-only preference in place.
 
 To add a regulation, append an entry to `REGULATION_LIST` with its roster, dates and sources. Anything not recovered from a published source belongs in `incompleteFields` so an empty set reads as "not recorded" rather than "none".
+
+`npm run check:regulations` fails when no regulation is active or when the known
+schedule ends within 21 days. The same check runs weekly in CI so an expiring
+roster cannot silently turn the default scan into unrestricted play.
+
+### Pokemon Catalog
+
+`npm run gen:pokemon-catalog` rebuilds `data/pokemon-catalog.v1.json` from the
+pinned `PokeAPI/api-data` revision recorded by the generator. The artifact stores
+normalized external facts, not scores or final scan results, and is validated
+against its manifest, regulation digest, forms, and variety joins. Generation is
+atomic: an incomplete or malformed source walk leaves the previous artifact
+untouched.
+
+Runtime scans lazy-load this committed catalog, verify its semantic contract and
+content hash, then recompute scores and filters locally. A valid revision-bound browser cache
+hit avoids loading the catalog chunk. Live PokeAPI acquisition remains isolated
+to development parity tests and data-generation tools.
 
 ### Domain Model
 
@@ -54,13 +73,16 @@ Move reach is kept **separate** from STAB coverage rather than replacing it. The
 - **Language:** TypeScript
 - **Build Tool:** Vite
 - **Styling:** SASS (SCSS)
-- **Data Source:** PokeAPI via `pokedex-promise-v2`
+- **Data Source:** Versioned PokeAPI catalog, verified and scanned locally
 - **Quality Assurance:** Vitest for unit testing, ESLint for code standards.
 - **Deployment:** GitHub Actions for automated deployment to GitHub Pages.
 
 ## 📦 Library Usage
 
 Heur-Aegis Dex can also be used as a component library in other Vue 3 projects. See [CHANGELOG.md](./CHANGELOG.md) for breaking changes between versions.
+
+Published packages include the project GPL-3.0 license and the BSD-3-Clause
+notice for the bundled PokeAPI-derived catalog data.
 
 Beyond the components, the package exports the engine itself — `getResistantTypes` to run a scan, `flattenToPokemon` to work with the results, `generateRosters` and `evaluateRoster` for team building, and the regulation and battle-format data.
 
@@ -114,17 +136,18 @@ import '@jabez007/heur-aegis-dex/style.css'
 
 ### State Scoping
 
-Party, filter and notification state is provided per Vue app. Registering the plugin with `app.use(HeurAegisDex)` scopes that state automatically, so two mounted instances never share a party and server-side rendering does not carry state between requests.
+Workspace, party, filter and notification state is provided per Vue app. Registering the plugin with `app.use(HeurAegisDex)` scopes that reactive state automatically, so mounted instances do not share in-memory party or filter state and server-side rendering does not carry it between requests. Saved workspaces still use browser storage shared by the current origin.
 
 If you import individual components without the plugin, they fall back to a shared module-level store. Call the provider functions during app setup to opt into isolation:
 
 ```typescript
-import { provideTeamBuilder, provideMetaFilters, provideNotifications } from '@jabez007/heur-aegis-dex'
+import { provideTeamBuilder, provideMetaFilters, provideNotifications, provideWorkspaceState } from '@jabez007/heur-aegis-dex'
 
 const app = createApp(App)
 provideTeamBuilder(app)
 provideMetaFilters(app)
 provideNotifications(app)
+provideWorkspaceState(app)
 ```
 
 ## 🚀 Development
@@ -151,11 +174,22 @@ npm run lint
 # Automatically fix linting issues
 npm run lint:fix
 
-# Verify the browser bundle does not externalize a Node builtin
+# Verify lazy catalog chunks and production package formats
 npm run check:browser
+
+# Pack, install, and verify ESM, CommonJS, and TypeScript consumers
+npm run check:package
+
+# Verify scanning with every external service blocked
+npm run test:browser:offline
 ```
 
-> **Browser polyfills:** `events` is a runtime dependency even though nothing in `src/` imports it. `node-cache`, reached through `pokedex-promise-v2`, extends `EventEmitter` at module scope; Vite externalizes Node builtins for the browser, so without the polyfill the app fails to boot. The unit suite runs in Node where builtins resolve natively and cannot catch this, so `src/browserDeps.test.ts` asserts the packaging invariant and `npm run check:browser` verifies the real bundle.
+The production graph contains neither `pokedex-promise-v2` nor its Node-oriented
+cache and `events` polyfill. `npm run check:browser` verifies that exclusion and
+loads the lazy catalog through both ES and CommonJS package builds.
+
+Catalog verification requires Web Crypto. The deployed browser app therefore
+requires a secure context, and package consumers require Node.js 22 or newer.
 
 ## 🛡 Stability and Security
 

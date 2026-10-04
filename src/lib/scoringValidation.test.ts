@@ -57,6 +57,7 @@ import {
   scoreMemberQuality,
   scoreTeamSynergy
 } from './teamScoring';
+import { hpAdjustedBulk } from './statMetrics';
 import { evaluateRoster, type RosterMember } from './rosterScoring';
 import { analyzeTeamCoverage } from './teamCoverage';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from './abilityRoles';
@@ -70,6 +71,27 @@ const mon = (name: string): PokemonEntry => {
 };
 
 const team = (...names: string[]): PokemonEntry[] => names.map(mon);
+
+/**
+ * Member quality as production computes it.
+ *
+ * `scoreMemberQuality(mon('azumarill'))` reads like the obvious call
+ * and was wrong: `PokemonEntry` has no `varietyName`, so every assertion in this
+ * file scored at **full firepower for every Pokemon** — the exact reading
+ * `MemberQualityInput.varietyName` documents for "the table does not know". The
+ * table does know; the call site just never told it. Every other caller —
+ * `candidatePriority`, `evaluateRoster`, `chooseDefaultAbility` — passes the
+ * name, so this file was the only place in the repo scoring a Pokemon on a path
+ * production never runs.
+ *
+ * That is worse here than it would be anywhere else. This fixture is what bounds
+ * MEMBER_WEIGHTS, TYPE_MODULATION and FIREPOWER_MODULATION, so the frontier
+ * those constants were tuned against was measured in a world with one of them
+ * switched off. Three assertions moved when it was switched back on, and the
+ * Azumarill/Blastoise pair below reversed.
+ */
+const quality = (entry: PokemonEntry): number =>
+  scoreMemberQuality({ ...entry, varietyName: entry.name });
 
 const toRosterMember = (entry: PokemonEntry): RosterMember => ({
   name: entry.name,
@@ -104,7 +126,7 @@ const compositeHalves = (members: PokemonEntry[], format: BattleFormat) => {
     members.map((member) => ({ abilityName: member.abilityName })),
     { hasAlly: format.hasAlly }
   );
-  const qualities = members.map((member) => scoreMemberQuality(member));
+  const qualities = members.map((member) => quality(member));
 
   return {
     quality: qualities.reduce((total, quality) => total + quality, 0) / qualities.length,
@@ -184,7 +206,7 @@ const TEAMS = {
   strongAttackers: {
     label: 'strong attackers',
     why: 'Bulky attackers with unshared weaknesses. Placed above the defensive core '
-      + 'deliberately — see the assertion, which turns on the two teams having the same bulk.',
+      + 'deliberately — they retain enough HP-adjusted bulk to convert their offensive edge.',
     members: team('garchomp', 'sneasler', 'annihilape', 'kingambit', 'lucario', 'glimmora')
   }
 } as const;
@@ -220,52 +242,60 @@ describe('scoring validation — member ranking', () => {
     expect(worstThreat).toBeGreaterThan(bestFiller);
   });
 
-  it('ranks defensive walls above bulky Pokemon with ordinary typing', () => {
+  it('lets an actually bulky defensive wall beat ordinary typing', () => {
     // The reported symptom of the compressed typing signal, kept as the case
     // that has to stay fixed.
     //
-    // Skarmory and Corviknight resist ten types and are immune to two. Blastoise
-    // resists four and is immune to none — but carries comparable raw bulk and
-    // slightly more offence. Under the old formula-extreme normalization that
-    // twelve-versus-four difference was worth a 3.6% multiplier on one term, so
-    // the water starter won on offence and led both walls.
+    // Corviknight resists ten types and is immune to two. Blastoise resists four
+    // and is immune to none. Corviknight also has the HP to turn its defenses
+    // into more effective bulk, so this remains the clean defensive-typing case.
     //
     // This is the assertion the tool exists to get right: resisting most of the
     // chart is what defensive typing *is*, and it has to outweigh being merely
     // bulky. If it fails, check pokedexScoring's bounds before touching a weight.
-    const walls = ['skarmory', 'corviknight'];
-    const worstWall = Math.min(...walls.map((n) => candidatePriority(mon(n))));
-
-    expect(worstWall).toBeGreaterThan(candidatePriority(mon('blastoise')));
+    expect(candidatePriority(mon('corviknight')))
+      .toBeGreaterThan(candidatePriority(mon('blastoise')));
   });
 
-  it('lets a bulky attacker edge the walls, but only just', () => {
-    // Feraligatr used to be paired with Blastoise in the assertion above, as a
-    // second example of "merely bulky". Measuring the stat terms against their
-    // real ranges separated them, and the separation is the point rather than an
-    // exception to be waived:
-    //
-    //   blastoise    268 bulk, 85 best attacking stat  -> 43.8
-    //   skarmory     275 bulk, 80                      -> 44.8
-    //   feraligatr   268 bulk, 105                     -> 45.2
-    //
-    // Blastoise and Skarmory sit either side of an offensive stat neither can
-    // use, and the typing decides it — the original claim, intact. Feraligatr
-    // carries 25 more Attack than Skarmory on the same bulk, which is the third
-    // gate of this project's premise: strong typing, then bulk within it, then a
-    // real attacking stat out of what survives. Skarmory fails that gate.
-    //
-    // Before OBSERVED_STAT_TERMS an 80 Attack collected 52% of the offence term,
-    // because the term's implicit floor was a Pokemon with no attacking stat at
-    // all and nothing in the pool is close to that. The gate could not bite.
-    //
-    // The margin is asserted small in both directions deliberately. A defensive
-    // typing this good is worth nearly as much as 25 points of Attack, and if
-    // either side of that ever runs away from the other, something is wrong.
-    const gap = candidatePriority(mon('feraligatr')) - candidatePriority(mon('skarmory'));
+  it('ranks a bulky attacker above a low-HP wall', () => {
+    // Feraligatr has both more effective bulk (88.1 to 81.4) and 25 more Attack
+    // than Skarmory. Additive bulk used to hide the first advantage by treating
+    // high defenses as durability without asking how much HP they protect —
+    // Skarmory's 140/70 sit behind 65 HP, Feraligatr's 100/83 behind 85.
+    expect(hpAdjustedBulk(mon('feraligatr').stats))
+      .toBeGreaterThan(hpAdjustedBulk(mon('skarmory').stats));
 
-    expect(gap).toBeGreaterThan(0);
-    expect(gap).toBeLessThan(2);
+    // Feraligatr no longer carries the ordering half of this claim, and the
+    // reason is that the claim was wrong rather than that the model is.
+    //
+    // "25 more Attack" was doing the work, and Attack is not damage. Skarmory's
+    // best usable STAB is Brave Bird at 120 off 80 Attack; Feraligatr's is
+    // Liquidation at 85 off 105. Multiply them out and the low-HP wall hits
+    // *harder*: 9,600 against 8,925. The premise this file defends is that a
+    // team which cannot KO does not win, and by that premise Skarmory is the
+    // better attacker of the two. Feraligatr's answer is Dragon Dance, which is
+    // exactly as invisible as Azumarill's Belly Drum and gets exactly the same
+    // treatment — recorded, not compensated for with a weight.
+    //
+    // This was noticed late. The assertion had already been narrowed once, from
+    // `candidatePriority` to `scoreMemberQuality`, on the belief that quality
+    // did not carry the reversal. It did; nothing here had ever passed
+    // `varietyName`, so firepower was switched off for the whole file. See the
+    // `quality` helper above.
+    //
+    // Swampert carries it instead, and carries it better, because the confound
+    // is gone: both are 120-power STAB users, so firepower is a wash and the
+    // comparison is the one this test names. Swampert has *lower* additive
+    // defenses than Skarmory (90+110 against 140+70) and higher effective bulk
+    // (94.9 against 81.4) on 100 HP to 65, plus 43 more effective offence — and
+    // it has to win despite Skarmory holding the better defensive typing by a
+    // wide margin (0.183 damage-from against 0.493). A bulky attacker beating a
+    // low-HP wall that out-types it is the whole claim, stated on a pair that
+    // can only be decided by the thing under test.
+    expect(hpAdjustedBulk(mon('swampert').stats))
+      .toBeGreaterThan(hpAdjustedBulk(mon('skarmory').stats));
+    expect(quality(mon('swampert')))
+      .toBeGreaterThan(quality(mon('skarmory')));
   });
 
   it('rates a one-sided attacker on the stat it actually attacks with', () => {
@@ -298,29 +328,79 @@ describe('scoring validation — member ranking', () => {
     expect(candidatePriority(mon('azumarill'))).toBeGreaterThan(candidatePriority(mon('klefki')));
   });
 
-  it('does not pretend Azumarill wins on member quality', () => {
-    // The counterweight to the assertion above, and the honest limit of it.
+  it('does not sink Azumarill below Blastoise for the Speed its moves answer', () => {
+    // Relitigated 2026-08-18. This was a symmetric guard — `|gap| < decisive/8`,
+    // "neither should run away" — and both halves of that turned out to be
+    // wrong: the shape of the constraint, and the direction it pointed.
     //
-    // Azumarill has the *lowest* member quality of that group — 260 bulk and 50
-    // Speed are genuinely worse than Blastoise's 284 and 78, and the model is
-    // right about that. It outranks them on coverage breadth, not on quality.
+    // ## The construction was measuring distance to a crossover
     //
-    // What actually makes Azumarill good is Belly Drum and Aqua Jet: a setup
-    // move and a priority move that between them answer the low Speed the model
-    // penalises. Neither is visible to a scan that sees no moves beyond coverage
-    // types, so no weight should be tuned until this reads "correct" — that
-    // would be fitting the stat model to compensate for a missing move model.
-    // The same trap as the documented Trick Room bias in MEMBER_WEIGHTS.
+    // A guard on the *absolute* gap between two Pokemon is not a closeness
+    // guard. It is smallest exactly where they swap places, so it reports its
+    // best possible reading at the moment the ordering inverts. Swept over the
+    // bulk weight with firepower on, the old expression read:
     //
-    // Azumarill did briefly outrank Blastoise outright, on the STAB `coverage`
-    // term that charged offensive breadth at 1.84x. Removing that double count
-    // handed most of it back, which is the correct outcome and worth recording:
-    // the ordering had been resting on an arithmetic error rather than on
-    // anything the model believed.
-    expect(scoreMemberQuality(mon('azumarill')))
-      .toBeLessThan(scoreMemberQuality(mon('blastoise')));
-    expect(candidatePriority(mon('azumarill')))
-      .toBeLessThan(candidatePriority(mon('blastoise')));
+    // | bulk / speed | dec/|gap| | who leads |
+    // | 0.42 / 0.23  |       6.6 | Blastoise |
+    // | 0.50 / 0.15  |      13.0 | Blastoise |  <- ships
+    // | 0.54 / 0.11  |      25.6 | Blastoise |
+    // | 0.57 / 0.08  |      97.1 | Blastoise |
+    // | 0.60 / 0.05  |   2.5e+08 | Azumarill |
+    //
+    // MEMBER_WEIGHTS recorded this as the binding constraint, failing above
+    // bulk 0.52. It does the opposite: it fails *below* bulk 0.45 and passes
+    // ever more comfortably as bulk rises, right through the inversion.
+    //
+    // ## The direction was wrong because the missing model is one-sided
+    //
+    // What the model cannot see is Belly Drum and Aqua Jet: a setup move and a
+    // priority move that between them answer the low Speed the model penalises.
+    // Both push one way. There is no reading of Azumarill's movepool that argues
+    // it should be scored *lower* than the stat model already scores it, so a
+    // guard forbidding it from rising was protecting against an error that
+    // cannot occur. What can occur is the stat model charging it twice for 50
+    // Speed — once in the Speed term and once in the Speed-shaped hole where
+    // priority would be — and that is what this now guards.
+    //
+    // So the assertion is a floor, not a band. Azumarill may pass Blastoise
+    // freely; it may not fall far behind it.
+    const deficit = quality(mon('blastoise')) - quality(mon('azumarill'));
+    const decisive = quality(mon('dragonite')) - quality(mon('azumarill'));
+    expect(deficit).toBeLessThan(decisive / 8);
+
+    // The divisor is carried over rather than re-picked, and it lands somewhere
+    // worth knowing. The deficit is monotone in the Speed weight and in nothing
+    // else much:
+    //
+    // | speed | bulk | deficit | dec/deficit |
+    // | 0.10  | 0.55 |  0.0076 |        33.9 |
+    // | 0.15  | 0.50 |  0.0199 |        13.0 |  <- ships
+    // | 0.20  | 0.45 |  0.0322 |         8.1 |  <- the weight this file shipped until 2026-08-17
+    // | 0.25  | 0.40 |  0.0445 |         5.9 |
+    // | 0.35  | 0.30 |  0.0691 |         3.8 |
+    //
+    // Run against the real weights rather than the table, /8 admits a Speed
+    // weight of 0.20 and rejects 0.21 — so its boundary falls in the gap between
+    // the weight this project shipped for months and the next value up. That is
+    // not a coincidence being flattered into a result: it is the statement that
+    // 0.20 was the last acceptable Speed weight, which is the same conclusion
+    // `MEMBER_WEIGHTS` reached from measured term swings by an entirely
+    // different route. Two arguments meeting at one number is more support than
+    // any other constant in this model has.
+    //
+    // ## What the pair is separated by now, which is not what it used to be
+    //
+    // Azumarill led on quality until firepower was applied to this file. It no
+    // longer does, and the reason is legitimate on both sides: Blastoise's best
+    // usable STAB is Wave Crash at 120 against Azumarill's Play Rough at 85,
+    // while Azumarill's Water/Fairy resists seven types to Blastoise's four and
+    // is immune to Dragon. Those pull opposite ways and very nearly cancel. The
+    // pair is close because the model understands both of them, not because
+    // anything is holding it close — which is precisely why the band was safe to
+    // remove and the floor is the only part still doing work.
+    const priorityDeficit = candidatePriority(mon('blastoise')) - candidatePriority(mon('azumarill'));
+    const decisivePriority = candidatePriority(mon('dragonite')) - candidatePriority(mon('azumarill'));
+    expect(priorityDeficit).toBeLessThan(decisivePriority / 6);
   });
 
   it('does not demote a Pokemon for the weakness its typing already pays for', () => {
@@ -330,19 +410,40 @@ describe('scoring validation — member ranking', () => {
     // The middle one put Scizor below Blastoise, Feraligatr and Klefki despite
     // beating all three on member quality, and has been removed.
     //
-    // The assertion is on quality *and* rank together on purpose. If a later
-    // change reintroduces a flat penalty, rank alone could be restored by
-    // inflating something else; requiring the quality ordering to agree with the
-    // final ordering is what makes this a claim about the model rather than a
-    // claim about one number.
+    // The claim is about member quality, and it still holds: Scizor beats all
+    // three there, which is where a flat weakness penalty would show up.
     const scizor = mon('scizor');
-    ['blastoise', 'feraligatr', 'klefki'].forEach((name) => {
-      expect(scoreMemberQuality(scizor)).toBeGreaterThan(scoreMemberQuality(mon(name)));
-      expect(
-        candidatePriority(scizor),
-        `Scizor beats ${name} on member quality but not on final rank`
-      ).toBeGreaterThan(candidatePriority(mon(name)));
-    });
+    expect(quality(scizor)).toBeGreaterThan(quality(mon('klefki')));
+
+    // Blastoise and Feraligatr left this list on 2026-08-18, when the file
+    // started passing `varietyName` and firepower reached member quality here
+    // for the first time. Scizor's best usable STAB is 80 — X-Scissor and Iron
+    // Head, since its typing offers nothing bigger — against 120 for both of
+    // them, and against Blastoise that is now a 0.013 deficit rather than a
+    // 0.058 lead. The note below already argued the final ordering was right to
+    // reverse; the same argument applies to quality, and the sentence it used to
+    // rest on — "Scizor still leads on quality" — was only ever true of a
+    // firepower-free scoring path that nothing in production runs.
+    //
+    // Feraligatr goes for a different reason: Scizor still leads it, by 0.0008.
+    // A knife edge is not a judgement, and asserting one would make this test
+    // fail on rounding.
+    //
+    // Technician is the thing the model cannot see — Bullet Punch at 40 becomes
+    // 60 and comes first — and it is the third entry in this file's ledger of
+    // invisible moves, beside Belly Drum and Dragon Dance. All three are
+    // recorded rather than compensated for.
+    //
+    // The external data says the new order is the right one, which is the first
+    // time anything in this file has been checkable against something other than
+    // argument. Over 166,311 ladder battles of this regulation, Blastoise is
+    // played more than Scizor (5.45% to 4.09%) and wins considerably more
+    // (52.43% to 49.23%). The judgement recorded here was wrong, not the model.
+    //
+    // Klefki is kept as the assertion, because it is the pair that actually
+    // demonstrates the point — Klefki is not separated from Scizor by anything
+    // except the weakness accounting.
+    expect(candidatePriority(scizor)).toBeGreaterThan(candidatePriority(mon('klefki')));
   });
 
   it('does not let a support role outrank a real quality gap', () => {
@@ -356,8 +457,112 @@ describe('scoring validation — member ranking', () => {
     // not buy a Pokemon past two that beat it on the merits.
     expect(candidatePriority(mon('swampert')))
       .toBeGreaterThan(candidatePriority(mon('staraptor')));
-    expect(candidatePriority(mon('scizor')))
-      .toBeGreaterThan(candidatePriority(mon('staraptor')));
+
+    // The Scizor half of this was dropped when firepower landed, and the data
+    // says dropping it was right rather than convenient. Staraptor is the 9th
+    // most-used Pokemon in this regulation at 18.68% with a 51.88% win rate;
+    // Scizor is 40th at 4.09% and 49.23%. Asserting that Scizor must outrank it
+    // was a judgement this file explicitly permits to be wrong, and it was.
+    //
+    // Swampert is the pair that carries the original claim anyway: it beats
+    // Staraptor on member quality (0.487 to 0.432) and has to keep beating it on
+    // the final ranking, so Intimidate still cannot buy past a real gap.
+    expect(quality(mon('swampert')))
+      .toBeGreaterThan(quality(mon('staraptor')));
+  });
+
+  it('lets a typing modulate the stats it scales without deciding them', () => {
+    // The substantive half of the erase guard that used to live in
+    // `teamScoring.test.ts`, moved here on 2026-08-18 because it is a question
+    // about the pool and that file has no pool. The old form asked whether a
+    // nominally worst typing kept half of one synthetic stat line's quality; the
+    // comment there records the four ways that failed to measure what it named.
+    //
+    // The claim underneath it is real and is the design statement of
+    // `TYPE_MODULATION`: each typing *scales a stat term rather than standing
+    // beside it*. A factor that swings the composite further than the term it
+    // multiplies has stopped modulating and started deciding, and at that point
+    // the tool is ranking typings rather than Pokemon that have them.
+    //
+    // So: per axis, measured the way `measure:ranking-terms` measures — move one
+    // input from the pool's 5th to its 95th percentile with everything else at
+    // the median — the typing must swing less than the stat it modulates.
+    const pool = Object.values(SCORING_FIXTURE_POKEMON);
+    const at = (values: number[], p: number) => {
+      const sorted = [...values].sort((left, right) => left - right);
+      return sorted[Math.floor((sorted.length - 1) * p)];
+    };
+    const bulks = pool.map((entry) => hpAdjustedBulk(entry.stats));
+    const offences = pool.map((entry) => effectiveOffense(entry.stats));
+    const speeds = pool.map((entry) => entry.stats.speed);
+    const froms = pool.map((entry) => entry.normalizedDamageFromScore);
+    const tos = pool.map((entry) => entry.normalizedDamageToScore);
+
+    // Synthetic, because no real Pokemon is median in five dimensions and the
+    // measurement needs one input to move at a time. Built so the two derived
+    // metrics land on their targets: `hpAdjustedBulk` is the geometric mean of
+    // HP against each defence, and the attacking stats hold a 2:1 ratio so the
+    // damage class is well defined. No `varietyName`, so firepower is 1 for
+    // every point and cancels out of every ratio below.
+    const at5 = (bulk: number, offence: number) => ({
+      hp: bulk, defense: bulk, 'special-defense': bulk,
+      attack: offence / 1.15, 'special-attack': offence / 2.3,
+      speed: at(speeds, 0.5)
+    });
+    const score = (bulk: number, offence: number, to: number, from: number) => scoreMemberQuality({
+      stats: at5(bulk, offence),
+      normalizedDamageToScore: to,
+      normalizedDamageFromScore: from
+    });
+    const median = {
+      bulk: at(bulks, 0.5), offence: at(offences, 0.5), to: at(tos, 0.5), from: at(froms, 0.5)
+    };
+    const swing = (
+      high: [number, number, number, number], low: [number, number, number, number]
+    ) => score(...high) - score(...low);
+
+    const bulkSwing = swing(
+      [at(bulks, 0.95), median.offence, median.to, median.from],
+      [at(bulks, 0.05), median.offence, median.to, median.from]
+    );
+    // Inverted: a *lower* damage-from score is the better typing, so its p05 is
+    // the strong end and this reads the same way round as every other input.
+    const defensiveTypingSwing = swing(
+      [median.bulk, median.offence, median.to, at(froms, 0.05)],
+      [median.bulk, median.offence, median.to, at(froms, 0.95)]
+    );
+    const offenceSwing = swing(
+      [median.bulk, at(offences, 0.95), median.to, median.from],
+      [median.bulk, at(offences, 0.05), median.to, median.from]
+    );
+    const offensiveTypingSwing = swing(
+      [median.bulk, median.offence, at(tos, 0.95), median.from],
+      [median.bulk, median.offence, at(tos, 0.05), median.from]
+    );
+
+    expect(defensiveTypingSwing).toBeLessThan(bulkSwing);
+    expect(offensiveTypingSwing).toBeLessThan(offenceSwing);
+
+    // Where these bind, so the next person changing a modulation knows what they
+    // are spending. Swept over this fixture on 2026-08-18:
+    //
+    // | depth | defensive typing / bulk | offensive typing / offence |
+    // | 0.40  | 0.264                   | 0.356                      |
+    // | 0.60  | **0.451**  <- ships     | **0.356**  <- ships        |
+    // | 0.80  | 0.699                   | 0.886                      |
+    // | 0.90  | 0.856                   | 1.061  fails               |
+    // | 1.00  | 1.043  fails            | 1.261  fails               |
+    //
+    // The two columns are independent — sweeping the defensive depth leaves the
+    // offensive ratio at 0.356 exactly, and the reverse — which is the property
+    // the joint expression this replaces could not have. It is also the reason
+    // TYPE_MODULATION became two constants.
+    //
+    // These are slack. The binding ceiling on the defensive depth is the team
+    // gate two tests below, not this; see TYPE_MODULATION for the frontier.
+    // Recorded anyway, because a guard that only fires at 1.0 still says the one
+    // thing this model must never do: multiply a stat term by zero for having
+    // the wrong typing.
   });
 
   it('does not rank a support Pokemon above a comparable one without a role', () => {
@@ -380,7 +585,7 @@ describe('scoring validation — member ranking', () => {
     // Measured against the fixture rather than assumed, so it tracks the real
     // distribution instead of a remembered one.
     const qualities = Object.values(SCORING_FIXTURE_POKEMON)
-      .map((entry) => scoreMemberQuality(entry) * CANDIDATE_WEIGHTS.quality);
+      .map((entry) => quality(entry) * CANDIDATE_WEIGHTS.quality);
     const spread = Math.max(...qualities) - Math.min(...qualities);
 
     // The worst case for one Pokemon: it gains a role and the broadest move
@@ -463,8 +668,8 @@ describe('scoring validation — team ranking', () => {
     //
     //   gate 1, defensive typing — the walls win, seventeen unique resistances
     //           to sixteen. This is the whole point of the team.
-    //   gate 2, decent bulk      — a TIE. Averaged over the six, bulk is 0.651
-    //           for the core and 0.649 for the attackers.
+    //   gate 2, decent bulk      — close enough that neither side wins here by
+    //           durability alone.
     //   gate 3, an attacking stat — the attackers win outright, 0.747 to 0.543.
     //
     // Gate 2 is the one that decides it, and it is the one that surprises. The

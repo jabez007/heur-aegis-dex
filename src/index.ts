@@ -2,6 +2,7 @@ import type { App } from 'vue'
 import { provideTeamBuilder } from './composables/useTeamBuilder'
 import { provideMetaFilters } from './composables/useMetaFilters'
 import { provideNotifications } from './composables/useNotifications'
+import { provideWorkspaceState } from './composables/useWorkspaceState'
 import './assets/scss/main.scss'
 import HeurAegisDexMain from './App.vue'
 import CustomCupBuilder from './components/CustomCupBuilder.vue'
@@ -12,6 +13,7 @@ import PokemonCard from './components/PokemonCard.vue'
 import StatBar from './components/StatBar.vue'
 import TeamWorkbench from './components/TeamWorkbench.vue'
 import TypeBadge from './components/TypeBadge.vue'
+import WorkspaceSavesDialog from './components/WorkspaceSavesDialog.vue'
 
 /** Main app component for standalone mounting or library use. */
 export { HeurAegisDexMain }
@@ -24,17 +26,45 @@ export {
   PokemonCard,
   StatBar,
   TeamWorkbench,
-  TypeBadge
+  TypeBadge,
+  WorkspaceSavesDialog
 }
 
 export { useTeamBuilder, provideTeamBuilder } from './composables/useTeamBuilder'
 export { useMetaFilters, provideMetaFilters, ALL_TYPES } from './composables/useMetaFilters'
 export { useNotifications, provideNotifications } from './composables/useNotifications'
+export { useWorkspaceState, provideWorkspaceState } from './composables/useWorkspaceState'
 
-export type { PartyMember } from './composables/useTeamBuilder'
+export type { GenerationAlternativeSummary, PartyMember } from './composables/useTeamBuilder'
 export type { Notification } from './composables/useNotifications'
+export {
+  WORKSPACE_STORAGE_KEY,
+  WORKSPACE_VERSION,
+  deleteSavedWorkspace,
+  emptyWorkspaceArchive,
+  isWorkspaceArchive,
+  isWorkspaceSnapshot,
+  mergeUnresolvedTeamIdentifiers,
+  readWorkspaceArchive,
+  renameSavedWorkspace,
+  saveNamedWorkspace,
+  writeWorkspaceArchive
+} from './lib/workspacePersistence'
+export type {
+  PokedexRegion,
+  SavedWorkspace,
+  WorkspaceArchiveV1,
+  WorkspaceSnapshotV1,
+  WorkspaceStorage
+} from './lib/workspacePersistence'
 // The scan itself, so consumers can drive the engine without mounting the app.
-export { DEFAULT_STATS_FILTERS, getBaseTypes, getDualTypes, getResistantTypes } from './lib/pokedex'
+export {
+  DEFAULT_STATS_FILTERS,
+  getBaseTypes,
+  getDualTypes,
+  getResistantTypes,
+  hpAdjustedBulk
+} from './lib/pokedex'
 export type {
   PokemonTypeData,
   DamageRelations,
@@ -84,7 +114,8 @@ export {
   BATTLE_FORMAT_LIST,
   DEFAULT_BATTLE_FORMAT,
   combinationsOf,
-  getBattleFormat
+  getBattleFormat,
+  isBattleFormatId
 } from './lib/battleFormats'
 export type { BattleFormat, BattleFormatId } from './lib/battleFormats'
 export {
@@ -113,6 +144,8 @@ export {
   CANDIDATE_WEIGHTS,
   candidatePriority,
   countTypeOverlap,
+  countSharedWeaknesses,
+  DEFAULT_UNANSWERED_WEAKNESS_SLACK,
   generateRosters
 } from './lib/rosterGeneration'
 export type { GenerateRostersOptions, GeneratedRoster } from './lib/rosterGeneration'
@@ -136,6 +169,14 @@ export {
 } from './lib/abilityEffects'
 export type { AbilityQualityRule, QualityComponent } from './lib/abilityEffects'
 
+export {
+  STATUS_THREAT,
+  getStatusImmunityMultipliers,
+  grantsStatusImmunity
+} from './lib/statusThreat'
+export { STATUS_MOVE_AILMENTS } from './lib/statusMoveData'
+export type { Ailment } from './lib/statusMoveData'
+
 export default {
   install: (app: App) => {
     // Each app gets its own party, filters and notifications. Without this the
@@ -145,6 +186,7 @@ export default {
     provideTeamBuilder(app)
     provideMetaFilters(app)
     provideNotifications(app)
+    provideWorkspaceState(app)
 
     app.component('HeurAegisDexMain', HeurAegisDexMain)
     app.component('CustomCupBuilder', CustomCupBuilder)
@@ -155,5 +197,6 @@ export default {
     app.component('StatBar', StatBar)
     app.component('TeamWorkbench', TeamWorkbench)
     app.component('TypeBadge', TypeBadge)
+    app.component('WorkspaceSavesDialog', WorkspaceSavesDialog)
   }
 }

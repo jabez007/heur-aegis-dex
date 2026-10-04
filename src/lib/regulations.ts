@@ -28,7 +28,7 @@ import type { BattleFormatId } from './battleFormats';
 
 export type MechanicId = 'mega' | 'terastal' | 'dynamax' | 'z-move';
 
-export type RegulationId = 'M-A' | 'M-B';
+export type RegulationId = 'M-A' | 'M-B' | 'M-C';
 
 export interface RegulationRules {
   /** Formats this regulation is played in. Roster and bring sizes live on the format. */
@@ -121,6 +121,25 @@ const M_B_MEGA_CAPABLE = [
   'tyranitar', 'venusaur', 'victreebel'
 ] as const;
 
+/**
+ * The 23 species M-C adds on top of the M-B roster. Serebii lists 32 entries;
+ * the other nine are six Mega Evolutions and three alternate forms (Alolan
+ * Persian, Low Key Toxtricity, female Indeedee) of species named here.
+ */
+const M_C_ADDITIONS = [
+  'arboliva', 'baxcalibur', 'cinderace', 'farfetchd', 'gogoat', 'golisopod', 'grapploct',
+  'indeedee', 'inteleon', 'mabosstiff', 'mr-mime', 'pawmot', 'perrserker', 'persian',
+  'pincurchin', 'rillaboom', 'salamence', 'sirfetchd', 'squawkabilly', 'swalot', 'thievul',
+  'toxtricity', 'wigglytuff'
+] as const;
+
+/**
+ * Species M-C lets Mega Evolve beyond M-B. M-C also adds Mega Absol Z, Mega
+ * Garchomp Z and Mega Lucario Z, but those are new forms of species that could
+ * already Mega Evolve, so they change nothing at species granularity.
+ */
+const M_C_MEGA_ADDITIONS = ['baxcalibur', 'golisopod', 'salamence'] as const;
+
 const REGULATION_LIST: readonly Regulation[] = [
   {
     id: 'M-A',
@@ -154,10 +173,32 @@ const REGULATION_LIST: readonly Regulation[] = [
       'https://victoryroad.pro/champions-regulations/'
     ],
     verifiedOn: '2026-07-27'
+  },
+  {
+    id: 'M-C',
+    label: 'Regulation Set M-C',
+    // 2026-09-08 19:00 PDT to 2026-12-01 17:59 PST. Nothing was active in the
+    // week between M-B ending and M-C starting.
+    activeFrom: '2026-09-09T02:00:00Z',
+    activeTo: '2026-12-02T01:59:00Z',
+    rules: CHAMPIONS_RULES,
+    mechanics: ['mega'],
+    legalSpecies: new Set<string>([...M_A_SPECIES, ...M_B_ADDITIONS, ...M_C_ADDITIONS]),
+    megaCapableSpecies: new Set<string>([...M_B_MEGA_CAPABLE, ...M_C_MEGA_ADDITIONS]),
+    incompleteFields: [],
+    sources: [
+      'https://www.pokemon.com/us/news/get-ready-for-regulation-set-m-c-in-pokemon-champions',
+      'https://www.serebii.net/pokemonchampions/rankedbattle/regulationm-c.shtml',
+      'https://metavgc.com/regulations/regulationm-c'
+    ],
+    verifiedOn: '2026-10-03'
   }
 ] as const;
 
 export const REGULATIONS = REGULATION_LIST;
+
+/** Lead time for replacing an expiring regulation before CI starts failing. */
+export const REGULATION_FRESHNESS_HORIZON_DAYS = 21;
 
 /**
  * Looks up a regulation by id.
@@ -181,6 +222,31 @@ export function getActiveRegulation(at: Date = new Date()): Regulation | undefin
   return REGULATION_LIST.find((regulation) =>
     timestamp >= Date.parse(regulation.activeFrom) && timestamp < Date.parse(regulation.activeTo)
   );
+}
+
+/**
+ * Finds the first instant not covered by a known regulation in a time window.
+ *
+ * @param from Inclusive start of the window.
+ * @param to Exclusive end of the window.
+ * @returns The first uncovered instant, or undefined when the full window is covered.
+ */
+export function getRegulationCoverageGap(from: Date, to: Date): Date | undefined {
+  let coveredUntil = from.getTime();
+  const end = to.getTime();
+
+  for (const regulation of [...REGULATION_LIST].sort((a, b) =>
+    Date.parse(a.activeFrom) - Date.parse(b.activeFrom)
+  )) {
+    const activeFrom = Date.parse(regulation.activeFrom);
+    const activeTo = Date.parse(regulation.activeTo);
+    if (activeTo <= coveredUntil) continue;
+    if (activeFrom > coveredUntil) return new Date(coveredUntil);
+    coveredUntil = Math.max(coveredUntil, activeTo);
+    if (coveredUntil >= end) return undefined;
+  }
+
+  return coveredUntil < end ? new Date(coveredUntil) : undefined;
 }
 
 /**

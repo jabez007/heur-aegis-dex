@@ -40,22 +40,52 @@ describe('BATTLE_FORMS', () => {
   });
 
   it('merges deliberately rather than by default', () => {
-    // If this count starts climbing without a matching change to the reasons,
+    // If this list starts growing without a matching change to the reasons,
     // someone has started merging forms because they are stronger rather than
-    // because the Pokemon fights in them.
-    expect(BATTLE_FORMS.filter((rule) => rule.merged).map((rule) => rule.species)).toEqual(['palafin']);
+    // because the Pokemon fights in them. It is currently empty: condition 4
+    // disqualified Palafin, the only entry that had ever satisfied the rest.
+    expect(BATTLE_FORMS.filter((rule) => rule.merged).map((rule) => rule.species)).toEqual([]);
   });
 });
 
 describe('getMergedBattleForm', () => {
+  // The real table merges nothing, so the mechanism is exercised against a
+  // fixture. Testing it through whichever species currently qualifies stops
+  // testing the mechanism the moment the table changes — which is exactly what
+  // happened when Palafin was unmerged.
+  const fixture = [{
+    species: 'fixture-mon',
+    variety: 'fixture-mon-battle',
+    ability: 'fixture-trigger',
+    merged: true,
+    reason: 'Fixture. Exercises the resolver without depending on the real table.'
+  }, {
+    species: 'recorded-mon',
+    variety: 'recorded-mon-battle',
+    ability: 'recorded-trigger',
+    merged: false,
+    reason: 'Fixture. Recorded and deliberately not merged.'
+  }];
+
   it('resolves a whitelisted form when the trigger ability is present', () => {
-    const rule = getMergedBattleForm('palafin', ['zero-to-hero']);
-    expect(rule?.variety).toBe('palafin-hero');
+    const rule = getMergedBattleForm('fixture-mon', ['fixture-trigger'], fixture);
+    expect(rule?.variety).toBe('fixture-mon-battle');
   });
 
   it('declines when the Pokemon does not have the trigger ability', () => {
     // A form the Pokemon cannot reach is not a form it fights in.
-    expect(getMergedBattleForm('palafin', ['torrent'])).toBeUndefined();
+    expect(getMergedBattleForm('fixture-mon', ['torrent'], fixture)).toBeUndefined();
+  });
+
+  it('declines a form that is recorded but not merged', () => {
+    expect(getMergedBattleForm('recorded-mon', ['recorded-trigger'], fixture)).toBeUndefined();
+  });
+
+  it('rates Palafin as registered, since Zero to Hero costs a turn', () => {
+    // The decision this file's condition 4 records. Palafin fights as Hero, but
+    // it has to spend a switch to get there, and no other conditional effect in
+    // the model is granted for free either.
+    expect(getMergedBattleForm('palafin', ['zero-to-hero'])).toBeUndefined();
   });
 
   it('declines for forms recorded but not merged', () => {

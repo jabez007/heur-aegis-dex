@@ -61,11 +61,19 @@ const fillRoster = (add: (entry: PokemonEntry) => boolean, count: number) => {
 
 describe('useTeamBuilder', () => {
   const builder = useTeamBuilder();
-  const { addPokemon, clearParty, roster, setFormat, teamWeaknessSummary } = builder;
+  const {
+    addPokemon,
+    clearGenerationExclusions,
+    clearParty,
+    roster,
+    setFormat,
+    teamWeaknessSummary
+  } = builder;
   const { notifications } = useNotifications();
 
   beforeEach(() => {
     clearParty();
+    clearGenerationExclusions();
     setFormat('doubles');
   });
 
@@ -281,6 +289,16 @@ describe('useTeamBuilder', () => {
     expect(builder.currentLineIndex.value).toBe(1);
   });
 
+  it('ignores non-integer steps from public callers', () => {
+    fillRoster(addPokemon, 6);
+    const originalBring = [...builder.bringIndices.value];
+
+    expect(() => builder.cycleBringLine(0.5)).not.toThrow();
+    expect(() => builder.cycleBringLine(Number.NaN)).not.toThrow();
+    expect(builder.bringIndices.value).toEqual(originalBring);
+    expect(builder.currentLineIndex.value).toBe(0);
+  });
+
   it('has nothing to cycle before a bring can be fielded', () => {
     fillRoster(addPokemon, 3);
 
@@ -293,6 +311,35 @@ describe('useTeamBuilder', () => {
     const scanOf = (types: string[]) =>
       types.map((type, index) => pokemon(`mon-${index}`, { typeName: type, types: [type] }));
 
+    it('cycles through meaningfully different alternatives after fresh generation', () => {
+      const scan = scanOf([
+        'fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel', 'psychic', 'flying'
+      ]);
+
+      builder.generateFullTeam(scan);
+      const first = new Set(roster.value.map((member) => member.name));
+
+      expect(builder.canTryAnotherRoster.value).toBe(true);
+      expect(builder.generationAlternative.value).toMatchObject({
+        optionNumber: 1,
+        scoreBehindBest: 0,
+        removedNames: [],
+        addedNames: []
+      });
+      builder.fillRemainingSlots(scan, scan);
+
+      const replacements = roster.value.filter((member) => !first.has(member.name));
+      expect(replacements.length).toBeGreaterThanOrEqual(2);
+      expect(builder.generationAlternative.value).toMatchObject({
+        optionNumber: 2,
+        removedNames: expect.arrayContaining([...first].filter((name) =>
+          !roster.value.some((member) => member.name === name))),
+        addedNames: expect.arrayContaining(replacements.map((member) => member.name))
+      });
+      expect(builder.generationAlternative.value!.scoreBehindBest).toBeGreaterThanOrEqual(0);
+      expect(builder.generationAlternative.value!.scoreBehindBest).toBeLessThanOrEqual(3);
+    });
+
     it('keeps the registered members and adds to them', () => {
       fillRoster(addPokemon, 3);
       const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock']);
@@ -303,6 +350,107 @@ describe('useTeamBuilder', () => {
       expect(roster.value.map((member) => member.name)).toEqual(
         expect.arrayContaining(['mon-0', 'mon-1', 'mon-2'])
       );
+    });
+
+    it('cycles through every completion within the score threshold', () => {
+      fillRoster(addPokemon, 3);
+      const locked = roster.value.map((member) => member.name);
+      const scan = scanOf([
+        'fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel', 'psychic', 'flying'
+      ]);
+
+      const completions = new Set<string>();
+      for (let option = 0; option < 6; option++) {
+        builder.fillRemainingSlots(scan, scan);
+        completions.add(roster.value.map((member) => member.name).sort().join('|'));
+      }
+
+      expect(completions.size).toBe(6);
+      expect(roster.value.map((member) => member.name)).toEqual(expect.arrayContaining(locked));
+      expect(builder.canTryAnotherRoster.value).toBe(true);
+    });
+
+    it('does not offer another roster when only one completion qualifies', () => {
+      fillRoster(addPokemon, 3);
+      const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock']);
+
+      builder.fillRemainingSlots(scan, scan);
+
+      expect(builder.canTryAnotherRoster.value).toBe(false);
+    });
+
+    /**
+     * This assertion used to be a coin flip and is now decided by 0.97 points.
+     *
+     * `mon-7` is one in every stat. The best roster containing it scored, across
+     * four consecutive recalibrations, **3.010** points behind the best, then
+     * **2.950**, **3.072** and **2.967** — against a
+     * ROSTER_ALTERNATIVE_SCORE_MARGIN that was 3. So this passed, failed, passed
+     * and failed again while nothing changed about how bad `mon-7` is.
+     *
+     * The reason it sat on the line is structural. Six are registered and four
+     * brought, so the worst member is never brought and reaches the score only
+     * through the brings it would spoil; setting `normalizedDamageFromScore` to
+     * 1 rather than 0 — worst defensive typing instead of best — moves the gap
+     * by exactly nothing. Roughly three points is simply what a wasted sixth
+     * slot can cost, so a margin of 3 could never exclude one.
+     *
+     * The margin is now derived rather than assumed: one member's worth of
+     * roster quality, at 1.99. The gap here measures 2.963 today, inside the
+     * same band as all four earlier readings, so the exclusion holds for a
+     * stated reason instead of by luck.
+     *
+     * It briefly stopped holding. A recalibration took the margin to 2.94, which
+     * is past the singles gap of 2.786 and 0.02 short of this one, and the fix
+     * was to correct what the derivation measured rather than to nudge the
+     * constant — ROSTER_ALTERNATIVE_SCORE_MARGIN has the argument. If this test
+     * starts flipping again, that docblock is the thing to read, not this one.
+     */
+    it('does not cycle into completions a member downgrade behind the best', () => {
+      fillRoster(addPokemon, 3);
+      const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel']);
+      // Special-biased like the rest of this fixture, which every entry is at
+      // 84 Attack against 109 Special Attack. With all six stats equal `mon-7`
+      // reads as a *mixed* attacker, and once `monochromeOffense` existed that
+      // made the worthless member the only thing giving these otherwise
+      // all-special lines a second angle of attack — so the roster wanted it,
+      // and this test failed for a reason that was entirely an artifact of the
+      // fixture. The stats are still one and two: it is as bad as it ever was,
+      // and now it is bad without also being the team's only physical option.
+      const weakStats = {
+        hp: 1, attack: 1, defense: 1, 'special-attack': 2, 'special-defense': 1, speed: 1
+      };
+      scan[7] = pokemon('mon-7', {
+        typeName: 'steel',
+        types: ['steel'],
+        stats: weakStats,
+        baseStats: weakStats,
+        statsTotal: 7,
+        normalizedDamageToScore: 0,
+        normalizedDamageFromScore: 0
+      });
+
+      for (let option = 0; option < 8; option++) {
+        builder.fillRemainingSlots(scan, scan);
+        expect(roster.value.map((member) => member.name)).not.toContain('mon-7');
+      }
+    });
+
+    it('preserves a locked member selected ability across alternatives', () => {
+      addPokemon(pokemon('mon-0'), 'blaze');
+      addPokemon(pokemon('mon-1', { typeName: 'water', types: ['water'] }));
+      addPokemon(pokemon('mon-2', { typeName: 'grass', types: ['grass'] }));
+      const scan = scanOf([
+        'fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel', 'psychic', 'flying'
+      ]);
+
+      builder.fillRemainingSlots(scan, scan);
+      builder.fillRemainingSlots(scan, scan);
+
+      const locked = roster.value.find((member) => member.name === 'mon-0');
+      expect(locked?.abilityName).toBe('blaze');
+      expect(locked?.weaknesses).toEqual(['water', 'rock', 'ground']);
+      expect(locked?.immunities).toEqual([]);
     });
 
     // The seed used to drop anything the scan could not resolve, and
@@ -325,6 +473,178 @@ describe('useTeamBuilder', () => {
         type: 'error',
         message: expect.stringContaining('mon-0')
       });
+    });
+  });
+
+  describe('generation exclusions', () => {
+    const scanOf = (types: string[]) =>
+      types.map((type, index) => pokemon(`mon-${index}`, { typeName: type, types: [type] }));
+
+    it('toggles a Pokemon form in the generation pool', () => {
+      expect(builder.isExcludedFromGeneration('feraligatr')).toBe(false);
+
+      builder.toggleGenerationExclusion('feraligatr');
+
+      expect(builder.isExcludedFromGeneration('feraligatr')).toBe(true);
+      expect(builder.excludedPokemonNames.value).toEqual(['feraligatr']);
+
+      builder.toggleGenerationExclusion('feraligatr');
+      expect(builder.isExcludedFromGeneration('feraligatr')).toBe(false);
+    });
+
+    it('keeps excluded Pokemon out of a generated roster', () => {
+      const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark']);
+      builder.toggleGenerationExclusion('mon-0');
+
+      builder.generateFullTeam(scan);
+
+      expect(roster.value).toHaveLength(6);
+      expect(roster.value.map((member) => member.name)).not.toContain('mon-0');
+    });
+
+    it('keeps an excluded registered Pokemon while filling around it', () => {
+      const scan = scanOf(['fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark']);
+      addPokemon(scan[0]);
+      addPokemon(scan[1]);
+      addPokemon(scan[2]);
+      builder.toggleGenerationExclusion('mon-0');
+      builder.toggleGenerationExclusion('mon-6');
+
+      builder.fillRemainingSlots(scan, scan);
+
+      expect(roster.value.map((member) => member.name)).toContain('mon-0');
+      expect(roster.value.map((member) => member.name)).not.toContain('mon-6');
+    });
+
+    it('can replace a generated Pokemon immediately after excluding it', () => {
+      const scan = scanOf([
+        'fire', 'water', 'grass', 'electric', 'ice', 'rock', 'dark', 'steel', 'psychic', 'flying'
+      ]);
+      addPokemon(scan[0]);
+      addPokemon(scan[1]);
+      addPokemon(scan[2]);
+      const locked = roster.value.map((member) => member.name);
+      builder.fillRemainingSlots(scan, scan);
+      const generated = roster.value.find((member) => !locked.includes(member.name))!;
+
+      builder.toggleGenerationExclusion(generated.name);
+
+      expect(builder.canTryAnotherRoster.value).toBe(true);
+      builder.fillRemainingSlots(scan, scan);
+      expect(roster.value.map((member) => member.name)).toEqual(expect.arrayContaining(locked));
+      expect(roster.value.map((member) => member.name)).not.toContain(generated.name);
+    });
+  });
+
+  describe('workspace state', () => {
+    it('distinguishes bring edits from roster membership edits', () => {
+      fillRoster(addPokemon, 4);
+      const teamRevision = builder.teamEditRevision.value;
+      const rosterRevision = builder.rosterEditRevision.value;
+
+      builder.toggleBring(builder.bringIndices.value[0]);
+
+      expect(builder.teamEditRevision.value).toBe(teamRevision + 1);
+      expect(builder.rosterEditRevision.value).toBe(rosterRevision);
+
+      addPokemon(pokemon('fifth', { typeName: 'dark', types: ['dark'] }));
+      expect(builder.rosterEditRevision.value).toBe(rosterRevision + 1);
+    });
+
+    it('atomically restores and snapshots identifiers and user choices', () => {
+      const scan = [
+        pokemon('charizard', { typeName: 'fire', types: ['fire'] }),
+        pokemon('blastoise', { typeName: 'water', types: ['water'] }),
+        pokemon('venusaur', { typeName: 'grass', types: ['grass'] })
+      ];
+
+      const result = builder.restoreTeam({
+        format: 'singles',
+        roster: [
+          { pokemon: 'charizard', ability: 'blaze' },
+          { pokemon: 'blastoise', ability: 'levitate' },
+          { pokemon: 'venusaur', ability: null }
+        ],
+        bring: ['charizard', 'venusaur'],
+        excluded: ['incineroar']
+      }, scan);
+
+      expect(result).toEqual({ unavailablePokemon: [], unavailableAbilities: [] });
+      expect(roster.value.map((member) => member.abilityName)).toEqual(['blaze', 'levitate', 'levitate']);
+      expect(builder.snapshotTeam()).toEqual({
+        format: 'singles',
+        roster: [
+          { pokemon: 'charizard', ability: 'blaze' },
+          { pokemon: 'blastoise', ability: 'levitate' },
+          { pokemon: 'venusaur', ability: 'levitate' }
+        ],
+        bring: ['charizard', 'venusaur'],
+        excluded: ['incineroar']
+      });
+    });
+
+    it('reports unavailable Pokemon and abilities rather than substituting them', () => {
+      const result = builder.restoreTeam({
+        format: 'doubles',
+        roster: [
+          { pokemon: 'charizard', ability: 'missing-ability' },
+          { pokemon: 'missing-pokemon', ability: null }
+        ],
+        bring: null,
+        excluded: []
+      }, [pokemon('charizard')]);
+
+      expect(roster.value.map((member) => member.name)).toEqual(['charizard']);
+      expect(roster.value[0].abilityName).toBe('levitate');
+      expect(result).toEqual({
+        unavailablePokemon: ['missing-pokemon'],
+        unavailableAbilities: ['charizard: missing-ability']
+      });
+    });
+  });
+
+  describe('scan reconciliation', () => {
+    it('refreshes registered Pokemon from the latest scan while preserving their ability', () => {
+      addPokemon(pokemon('charizard'), 'blaze');
+      const refreshedStats = { ...stats, attack: 120 };
+
+      builder.reconcileRoster([
+        pokemon('charizard', { stats: refreshedStats, baseStats: refreshedStats })
+      ]);
+
+      expect(roster.value[0].abilityName).toBe('blaze');
+      expect(roster.value[0].stats.attack).toBe(120);
+      expect(builder.unavailableRosterNames.value).toEqual([]);
+    });
+
+    it('retains unavailable registrations but suspends their scoring and analysis', () => {
+      const scan = ['fire', 'water', 'grass', 'electric'].map((type, index) =>
+        pokemon(`mon-${index}`, { typeName: type, types: [type] })
+      );
+      scan.forEach((entry) => addPokemon(entry));
+      expect(builder.rosterEvaluation.value.best).not.toBeNull();
+
+      builder.reconcileRoster(scan.slice(0, 3));
+
+      expect(roster.value.map((member) => member.name)).toEqual(scan.map((entry) => entry.name));
+      expect(builder.unavailableRosterNames.value).toEqual(['mon-3']);
+      expect(builder.rosterEvaluation.value.best).toBeNull();
+      expect(builder.bringIndices.value).toEqual([]);
+      expect(builder.teamWeaknessSummary.value).toEqual({});
+    });
+
+    it('resumes scoring when a later scan contains every registration again', () => {
+      const scan = ['fire', 'water', 'grass', 'electric'].map((type, index) =>
+        pokemon(`mon-${index}`, { typeName: type, types: [type] })
+      );
+      scan.forEach((entry) => addPokemon(entry));
+      builder.reconcileRoster(scan.slice(0, 3));
+
+      builder.reconcileRoster(scan);
+
+      expect(builder.unavailableRosterNames.value).toEqual([]);
+      expect(builder.rosterEvaluation.value.best).not.toBeNull();
+      expect(builder.bringIndices.value).toHaveLength(4);
     });
   });
 

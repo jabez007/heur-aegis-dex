@@ -20,9 +20,8 @@ describe('UNBREEDABLE_FORMS', () => {
   });
 
   it('names species that are actually legal', () => {
-    const legal = REGULATIONS.find((regulation) => regulation.id === 'M-B')!.legalSpecies;
     UNBREEDABLE_FORMS.forEach((rule) => {
-      expect(legal.has(rule.species)).toBe(true);
+      expect(REGULATIONS.some((regulation) => regulation.legalSpecies.has(rule.species))).toBe(true);
     });
   });
 

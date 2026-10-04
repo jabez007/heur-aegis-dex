@@ -12,11 +12,21 @@
  * Three constraints survive that. No duplicate species, which is a rule of the
  * format. No two members on the same type combination, which is not — you may
  * register two Steel/Dragons — but which a *generated* roster should not spend a
- * slot on. And a budget on how often the roster repeats any single elemental
- * type, searched strictest-first so a repeat is spent only when nothing cleaner
- * fits. See `typingKey` and `countTypeOverlap` for why the synergy penalties
- * alone did not settle either. All three bind generation only; a hand-built
- * roster is scored as it is.
+ * slot on. And a budget on how often the roster repeats a weakness *nothing on
+ * it resists*, searched strictest-first so a repeat is spent only when nothing
+ * cleaner fits. All three bind generation only; a hand-built roster is scored as
+ * it is.
+ *
+ * That third constraint has been rewritten twice, and the pattern is worth
+ * naming because it will probably happen again. It began as `countTypeOverlap`,
+ * a budget on repeated elemental types. That was a proxy for repeated
+ * weaknesses, and wrong for 10.7% of type-sharing pairs. Repeated weaknesses
+ * were in turn a proxy for repeated *unanswered* weaknesses, and overstated the
+ * threat in 96% of generated rosters. Each stage measured the stand-in for the
+ * next one down. See `countTypeOverlap`, `countSharedWeaknesses` and
+ * `countUnansweredWeaknesses` — the first two are kept, unused by the search,
+ * because the reasoning that retired them is the reasoning that would retire
+ * this one.
  *
  * Like the type search this is a beam, not an exhaustive enumeration, and it
  * prunes twice over:
@@ -31,10 +41,18 @@
  * must not describe the result as optimal.
  */
 
+import { coverageBeyondStab } from './coverageMoves';
 import { evaluateRoster, scoreBring, type RosterEvaluation, type RosterMember } from './rosterScoring';
-import { scoreMemberQuality } from './teamScoring';
+import type { TypeMatchupValues } from './teamCoverage';
+import { MOVE_ROLE_CREDIT, offenseStatTerm, PRANKSTER_ROLE_CREDIT, scoreMemberQuality } from './teamScoring';
+import { getMoveSourcedRoles } from './utilityMoves';
 import { DEFAULT_BASE_SCORE } from './pokedexScoring';
-import { getAbilityEffect, getApplicableRoles, soloRoleValue } from './abilityRoles';
+import {
+  getAbilityEffect,
+  getApplicableRoles,
+  RELIABLE_STATUS_ABILITIES,
+  soloRoleValue
+} from './abilityRoles';
 import type { BattleFormat } from './battleFormats';
 import type { PokemonEntry } from './pokemonEntry';
 
@@ -132,6 +150,113 @@ export const CANDIDATE_WEIGHTS = {
    * invariant for anything under roughly 270 bulk — the frail Pokemon, where a
    * quadruple weakness is least survivable. Pinned at the weakest case instead.
    *
+   * ## Swept against real usage, and deliberately not raised
+   *
+   * This weight is the binding constraint on three separate corrections — move
+   * sourced support roles, Mirror Armor, and now weather abusers — each of which
+   * measured as real and then moved almost nothing, because a role is worth one
+   * point against a quality term spanning thirty. So it was swept directly,
+   * against the 166,311-battle usage table:
+   *
+   * | weight | vs usage | vs win | excadrill / mamoswine | grimmsnarl | rotom-wash |
+   * | ------ | -------- | ------ | --------------------- | ---------- | ---------- |
+   * | 0      | 0.245    | 0.262  | 27 / 17               | 77         | 170        |
+   * | **1**  | 0.249    | 0.259  | 30 / 21               | 81         | 176        |
+   * | 3      | 0.268    | 0.261  | 28 / **29**           | 88         | 178        |
+   * | 8      | 0.289    | 0.259  | 27 / 40               | 111        | 191        |
+   *
+   * Raising it would fix the case that prompted the sweep: Excadrill passes
+   * Mamoswine at 3, matching the tier lists that put them at B and C. Usage
+   * correlation climbs the whole way.
+   *
+   * It is not raised, for three reasons that only mean anything together. The
+   * climb has no peak, which usually means a term is picking up a correlate
+   * rather than a cause — here, that support Pokemon are heavily played in
+   * doubles. Win rate is flat across the entire sweep, so the one target not
+   * compressed by usage sees nothing. And most tellingly, **the Pokemon this was
+   * meant to rescue get worse**: Grimmsnarl and Rotom-Wash are 18th and 38th in
+   * the format, and both fall as the weight rises, because their support is
+   * Prankster, screens and Will-O-Wisp — none of which the model can see.
+   *
+   * That is the finding. Widening the channel amplifies the fraction of support
+   * the model knows and penalizes the rest, so more support has to be modelled
+   * *before* this weight is worth revisiting. Raising it now would buy a better
+   * correlation by making the two clearest errors on the board bigger.
+   *
+   * It would also break the invariant above: at 3 a role is worth roughly three
+   * times the quadruple-weakness charge on a frail Pokemon.
+   *
+   * ### Swept again once screens and status were modelled, and it changed shape
+   *
+   * The argument above predicted that the sweep misbehaved *because* most of
+   * support was invisible. Adding screens and status infliction tested that
+   * prediction directly, and it held:
+   *
+   * | weight | usage (before / after) | grimmsnarl | rotom-wash |
+   * | ------ | ---------------------- | ---------- | ---------- |
+   * | **1**  | 0.249 / 0.249          | 81 -> 77   | 176 -> 168 |
+   * | 4      | 0.271 / 0.263          | 92 -> 77   | 183 -> 162 |
+   * | 8      | 0.289 / 0.261          | 111 -> 74  | 191 -> 152 |
+   *
+   * Both objections are gone. Rotom-Wash now *improves* as the weight rises
+   * where it used to degrade, and the usage curve has a peak at 6 instead of
+   * climbing without one — the signature of a term measuring a cause rather than
+   * a correlate.
+   *
+   * It is still not raised, and the reason is now much narrower than before. At
+   * the peak the usage gain over 1 is 0.017, win rate is unchanged at 0.258
+   * against 0.260, and a weight of 6 is roughly six times the quadruple-weakness
+   * charge on a frail Pokemon. A documented invariant is not worth trading for
+   * 0.017 on the more compressed of two targets.
+   *
+   * ### Swept a third time with Prankster in, and the answer is no
+   *
+   * The last piece of support landed and the sweep was rerun. It does not need
+   * the invariant argued with, because the term does not earn the raise:
+   *
+   * | weight | vs usage | vs win rate |
+   * | ------ | -------- | ----------- |
+   * | 0      | 0.245    | **0.262**   |
+   * | **1**  | 0.250    | 0.260       |
+   * | 3      | 0.256    | 0.261       |
+   * | 6      | 0.263    | 0.250       |
+   * | 10     | 0.258    | 0.228       |
+   *
+   * The two targets now point in opposite directions. Usage peaks around 4 to 6
+   * and win rate declines steadily from 3 onward, losing more than it ever
+   * gained by 10. Raising this makes the ranking better at predicting what
+   * people *play* and worse at predicting what *wins*.
+   *
+   * Checking the term directly rather than through the composite says why, and
+   * it is the result that closes this line of work. Support-role count on its
+   * own correlates **-0.043 with usage and -0.104 with win rate**, and the group
+   * means fall monotonically:
+   *
+   * | roles filled | n  | mean usage | mean win rate |
+   * | ------------ | -- | ---------- | ------------- |
+   * | 0            |  9 | 7.78%      | 49.76%        |
+   * | 1            | 28 | 5.68%      | 49.23%        |
+   * | 2            | 30 | 5.39%      | 49.07%        |
+   * | 3            | 18 | 7.28%      | 49.02%        |
+   * | 4            |  5 | 1.86%      | 48.63%        |
+   *
+   * Filling more support roles predicts winning slightly *less*. The tail is thin
+   * and the win-rate column is compressed, so this is suggestive rather than
+   * settled — but there is no reading of it that argues for paying support more.
+   * Whatever lifts the usage correlation as the weight rises, it is not the
+   * support term predicting usage, because support does not predict usage either.
+   * The likeliest mechanism is that support Pokemon are slow and the speed term
+   * anti-correlates with win rate at -0.114, so weighting support partly cancels
+   * a different error. Fixing one error with another is not a calibration.
+   *
+   * ### And the two cases that started this were not both errors
+   *
+   * Grimmsnarl wins 49.76% and Rotom-Wash 48.68%, both below the field, while
+   * being played 18th and 38th. Ranking them low is defensible on performance and
+   * wrong only against popularity, which this tool does not claim to predict.
+   * Excadrill at 50.75% against Mamoswine's 48.60% is the real error in that pair
+   * — and it is an error about Sand Rush, now scored, not about this weight.
+   *
    * That the charge is *smaller* for frail Pokemon is a real quirk of routing it
    * through the bulk term, not a deliberate claim: it says a 4x weakness costs
    * less when there was less to lose. Defensible, since something that dies to a
@@ -145,14 +270,147 @@ export const CANDIDATE_WEIGHTS = {
    */
   supportRole: 1,
   /**
-   * Reachable coverage. A tiebreak: it says "can learn", never "would run".
+   * Reachable coverage *beyond STAB*. A tiebreak: it says "can learn", never
+   * "would run".
    *
-   * Not duplicated by anything, unlike the STAB `coverage` term that used to sit
-   * beside it: this comes from `getMoveCoverage` reading the Champions movepool,
-   * not from the type chart, and it is already read against the attacker's stats.
+   * ## The claim that used to be here was wrong
+   *
+   * It read: "Not duplicated by anything, unlike the STAB `coverage` term that
+   * used to sit beside it: this comes from `getMoveCoverage` reading the
+   * Champions movepool, not from the type chart." Both halves are true and the
+   * conclusion does not follow. The move tables include moves of the Pokemon's
+   * **own** types, so a Pokemon with a real STAB move reaches everything its
+   * typing reaches, plus more — and `normalizedDamageToScore` had already
+   * scored the first part inside the offence term.
+   *
+   * Measured by `npm run measure:ranking-terms`: **145 of the 146** entries in a
+   * default M-B view have their STAB coverage wholly inside their move coverage.
+   * So this was the same double count that removed the `coverage` weight below,
+   * arriving by a different route — through the movepool rather than off the
+   * chart, which is exactly why the note above thought it was safe.
+   *
+   * Now counts only `coverageBeyondStab`, the quantity `PokemonCard` was already
+   * displaying. The card had shown STAB coverage and extra coverage as separate
+   * rows since it was written; the ranking is what disagreed with it.
+   *
+   * ## The weight does not move, and that is the interesting part
+   *
+   * Subtracting shrinks every count — Mamoswine 16 -> 7, Excadrill 15 -> 8 —
+   * and the term's swing across the pool goes *up*, 2.20 points to 2.40, because
+   * what it removes is concentrated in the Pokemon whose typings already hit
+   * everything. The spread widens (p05 7 -> 3) while the top barely moves.
+   *
+   * The sign of what it measures flips, which is the real repair. Against the
+   * offensive typing score the raw count correlates at **+0.22** and the
+   * remainder at **-0.23**: a Pokemon whose STAB already covers the format has
+   * less left to gain from a coverage move, and that is the thing worth paying
+   * for. Correlation with STAB power falls from 0.36 to 0.15 over the same
+   * change.
+   *
+   * ## It is no longer stat-independent, and the pair that argued for that was
+   * the wrong pair
+   *
+   * The note here used to read: "Klefki reaching seven extra types off an 80
+   * Special Attack is paid at the same rate as Kingambit reaching seven." That
+   * example does not survive being looked up. Measured in Regulation M-B:
+   *
+   * | Pokemon   | attack stats | STAB reach | move reach | **extra** | paid |
+   * | Klefki    | 80 / 80      | 6          | 10         | **4**     | 0.80 |
+   * | Kingambit | 135 / 60     | 5          | 15         | **10**    | 2.00 |
+   *
+   * They are not paid the same rate; Kingambit is paid 2.5x more, and they sit
+   * 199 places apart. The sentence was carried word for word from the removed
+   * `coverage` weight below, where it was a claim about STAB `coverages` — and
+   * even there the numbers are 6 and 5, not seven and seven. It was a slogan
+   * that outlived its measurement. Kingambit is also not in the default view at
+   * all: Dark/Steel is 4x weak to Fighting, so the pair can only be seen side by
+   * side with the type filters opened.
+   *
+   * The **defect** it named is real; only its exemplars were wrong. The honest
+   * pair is Audino and Snorlax. Both reach 18 types beyond STAB — the widest in
+   * the pool, and the largest payment this term makes anywhere at 3.6 points —
+   * off offence terms of 0.119 and 0.512. Aegislash-Shield collects 2.2 points
+   * of reach on an offence term of 0.02.
+   *
+   * So the charge is now scaled by `offenseStatTerm`, through
+   * MOVE_COVERAGE_MODULATION. Reach that nothing can be done with is not a
+   * threat, which is the same argument that removed the `coverage` weight and
+   * the same argument behind the damage-class split in `coverageMoves.ts`.
+   *
+   * ## Why 0.26 rather than 0.2
+   *
+   * Modulating multiplies by a number below 1 for everyone but the very top of
+   * the offence range, so applying it at the old weight would have shrunk the
+   * term for the whole pool — a quiet weight cut wearing a repricing's clothes,
+   * which is the exact side effect that forced TYPE_MODULATION to be split into
+   * an offensive and a defensive half. The weight is raised to keep the term
+   * worth what it was worth to a *median* Pokemon, so the change rotates the
+   * term about the median instead of shrinking it: the p05-to-p95 swing of
+   * reach lands at 2.37 points against the 2.40 it was, and the term holds its
+   * 4.6% share of what decides the order. Measured, not derived: see the sweep
+   * in MOVE_COVERAGE_MODULATION.
    */
-  moveCoverage: 0.2
+  moveCoverage: 0.26
 } as const;
+
+/**
+ * How strongly `offenseStatTerm` modulates the reachable-coverage charge.
+ *
+ * Same shape as TYPE_MODULATION: `(1 - depth) + depth * term`, so 0 is the old
+ * stat-independent flat charge and 1 makes coverage worth literally nothing to
+ * a Pokemon at the floor of the offence range. Neither end is right. The floor
+ * is *pool-relative* — OBSERVED_STAT_TERMS.offense starts at 0.32 of the stat
+ * ceiling, so a term of 0 means "worst attacker in the format", not "cannot
+ * attack" — and a wall that can still click a super-effective move has done
+ * something, even if not much.
+ *
+ * Swept over the Regulation M-B pool with the type filters opened, 236 entries,
+ * on 2026-08-18. `rho(cov, offTyp)` is the anti-correlation the previous fix
+ * bought and this one must not spend: a Pokemon whose STAB already covers the
+ * format has less left to gain from a coverage move.
+ *
+ * | depth | rho(cov, offTerm) | rho(cov, offTyp) | Audino | Lopunny | Sinistcha |
+ * | 0.00  | 0.070             | **-0.308**       | 157    | 193     | 60        |
+ * | 0.30  | 0.204             | -0.287           | 164    | 199     | 59        |
+ * | 0.40  | 0.260             | -0.272           | 165    | 201     | 56        |
+ * | 0.50  | 0.320             | **-0.254**       | 169    | 202     | 55        |
+ * | 0.60  | 0.389             | -0.226           | 171    | 203     | 55        |
+ * | 0.75  | 0.501             | -0.175           | 177    | 205     | 55        |
+ * | 1.00  | 0.684             | **-0.070**       | 180    | 208     | 53        |
+ *
+ * The right-hand column is why this stops at 0.5. Past it the term starts
+ * turning back into a proxy for the offence stat and hands back the sign the
+ * double-count repair was worth doing for: at depth 1 the anti-correlation with
+ * offensive typing has almost vanished, which would leave the term measuring
+ * "is a good attacker" — something two other terms already measure — rather
+ * than "has reach its typing does not give it". 0.5 buys most of the
+ * stat-dependence for a fifth of that cost, and matches TYPE_MODULATION.defensive.
+ *
+ * ## What this is worth, which is not much, recorded so it is not overclaimed
+ *
+ * Top-20 churn in the default view is **zero** at every depth swept, and zero
+ * in the opened view too. The Pokemon this repricing demotes — Audino,
+ * Lopunny, Aegislash-Shield, Bastiodon, Pikachu — are almost all filtered out
+ * of the default browser view already, by the damage-from ceiling and the
+ * quadruple-weakness filter. The defect was real and is now fixed, but the
+ * product's own filters were already hiding most of it, and the correction is
+ * worth about ten places in the middle of an opened list.
+ *
+ * That is the honest size of it. It is recorded here rather than in a commit
+ * message because the next person tempted to reach for this term to fix a
+ * ranking they dislike should know it cannot move one.
+ *
+ * ## And it costs something, which is the reason to keep the depth low
+ *
+ * Premise alignment falls from 0.692 to **0.683**, top-20 overlap unchanged at
+ * 12/20. That is the expected direction and it is a real cost: attacking stat
+ * is not one of the three things the tool was built to find, so pricing any
+ * term by it pulls the order a little away from the premise order. The trade is
+ * taken because the alternative is a term that pays for threats that do not
+ * exist, and a premise score that rewards fictional threats is not measuring
+ * the premise either. It is also the second reason not to go deeper than 0.5.
+ */
+export const MOVE_COVERAGE_MODULATION = 0.5;
 
 // There is deliberately no `coverage` term in CANDIDATE_WEIGHTS.
 //
@@ -235,6 +493,8 @@ export interface GenerateRostersOptions {
   seed?: PokemonEntry[];
   /** Number of elemental types in play. */
   typeCount?: number;
+  /** What each type is worth in the metagame, for the synergy half of the score. */
+  typeValues?: TypeMatchupValues;
   /** Champions forbids duplicate Pokedex numbers, so this defaults to false. */
   allowDuplicateSpecies?: boolean;
   /**
@@ -244,8 +504,58 @@ export interface GenerateRostersOptions {
    * generated roster should not spend a slot on one. See TYPING_KEY below.
    */
   allowDuplicateTypings?: boolean;
+  /**
+   * Unanswered shared weaknesses allowed *above* the fewest the pool can manage.
+   * Defaults to `DEFAULT_UNANSWERED_WEAKNESS_SLACK`, which is 0.
+   *
+   * Expressed as slack rather than an absolute budget because the floor depends
+   * on the pool: a user filtered down to Steel and Dragon cannot reach zero on
+   * the raw count, and an absolute cap would either fail there or be vacuous on
+   * the full roster. Raising this trades defensive tidiness for the individual
+   * quality of the members.
+   */
+  unansweredWeaknessSlack?: number;
   candidateLimit?: number;
 }
+
+/**
+ * How much unanswered redundancy the generator will accept for a better roster.
+ *
+ * Zero, and the reason it can afford to be is that the constraint became almost
+ * free once it stopped counting weaknesses the roster already covers:
+ *
+ * | slack | doubles | singles |
+ * | ----- | ------- | ------- |
+ * | 0     | 89.70   | 90.48   |
+ * | 1     | 89.79   | 90.48   |
+ * | 2     | 89.79   | 90.48   |
+ * | none  | 89.79   | 90.48   |
+ *
+ * Strict costs **0.09 points in doubles and nothing at all in singles**, where
+ * the singles roster the generator picks *is* the unconstrained optimum. There
+ * is no purity to buy: a roster with no unanswered redundancy is simply also the
+ * best roster.
+ *
+ * ## Why this was briefly 2
+ *
+ * The same table against `countSharedWeaknesses` read 88.88 / 88.56 at strict,
+ * against 89.79 / 90.48 unconstrained — 0.91 and 1.92 points, which is a lot on
+ * a scale where every weight in this model carries less uncertainty than that.
+ * A default of 2 was the right answer to that measurement.
+ *
+ * The measurement was the problem. Nearly all of that cost was being charged for
+ * shared weaknesses the roster *answered*, and once the count dropped them the
+ * justification for slack went with it. The singles roster at strict carries
+ * four shared weaknesses and a repeated type, every one of them covered by a
+ * teammate; the previous rule refused it and charged 1.92 points to do so.
+ *
+ * The knob is kept because the floor mechanism still needs it and a user may
+ * reasonably want to trade defensive tidiness for individual quality. It is
+ * simply no longer paying for anything by default.
+ *
+ * Measured 2026-08-13 over the app's default candidate pool.
+ */
+export const DEFAULT_UNANSWERED_WEAKNESS_SLACK = 0;
 
 /**
  * Identity used to keep a generated roster off the same typing twice.
@@ -343,6 +653,157 @@ export function countTypeOverlap(roster: { types: string[] }[]): number {
   return [...counts.values()].reduce((total, count) => total + count - 1, 0);
 }
 
+/**
+ * How many times a roster repeats a weakness.
+ *
+ * Same shape as `countTypeOverlap` and the same rules — counted per repetition,
+ * so a third member weak to Ground costs again, and it binds generation only and
+ * enters no score. It replaces that function in the search, and the reason is
+ * that `countTypeOverlap` was a *proxy* for this.
+ *
+ * ## Why measure the thing rather than the stand-in
+ *
+ * The proxy is good. Across the legal pool, pairs sharing an elemental type
+ * average 1.86 shared weaknesses against 0.48 for pairs that share none. But it
+ * is wrong in both directions, and the errors are not rare:
+ *
+ * | pairs             | count  | mean shared | misclassified          |
+ * | ----------------- | ------ | ----------- | ---------------------- |
+ * | share a type      |  3,056 | 1.86        | 10.7% share *no* weakness |
+ * | share no type     | 18,472 | 0.48        |  7.5% share 2 or more  |
+ *
+ * The 10.7% is the expensive half: those are rosters the old rule refused to
+ * generate for no defensive reason at all. Steel/Dragon beside Ground/Steel is
+ * the case the doc above already named — both Steel, and they resist Fire
+ * differently, so the second type undoes the first.
+ *
+ * Measured 2026-08-13 over the 208 legal species of Regulation M-B in default
+ * form, using each Pokemon's *ability-adjusted* weaknesses. That last part is
+ * why the proxy has got slightly worse since it was chosen: the recorded figure
+ * was 8.9%, and it rose to 10.7% when the resist abilities moved into the damage
+ * relations. A Thick Fat Venusaur is no longer weak to Fire, and the typing it
+ * is derived from cannot know that. The direct measure improves as the model
+ * does; the proxy cannot.
+ *
+ * ## What this does not change
+ *
+ * Shared weaknesses are already charged by `scoreTeamSynergy`, and this must not
+ * become a second charge on the same property — the defect removed twice above,
+ * from the `coverage` and `quadrupleWeakness` terms. It is a constraint on what
+ * the generator will *suggest*, not an opinion about what a roster is worth. A
+ * user who builds one by hand still gets scored honestly.
+ *
+ * @param roster Members to inspect, carrying ability-adjusted weaknesses.
+ * @returns Total repetitions, 0 when no two members share a weakness.
+ */
+export function countSharedWeaknesses(roster: { weaknesses?: string[] }[]): number {
+  const counts = new Map<string, number>();
+  roster.forEach((member) => (member.weaknesses ?? []).forEach((weakness) => {
+    counts.set(weakness, (counts.get(weakness) ?? 0) + 1);
+  }));
+  return [...counts.values()].reduce((total, count) => total + count - 1, 0);
+}
+
+interface WeaknessProfile {
+  weaknesses?: string[];
+  /** Includes immunities: `createTypeSummary` builds this as the 0x, 0.25x and 0.5x buckets. */
+  resistances?: string[];
+}
+
+/**
+ * How many times a roster repeats a weakness *that nothing on it resists*.
+ *
+ * The measure the search actually constrains on, and the third step in a chain
+ * where each stage was a stand-in for the next. Repeated typings stood in for
+ * repeated weaknesses; repeated weaknesses stand in for this.
+ *
+ * Two members weak to Ground with a third resisting it is a hole somebody
+ * covers. Two members weak to Ground with nobody answering is how a game is
+ * lost, and only the second is worth spending budget on. `teamCoverage.ts` has
+ * said so all along — its `defensivelyUncoveredWeaknesses` is documented as "the
+ * types that actually threaten the team" — and the roster search was not reading
+ * it.
+ *
+ * The gap is not marginal. Across the top 200 generated rosters in each format,
+ * **96%** had a raw shared-weakness count that overstated the real threat, and
+ * the roster the generator picked in doubles counted 2 shared weaknesses of
+ * which **0** were unanswered. It was paying budget for redundancy that the
+ * roster already covered.
+ *
+ * Measured 2026-08-13 over the app's default candidate pool.
+ *
+ * ## Immunities need no special case
+ *
+ * `resistances` is the broad "takes reduced damage" set and already contains the
+ * 0x bucket, so a Levitate answer to Ground counts here without being named
+ * separately. That is the same set `resistanceBreadth` scores against.
+ *
+ * @param roster Members carrying ability-adjusted weaknesses and resistances.
+ * @returns Repetitions of unanswered weaknesses, 0 when every shared weakness
+ *   has someone to switch into.
+ */
+export function countUnansweredWeaknesses(roster: WeaknessProfile[]): number {
+  const counts = new Map<string, number>();
+  const answered = new Set<string>();
+  roster.forEach((member) => {
+    (member.weaknesses ?? []).forEach((weakness) => {
+      counts.set(weakness, (counts.get(weakness) ?? 0) + 1);
+    });
+    (member.resistances ?? []).forEach((resistance) => answered.add(resistance));
+  });
+
+  let total = 0;
+  counts.forEach((count, type) => {
+    if (!answered.has(type)) total += count - 1;
+  });
+  return total;
+}
+
+/**
+ * Lower bound on what `countUnansweredWeaknesses` can still fall to.
+ *
+ * Needed because that measure is **not prefix-monotone**: adding a member who
+ * resists Ground removes Ground from the tally entirely, so a partial roster
+ * over budget can still complete to one under it. `countSharedWeaknesses` had no
+ * such problem — adding a member could only ever raise it — and pruning the beam
+ * on the direct count would silently discard valid rosters.
+ *
+ * So the beam prunes on this instead. A repeated weakness counts against a
+ * partial only when *nothing left in the candidate pool* resists it, which makes
+ * the value a true lower bound on any completion: those types cannot be answered
+ * by anyone still available, and their counts only grow as members are added.
+ * Pruning when the bound exceeds the budget therefore cannot drop a roster that
+ * would have met it.
+ *
+ * The bound is loose early — with the whole pool remaining, almost every type is
+ * still answerable and the bound sits near zero — and tightens as the search
+ * consumes candidates. That is the right shape for a beam: permissive while
+ * options remain, decisive once they do not.
+ *
+ * @param roster Members chosen so far.
+ * @param answerableLater Types some remaining candidate still resists.
+ * @returns A count no completion of this roster can go below.
+ */
+function boundUnansweredWeaknesses(
+  roster: WeaknessProfile[],
+  answerableLater: ReadonlySet<string>
+): number {
+  const counts = new Map<string, number>();
+  const answered = new Set<string>();
+  roster.forEach((member) => {
+    (member.weaknesses ?? []).forEach((weakness) => {
+      counts.set(weakness, (counts.get(weakness) ?? 0) + 1);
+    });
+    (member.resistances ?? []).forEach((resistance) => answered.add(resistance));
+  });
+
+  let total = 0;
+  counts.forEach((count, type) => {
+    if (!answered.has(type) && !answerableLater.has(type)) total += count - 1;
+  });
+  return total;
+}
+
 export interface GeneratedRoster {
   members: PokemonEntry[];
   evaluation: RosterEvaluation;
@@ -383,10 +844,27 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
 
   // Scored in isolation, so a role that needs teammates to pay off earns less
   // than one that works the moment the Pokemon is on the field.
+  const applicable = getApplicableRoles(hasAlly);
   const effect = getAbilityEffect(entry.abilityName);
-  const roleValue = effect && getApplicableRoles(hasAlly).includes(effect.role)
-    ? soloRoleValue(effect.role)
-    : 0;
+  const abilityRole = effect && applicable.includes(effect.role) ? effect.role : undefined;
+
+  // A role the Pokemon can only reach with a move counts too, at a discount for
+  // the moveslot it costs. Without this the browser is blind to the Pokemon the
+  // format plays for their support: Corviknight is ranked on its attacking stat
+  // while it is brought for Tailwind, and Pelipper's Wide Guard is invisible.
+  // Roles the ability already supplies are not paid twice.
+  const moveRoleValue = getMoveSourcedRoles(entry.name)
+    .filter((role) => applicable.includes(role) && role !== abilityRole)
+    .reduce((total, role) => total + soloRoleValue(role), 0);
+
+  // Prankster makes those moves land, which is worth more than being able to
+  // learn them. It is the one ability whose whole value is *which* moves it
+  // accelerates, and the move tables are what finally made that computable.
+  const moveCredit = entry.abilityName && RELIABLE_STATUS_ABILITIES.has(entry.abilityName)
+    ? PRANKSTER_ROLE_CREDIT
+    : MOVE_ROLE_CREDIT;
+
+  const roleValue = soloRoleValue(abilityRole) + (moveCredit * moveRoleValue);
 
   // Stats modulated by typing, on the same terms the team scorer will use.
   // Resistances and weaknesses are not added separately: they are already what
@@ -395,45 +873,102 @@ export function candidatePriority(entry: PokemonEntry, options: { hasAlly?: bool
     stats: entry.stats,
     normalizedDamageToScore: entry.normalizedDamageToScore,
     normalizedDamageFromScore: entry.normalizedDamageFromScore,
-    abilityName: entry.abilityName
+    abilityName: entry.abilityName,
+    varietyName: entry.name
   });
+
+  // Only the reach STAB does not already have. The offence term inside
+  // `quality` scores STAB coverage through `normalizedDamageToScore`, and the
+  // move tables include moves of the Pokemon's own types, so the raw list
+  // charged for most of that a second time. See `coverageBeyondStab`.
+  const extraCoverage = coverageBeyondStab(entry.coverages, entry.moveCoverages);
+
+  // And priced by what could be done with it. A move that can be learned is
+  // only a threat if the Pokemon has an attacking stat to fire it off, so the
+  // charge is modulated by the same offence term `quality` is built on rather
+  // than paid flat. See MOVE_COVERAGE_MODULATION.
+  const reachValue = (1 - MOVE_COVERAGE_MODULATION) +
+    (MOVE_COVERAGE_MODULATION * offenseStatTerm(entry.stats, entry.abilityName));
 
   return (quality * w.quality) +
     (roleValue * w.supportRole) +
-    (entry.moveCoverages.length * w.moveCoverage);
+    (extraCoverage.length * w.moveCoverage * reachValue);
 }
 
 /**
  * Builds rosters from a Pokemon pool, ranked by the bring options they offer.
  *
- * Runs the search twice at most: once refusing to put two members on the same
- * type combination, and again without that constraint if the first pass could
- * not fill a roster. A narrow pool — a user filtering the browser down to a
- * handful of typings — must still get a roster rather than an error, and in that
+ * Two constraints bind the search, and neither enters a score. No two members
+ * on the same type combination, and no more shared weaknesses than the pool's
+ * own floor plus `unansweredWeaknessSlack`.
+ *
+ * A narrow pool — a user filtering the browser down to a handful of typings —
+ * must still get a roster rather than an error, so the floor is measured against
+ * that pool and the typing rule is dropped entirely if it cannot be met. In that
  * case doubling up is the honest answer rather than a failure.
  *
- * @param options Pool, format, roster size, seed and pruning limits.
+ * Costs between two and about five beam searches: one unconstrained to bound the
+ * bisection, log₂ of the floor to find it, and one at the loosened budget unless
+ * the unconstrained best already fits.
+ *
+ * @param options Pool, format, roster size, seed, slack and pruning limits.
  * @returns Rosters ordered by score, best first. May be empty.
  */
 export function generateRosters(options: GenerateRostersOptions): GeneratedRoster[] {
   if (options.allowDuplicateTypings) return searchRosters(options, true, Infinity);
 
-  // Strictest first, loosening one repetition at a time. A roster of six can
-  // repeat at most twelve types, and the unconstrained pass after the loop
-  // covers the case where the typing rule rather than the overlap budget is
-  // what cannot be met.
-  const rosterSize = options.rosterSize ?? options.format.maxRosterSize;
-  for (let budget = 0; budget <= rosterSize * 2; budget++) {
-    const found = searchRosters(options, false, budget);
-    if (found.length > 0) return found;
+  // Find the strictest budget the pool can meet, then spend `slack` above it.
+  //
+  // The floor has to be discovered rather than assumed, because it depends
+  // entirely on the pool: the full roster reaches zero shared weaknesses, and a
+  // pool narrowed to Steel and Dragon cannot get below seven. An absolute budget
+  // would be vacuous on the first and impossible on the second.
+  //
+  // Bisection rather than a scan from zero. The old rule counted repeated
+  // *types* and could usually be satisfied at zero, so a linear scan stopped on
+  // its first attempt; repeated weaknesses need several steps, and each step is
+  // a full beam search. Feasibility is monotone in the budget — a roster valid
+  // at B is valid at B+1 — so bisection finds the same floor in log time. The
+  // upper bound is the unconstrained search: if that finds nothing, no budget
+  // will.
+  const relaxed = searchRosters(options, false, Infinity);
+  if (relaxed.length === 0) return searchRosters(options, true, Infinity);
+
+  const slack = options.unansweredWeaknessSlack ?? DEFAULT_UNANSWERED_WEAKNESS_SLACK;
+
+  let low = 0;
+  let high = countUnansweredWeaknesses(relaxed[0].members);
+  let floor = high;
+  let strictest = relaxed;
+
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const found = searchRosters(options, false, mid);
+    if (found.length > 0) {
+      strictest = found;
+      floor = countUnansweredWeaknesses(found[0].members);
+      high = floor;
+    } else {
+      low = mid + 1;
+    }
   }
-  return searchRosters(options, true, Infinity);
+
+  if (slack <= 0) return strictest;
+
+  // The unconstrained best already fits, so it is also the best within budget —
+  // higher budgets admit strictly more rosters. Saves the final search on the
+  // common case where the pool is wide enough that slack covers the gap.
+  const budget = floor + slack;
+  if (countUnansweredWeaknesses(relaxed[0].members) <= budget) return relaxed;
+
+  const loosened = searchRosters(options, false, budget);
+  return loosened.length > 0 ? loosened : strictest;
 }
 
 function searchRosters(
   options: GenerateRostersOptions,
   allowDuplicateTypings: boolean,
-  maxTypeOverlap: number
+  maxUnansweredWeaknesses: number
 ): GeneratedRoster[] {
   const {
     pokemon,
@@ -447,7 +982,7 @@ function searchRosters(
 
   if (rosterSize <= 0 || seed.length > rosterSize) return [];
 
-  const scoringOptions = { format, typeCount };
+  const scoringOptions = { format, typeCount, typeValues: options.typeValues };
   const seedNames = new Set(seed.map((entry) => entry.name));
   const seedSpecies = new Set(seed.map((entry) => entry.speciesName));
 
@@ -487,14 +1022,29 @@ function searchRosters(
     return key;
   };
 
-  const canAdd = (roster: PokemonEntry[], candidate: PokemonEntry): boolean => {
+  // Types some candidate at or after each index still resists, built back to
+  // front. `answerableLater[i]` is what the pool can still cover once the search
+  // has passed index i, and it is what keeps the pruning bound sound.
+  const answerableLater: Set<string>[] = new Array(candidates.length + 1);
+  answerableLater[candidates.length] = new Set();
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const next = new Set(answerableLater[i + 1]);
+    (candidates[i].resistances ?? []).forEach((resistance) => next.add(resistance));
+    answerableLater[i] = next;
+  }
+
+  const canAdd = (roster: PokemonEntry[], candidate: PokemonEntry, index: number): boolean => {
     if (roster.length >= rosterSize) return false;
     if (roster.some((member) => member.name === candidate.name)) return false;
     if (!allowDuplicateSpecies && roster.some((member) => member.speciesName === candidate.speciesName)) return false;
     // A seed that already doubles a typing keeps whatever the user chose; this
     // only stops the search from adding more of one.
     if (!allowDuplicateTypings && roster.some((member) => typing(member) === typing(candidate))) return false;
-    if (maxTypeOverlap !== Infinity && countTypeOverlap([...roster, candidate]) > maxTypeOverlap) return false;
+    // Pruned on the lower bound rather than the measure itself, because the
+    // measure can *fall* when a member is added. See boundUnansweredWeaknesses.
+    if (maxUnansweredWeaknesses !== Infinity
+      && boundUnansweredWeaknesses([...roster, candidate], answerableLater[index + 1])
+        > maxUnansweredWeaknesses) return false;
     return true;
   };
 
@@ -504,7 +1054,7 @@ function searchRosters(
     const remaining = candidates.length - index - 1;
     const expanded = partials.flatMap((roster) => {
       const branches = [roster];
-      if (canAdd(roster, candidate)) branches.push([...roster, candidate]);
+      if (canAdd(roster, candidate, index)) branches.push([...roster, candidate]);
       return branches;
     });
 
@@ -524,6 +1074,10 @@ function searchRosters(
 
   return partials
     .filter((roster) => roster.length === rosterSize)
+    // The beam pruned on a lower bound, which is deliberately permissive. Only a
+    // finished roster can be measured, so the real budget is enforced here.
+    .filter((roster) => maxUnansweredWeaknesses === Infinity
+      || countUnansweredWeaknesses(roster) <= maxUnansweredWeaknesses)
     .map((members) => {
       const evaluation = evaluateRoster(members.map(toRosterMember), scoringOptions);
       return { members, evaluation, score: evaluation.score };

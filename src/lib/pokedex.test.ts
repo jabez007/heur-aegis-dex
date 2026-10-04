@@ -1,5 +1,22 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { DEFAULT_STATS_FILTERS, __resetPokedexResourceCaches, getBaseTypes, getDualTypes, getResistantTypes } from './pokedex';
+import {
+  DEFAULT_STATS_FILTERS,
+  __resetPokedexResourceCaches,
+  getBaseTypes,
+  getDualTypes,
+  getResistantTypes,
+  hpAdjustedBulk
+} from './pokedexLive';
+import {
+  catalogTypeToPokemonType,
+  enrichCatalogVariety,
+  getCatalogResistantTypes
+} from './pokemonCatalogScan';
+import { damageFromScoreBounds, damageToScoreBounds } from './pokedexScoring';
+import { isResistantTypeResultList } from './pokedexTypes';
+import { UNIFORM_TYPE_THREAT } from './typeThreat';
+import { COVERAGE_MOVE_POKEDEX } from './coverageMoves';
+import type { PokemonCatalogV1 } from './pokemonCatalog';
 
 const mockState = vi.hoisted(() => ({
   duplicateCharmanderAcrossTypes: false,
@@ -7,6 +24,7 @@ const mockState = vi.hoisted(() => ({
   failPokemon4Once: false,
   /** Report species names that appear on the Regulation M-B roster. */
   useRegulationLegalSpecies: false,
+  regulationSpeciesName: null as string | null,
   /** Report every species as legendary, exercising the breedable-only filter. */
   treatSpeciesAsLegendary: false,
   /** Name the fire-type entry after a Pokemon present in the coverage-move table. */
@@ -23,6 +41,8 @@ const mockState = vi.hoisted(() => ({
   breakPalafinTrigger: false,
   /** Give the fire-type entry Azumarill's ability pair: Huge Power plus a defensive immunity. */
   useHugePower: false,
+  /** Give the entry mutually exclusive attack and defense stat abilities. */
+  useSplitStatAbilities: false,
   /** Give the fire-type entry a support ability alongside a filler and a type immunity. */
   useSupportAbility: false,
   /** Give the fire-type entry Skeledirge's pair: a filler first, a quality ability hidden. */
@@ -184,6 +204,7 @@ vi.mock('pokedex-promise-v2', () => {
             throw new Error('temporary pokemon fetch failure');
           }
           return {
+          is_default: true,
           types: [{ type: { name: 'fire' } }],
           sprites: { front_default: 'charmander.png' },
           stats: [
@@ -211,6 +232,11 @@ vi.mock('pokedex-promise-v2', () => {
                 { ability: { name: 'drought' }, is_hidden: false },
                 { ability: { name: 'flash-fire' }, is_hidden: true }
               ]
+              : mockState.useSplitStatAbilities
+                ? [
+                  { ability: { name: 'huge-power' }, is_hidden: false },
+                  { ability: { name: 'fur-coat' }, is_hidden: true }
+                ]
               : mockState.useHugePower
               // Azumarill's real pair: the stat ability, and a type immunity that
               // wins on defensive merit alone.
@@ -242,7 +268,7 @@ vi.mock('pokedex-promise-v2', () => {
           return {
           name: mockState.usePalafin
             ? 'palafin'
-            : (mockState.useRegulationLegalSpecies ? 'charizard' : 'charmander'),
+            : (mockState.regulationSpeciesName ?? (mockState.useRegulationLegalSpecies ? 'charizard' : 'charmander')),
           is_legendary: mockState.treatSpeciesAsLegendary,
           is_mythical: false,
           egg_groups: [{ name: 'monster' }],
@@ -257,6 +283,7 @@ vi.mock('pokedex-promise-v2', () => {
         }
         if (url.startsWith('/api/v2/pokemon/7/')) {
           return {
+          is_default: true,
           types: [{ type: { name: 'water' } }],
           sprites: { front_default: 'squirtle.png' },
           stats: [
@@ -311,7 +338,9 @@ vi.mock('pokedex-promise-v2', () => {
               { base_stat: 70, stat: { name: 'speed' } }
             ],
             abilities: [{ ability: { name: 'blaze' }, is_hidden: false }],
-            species: { url: `https://pokeapi.co/api/v2/pokemon-species/${id}/` }
+            species: {
+              url: `https://pokeapi.co/api/v2/pokemon-species/${id >= 10001 && id <= 10003 ? 4 : id}/`
+            }
           };
         }
 
@@ -339,6 +368,7 @@ beforeEach(() => {
   mockState.expandFireRoster = false;
   mockState.failPokemon4Once = false;
   mockState.useRegulationLegalSpecies = false;
+  mockState.regulationSpeciesName = null;
   mockState.treatSpeciesAsLegendary = false;
   mockState.useCoverageTableName = false;
   mockState.includeAlternateForms = false;
@@ -347,6 +377,7 @@ beforeEach(() => {
   mockState.usePalafin = false;
   mockState.breakPalafinTrigger = false;
   mockState.useHugePower = false;
+  mockState.useSplitStatAbilities = false;
   mockState.useSupportAbility = false;
   mockState.useQualityAbility = false;
   mockState.detailDelayMs = 0;
@@ -355,6 +386,148 @@ beforeEach(() => {
   mockState.activeDetailRequests = 0;
   mockState.maxActiveDetailRequests = 0;
 });
+
+const parityCatalog = () => ({
+  types: [
+    {
+      id: 10,
+      name: 'fire',
+      damageRelations: {
+        doubleDamageFrom: ['water', 'rock', 'ground'],
+        halfDamageFrom: ['fire', 'grass', 'bug'],
+        noDamageFrom: [],
+        doubleDamageTo: ['grass', 'bug'],
+        halfDamageTo: ['water', 'fire', 'rock'],
+        noDamageTo: []
+      }
+    },
+    {
+      id: 11,
+      name: 'water',
+      damageRelations: {
+        doubleDamageFrom: ['electric', 'grass'],
+        halfDamageFrom: ['water', 'fire', 'ice'],
+        noDamageFrom: [],
+        doubleDamageTo: ['fire', 'rock', 'ground'],
+        halfDamageTo: ['water', 'grass', 'dragon'],
+        noDamageTo: []
+      }
+    },
+    {
+      id: 12,
+      name: 'bug',
+      damageRelations: {
+        doubleDamageFrom: ['fire', 'flying', 'rock'],
+        halfDamageFrom: ['fighting', 'ground', 'grass'],
+        noDamageFrom: [],
+        doubleDamageTo: ['grass', 'psychic', 'dark'],
+        halfDamageTo: ['fire', 'fighting', 'poison', 'flying', 'ghost', 'steel', 'fairy'],
+        noDamageTo: []
+      }
+    },
+    {
+      id: 13,
+      name: 'steel',
+      damageRelations: {
+        doubleDamageFrom: ['fire', 'fighting', 'ground'],
+        halfDamageFrom: [
+          'normal', 'flying', 'rock', 'bug', 'steel', 'grass', 'psychic', 'ice', 'dragon', 'fairy'
+        ],
+        noDamageFrom: ['poison'],
+        doubleDamageTo: ['rock', 'ice', 'fairy'],
+        halfDamageTo: ['steel', 'fire', 'water', 'electric'],
+        noDamageTo: []
+      }
+    }
+  ],
+  species: [
+    {
+      id: 4,
+      name: 'charmander',
+      isLegendary: false,
+      isMythical: false,
+      eggGroups: ['monster'],
+      // In the game's Pokedex, or `getThreatPool` excludes them as unfaceable
+      // and the weighting this fixture exists to exercise falls back to uniform.
+      pokedexes: ['national', COVERAGE_MOVE_POKEDEX],
+      varietyNames: ['charmander']
+    },
+    {
+      id: 7,
+      name: 'squirtle',
+      isLegendary: false,
+      isMythical: false,
+      eggGroups: ['monster'],
+      pokedexes: ['national', COVERAGE_MOVE_POKEDEX],
+      varietyNames: ['squirtle']
+    }
+  ],
+  varieties: [
+    {
+      id: 4,
+      name: 'charmander',
+      speciesName: 'charmander',
+      isDefault: true,
+      types: ['fire'],
+      abilityStatus: 'known',
+      abilities: [
+        { slot: 1, name: 'blaze', isHidden: false },
+        { slot: 3, name: 'levitate', isHidden: true }
+      ],
+      stats: {
+        hp: 39,
+        attack: 52,
+        defense: 43,
+        'special-attack': 60,
+        'special-defense': 50,
+        speed: 65
+      },
+      sprite: 'charmander.png',
+      form: { isMega: false, isBattleOnly: false }
+    },
+    {
+      id: 7,
+      name: 'squirtle',
+      speciesName: 'squirtle',
+      isDefault: true,
+      types: ['water'],
+      abilityStatus: 'known',
+      abilities: [{ slot: 1, name: 'torrent', isHidden: false }],
+      stats: {
+        hp: 44,
+        attack: 48,
+        defense: 65,
+        'special-attack': 50,
+        'special-defense': 64,
+        speed: 43
+      },
+      sprite: 'squirtle.png',
+      form: { isMega: false, isBattleOnly: false }
+    }
+  ]
+}) as unknown as PokemonCatalogV1;
+
+const parityOptions = {
+  baseScore: 18,
+  typeFilters: {
+    maxDamageFromScore: false,
+    allowQuadrupleDamage: true,
+    limitQuadrupleDamage: false
+  },
+  pokemonFilters: {
+    inPokedex: 'national',
+    allowMegas: false,
+    includeAbilityImmunities: true,
+    includeMoveCoverage: true,
+    // Parity is asserted on the scoring both paths can express. The live path
+    // scores flat because it cannot measure a threat pool before it has fetched
+    // one — the reasoning is at the top of `getResistantTypes` in pokedexLive.ts
+    // — so comparing under weighting would compare a measurement against its
+    // absence and tell us nothing about acquisition.
+    weightByThreat: false
+  },
+  statsFilters: { minimumAttacks: 10, minimumBulk: 10 }
+} as const;
 
 describe('pokedex.js API integration logic', () => {
   it('getBaseTypes should calculate base type damage scores', async () => {
@@ -365,8 +538,18 @@ describe('pokedex.js API integration logic', () => {
     // base score(18) + double_from(3) - 0.5 * half_from(3) - no_from(0) = 19.5
     expect(fireType.damage_relations.damage_from_score).toBe(19.5);
     
-    // base score(18) + double_to(2) - 0.5 * half_to(3) - no_to(0) = 18.5
-    expect(fireType.damage_relations.damage_to_score).toBe(18.5);
+    // The offensive score no longer reads the `*_damage_to` buckets at all. It
+    // scores against a census of defenders, and resolves each matchup from the
+    // defender's `*_damage_from` — the same side of the chart the defensive
+    // score reads, so a typing's two scores can no longer disagree about what
+    // beats what. This mock is where that shows: its four types are the whole
+    // field, and its Fire entry lists `double_damage_to: [grass, bug]` while its
+    // Steel entry lists `double_damage_from: [fire, ...]`. Fire beats Steel by
+    // one direction of the fixture and not the other, and the old formula could
+    // only see the direction that was wrong.
+    //
+    // 18 + fire(-0.5) + water(-0.5) + bug(+1) + steel(+1) = 19
+    expect(fireType.damage_relations.damage_to_score).toBe(19);
   });
 
   it('getDualTypes should combine damage relations for dual typing', async () => {
@@ -394,6 +577,7 @@ describe('pokedex.js API integration logic', () => {
     });
 
     expect(Array.isArray(resistant)).toBe(true);
+    expect(isResistantTypeResultList(resistant)).toBe(true);
 
     const fireType = resistant.find(t => t.name === 'fire');
     expect(fireType).toBeDefined();
@@ -405,6 +589,66 @@ describe('pokedex.js API integration logic', () => {
     expect(waterType!.pokemon).toHaveLength(1);
     expect(waterType!.pokemon[0].pokemon.name).toBe('squirtle');
     expect(waterType!.pokemon[0].stats_total).toBe(44 + 48 + 65 + 50 + 64 + 43); // 314
+  });
+
+  it('produces the same canonical entry from equivalent live and catalog facts', async () => {
+    const live = await getResistantTypes(parityOptions);
+    const liveEntry = live.find((type) => type.name === 'fire')!.pokemon[0];
+    const catalog = parityCatalog();
+    const catalogType = catalogTypeToPokemonType(catalog.types[0], catalog, 18);
+    const catalogEntry = enrichCatalogVariety(
+      catalog,
+      catalog.varieties[0],
+      catalogType,
+      {},
+      {
+        baseScore: 18,
+        // A parity check between the live and catalog paths, so it wants the
+        // weighting both paths default to rather than a measured one.
+        threatWeights: UNIFORM_TYPE_THREAT,
+        damageFromBounds: damageFromScoreBounds(18),
+        damageToBounds: damageToScoreBounds(18),
+        inPokedex: 'national',
+        allowMegas: false,
+        includeAbilityImmunities: true,
+        includeMoveCoverage: true,
+        breedableOnly: true,
+        minimumAttacks: 10,
+        minimumBulk: 10
+      }
+    );
+
+    expect(catalogEntry).toEqual(liveEntry);
+  });
+
+  it('produces identical complete results from equivalent live and catalog facts', async () => {
+    const live = await getResistantTypes(parityOptions);
+    const fromCatalog = await getCatalogResistantTypes(parityCatalog(), parityOptions);
+
+    expect(fromCatalog).toEqual(live);
+  });
+
+  it('keeps live and catalog full scans aligned under every shared default', async () => {
+    // Every default except threat weighting, which the live path cannot measure.
+    const unweighted = { pokemonFilters: { weightByThreat: false } } as const;
+
+    expect(await getCatalogResistantTypes(parityCatalog(), unweighted))
+      .toEqual(await getResistantTypes(unweighted));
+  });
+
+  it('scores the catalog path against the metagame and the live path flat', async () => {
+    // The paths diverge by design, and the divergence is the feature: a catalog
+    // scan knows which species are legal and what they can attack with, so it
+    // prices a weakness by how exploitable it actually is. Asserting the gap
+    // exists stops the weighting being switched off by accident.
+    const [weighted, flat] = await Promise.all([
+      getCatalogResistantTypes(parityCatalog()),
+      getResistantTypes()
+    ]);
+
+    expect(weighted).not.toEqual(flat);
+    expect(weighted.map((type) => type.name).sort())
+      .toEqual(flat.map((type) => type.name).sort());
   });
 
   it('getResistantTypes should apply ability immunities by default', async () => {
@@ -528,12 +772,12 @@ describe('pokedex.js API integration logic', () => {
     expect(resistant.find(t => t.name === 'fire')!.pokemon[0].effective_move_coverages).toEqual([]);
   });
 
-  const scanWithAlternateForms = (allowMegas: boolean) => {
+  const scanWithAlternateForms = (allowMegas: boolean, regulation?: string) => {
     mockState.includeAlternateForms = true;
     return getResistantTypes({
       baseScore: 18,
       typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
-      pokemonFilters: { inPokedex: 'national', allowMegas, includeAbilityImmunities: true },
+      pokemonFilters: { inPokedex: 'national', allowMegas, includeAbilityImmunities: true, regulation },
       statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
     });
   };
@@ -593,6 +837,45 @@ describe('pokedex.js API integration logic', () => {
     expect(names).not.toContain('charmander-gmax');
   });
 
+  it('getResistantTypes should enforce a regulation verified Mega roster', async () => {
+    mockState.includeAlternateForms = true;
+    mockState.regulationSpeciesName = 'arcanine';
+
+    const resistant = await getResistantTypes({
+      baseScore: 18,
+      typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+      pokemonFilters: {
+        inPokedex: 'national',
+        allowMegas: true,
+        includeAbilityImmunities: true,
+        regulation: 'M-B'
+      },
+      statsFilters: { minimumStatsTotal: 100, minimumAttacks: 10, minimumDefenses: 10 }
+    });
+
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+    expect(names).toContain('charmander');
+    expect(names).not.toContain('charmander-mega');
+  });
+
+  it('getResistantTypes should keep Megas present in a verified regulation roster', async () => {
+    mockState.useRegulationLegalSpecies = true;
+
+    const resistant = await scanWithAlternateForms(true, 'M-B');
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+
+    expect(names).toContain('charmander-mega');
+  });
+
+  it('getResistantTypes should not treat an incomplete Mega roster as empty', async () => {
+    mockState.useRegulationLegalSpecies = true;
+
+    const resistant = await scanWithAlternateForms(true, 'M-A');
+    const names = resistant.find(t => t.name === 'fire')!.pokemon.map(p => p.pokemon.name);
+
+    expect(names).toContain('charmander-mega');
+  });
+
   it('getResistantTypes should not request a form for default varieties', async () => {
     await scanWithAlternateForms(false);
 
@@ -612,23 +895,25 @@ describe('pokedex.js API integration logic', () => {
     });
   };
 
-  it('getResistantTypes should rate a Pokemon on the form it fights in', async () => {
+  it('getResistantTypes should rate Palafin on its registered form', async () => {
     const entry = (await scanPalafin()).find(t => t.name === 'fire')!.pokemon[0];
 
-    // Identity stays with the registered form; only the numbers move.
+    // This asserted Hero's 160 Attack and 650 total until 2026-08-16. Reaching
+    // Hero costs a switch, and `battleForms.ts` condition 4 excludes forms that
+    // cost a turn — so nothing merges now and the registered numbers stand.
     expect(entry.pokemon.name).toBe('charmander');
     expect(entry.species_name).toBe('palafin');
-    expect(entry.battle_form_name).toBe('palafin-hero');
-    expect(entry.stats!.attack).toBe(160);
-    expect(entry.stats_total).toBe(650);
+    expect(entry.battle_form_name).toBeUndefined();
+    expect(entry.stats!.attack).toBe(52);
   });
 
-  it('getResistantTypes should apply stat floors to the fighting form', async () => {
-    // The registered Palafin-Zero form would fail this floor. Rating it there
-    // would drop from the scan a Pokemon that battles at 650.
+  it('getResistantTypes should apply stat floors to the registered form', async () => {
+    // The mirror of what this used to assert. Floors a battle form would clear
+    // and the registered form would not now exclude the Pokemon, which is the
+    // whole consequence of unmerging: you are filtered on what you register.
     const resistant = await scanPalafin({ minimumStatsTotal: 600, minimumAttacks: 150, minimumDefenses: 80 });
 
-    expect(resistant.find(t => t.name === 'fire')!.pokemon).toHaveLength(1);
+    expect(resistant.find(t => t.name === 'fire')!.pokemon).toHaveLength(0);
   });
 
   it('getResistantTypes should rate as registered when the trigger ability is absent', async () => {
@@ -652,54 +937,92 @@ describe('pokedex.js API integration logic', () => {
     expect(resistant.find(t => t.name === 'fire')!.pokemon[0].battle_form_name).toBeUndefined();
   });
 
-  // The mocked charmander is 39/52/43/60/50/65: best attack 60, average
-  // defenses 46.5. Squirtle is 44/48/65/50/64/43: best attack 50, defenses 64.5.
-  const scanWithFloors = (minimumAttacks: number, minimumDefenses: number) => getResistantTypes({
+  // The mocked Charmander is 39/52/43/60/50/65: best attack 60 and HP-adjusted
+  // effective bulk 42.6. Squirtle is 44/48/65/50/64/43: attack 50, bulk 53.3.
+  const scanWithFloors = (minimumAttacks: number, minimumBulk: number) => getResistantTypes({
     baseScore: 18,
     typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
     pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
-    statsFilters: { minimumStatsTotal: 100, minimumAttacks, minimumDefenses }
+    statsFilters: { minimumAttacks, minimumBulk }
   });
   const firePokemon = (result: Awaited<ReturnType<typeof getResistantTypes>>) =>
     result.find(t => t.name === 'fire')!.pokemon;
 
   describe('stat floors', () => {
-    it('keeps a Pokemon that clears the attack floor but not the defense floor', () => {
-      // The Excadrill case: elite because it is all offense. Requiring both
-      // floors rejected exactly the Pokemon that specialise.
-      return scanWithFloors(55, 90).then(r => expect(firePokemon(r)).toHaveLength(1));
+    it('defaults to an 80 attack floor and a 70 effective-bulk floor', () => {
+      expect(DEFAULT_STATS_FILTERS).toEqual({
+        minimumAttacks: 80,
+        minimumBulk: 70
+      });
     });
 
-    it('keeps a Pokemon that clears the defense floor but not the attack floor', () => {
-      // The Toxapex case, the same failure in the other direction.
-      return scanWithFloors(90, 40).then(r => expect(firePokemon(r)).toHaveLength(1));
+    it('factors HP into physical and special bulk', () => {
+      expect(hpAdjustedBulk({ hp: 70, defense: 70, 'special-defense': 70 })).toBe(70);
+      expect(hpAdjustedBulk({ hp: 60, defense: 60, 'special-defense': 75 })).toBeCloseTo(63.54, 2);
     });
 
-    it('rejects a Pokemon that clears neither', () => {
-      return scanWithFloors(90, 90).then(r => expect(firePokemon(r)).toHaveLength(0));
+    it('rejects a Pokemon that clears the attack floor but not the defense floor', () => {
+      return scanWithFloors(55, 90).then(r => expect(firePokemon(r)).toHaveLength(0));
     });
 
-    it('still applies the total floor on its own', () => {
-      // The total is a genuine conjunct: either/or applies only to the two
-      // stat floors, not to everything.
+    it('rejects a Pokemon that clears the defense floor but not the attack floor', () => {
+      return scanWithFloors(90, 40).then(r => expect(firePokemon(r)).toHaveLength(0));
+    });
+
+    it('keeps a Pokemon that reaches both floors', () => {
+      return scanWithFloors(60, 42).then(r => expect(firePokemon(r)).toHaveLength(1));
+    });
+
+    it('ignores the removed total-stat floor from legacy callers', () => {
       return getResistantTypes({
         baseScore: 18,
         typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
         pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
-        statsFilters: { minimumStatsTotal: 900, minimumAttacks: 1, minimumDefenses: 1 }
-      }).then(r => expect(firePokemon(r)).toHaveLength(0));
+        statsFilters: { minimumStatsTotal: 900, minimumAttacks: 1, minimumBulk: 1 }
+      }).then(r => expect(firePokemon(r)).toHaveLength(1));
+    });
+
+    it.each([true, false])(
+      'does not combine mutually exclusive stat abilities when immunities=%s',
+      async (includeAbilityImmunities) => {
+        mockState.useSplitStatAbilities = true;
+        const result = await getResistantTypes({
+          baseScore: 18,
+          typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+          pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities },
+          statsFilters: { minimumAttacks: 100, minimumBulk: 50 }
+        });
+
+        // Huge Power clears Attack but not Bulk; Fur Coat clears Bulk but not
+        // Attack. The Pokemon cannot use both abilities at once.
+        expect(firePokemon(result)).toHaveLength(0);
+      }
+    );
+
+    it('keeps all ability profiles when one profile clears both floors', async () => {
+      mockState.useSplitStatAbilities = true;
+      const result = await getResistantTypes({
+        baseScore: 18,
+        typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
+        pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true },
+        statsFilters: { minimumAttacks: 100, minimumBulk: 40 }
+      });
+      const entry = firePokemon(result)[0];
+
+      expect(Object.keys(entry.ability_profiles!)).toEqual(['huge-power', 'fur-coat']);
+      expect(entry.ability_profiles!['huge-power'].stats!.attack).toBe(104);
+      expect(entry.ability_profiles!['fur-coat'].stats!.defense).toBe(86);
     });
 
     it('defaults to DEFAULT_STATS_FILTERS when none are supplied', async () => {
-      // Charmander totals 309, under the 440 default, so an omitted
-      // statsFilters must not silently mean "no floors".
+      // Charmander misses both active defaults, so omitted statsFilters must
+      // not silently mean "no floors".
       const resistant = await getResistantTypes({
         baseScore: 18,
         typeFilters: { maxDamageFromScore: false, allowQuadrupleDamage: true, limitQuadrupleDamage: false },
         pokemonFilters: { inPokedex: 'national', allowMegas: false, includeAbilityImmunities: true }
       });
 
-      expect(DEFAULT_STATS_FILTERS.minimumStatsTotal).toBe(440);
       expect(firePokemon(resistant)).toHaveLength(0);
     });
   });
@@ -796,34 +1119,24 @@ describe('pokedex.js API integration logic', () => {
     expect(entry.selected_ability_name).toBe('unaware');
   });
 
-  it('getResistantTypes should fetch a battle form inside the concurrency budget', async () => {
-    // Enough entries that the prefetch cannot drain in a single wave, so there
-    // are provably later requests to compare against.
+  it('getResistantTypes should not fetch a battle form nothing merges', async () => {
+    // These two asserted that a merged form was fetched inside the concurrency
+    // budget and fetched only once. With the whitelist empty there is no merged
+    // form to fetch, so the claim worth keeping is the inverse: an unmerged
+    // battle form must cost no request at all. A scan that started fetching
+    // Palafin-Hero again would be doing work for a form it will not score.
     mockState.expandFireRoster = true;
     await scanPalafin();
 
-    const order = mockState.requestOrder;
-    const battleFormIndex = order.indexOf('/api/v2/pokemon/9000/');
-    expect(battleFormIndex).toBeGreaterThanOrEqual(0);
-
-    // The prefetch warms every detail request under mapWithConcurrency, and
-    // processPokemon then issues none of its own. A battle form resolved lazily
-    // instead would be the *last* detail request of the whole scan, since by
-    // then everything else is cached — so the presence of later ones is the
-    // signal that this fetch happened inside the budget.
-    const laterDetailRequests = order
-      .slice(battleFormIndex + 1)
-      .filter((url) => url.startsWith('/api/v2/pokemon'));
-
-    expect(laterDetailRequests.length).toBeGreaterThan(0);
+    expect(mockState.requestOrder).not.toContain('/api/v2/pokemon/9000/');
     expect(mockState.maxActiveDetailRequests).toBeLessThanOrEqual(12);
   });
 
-  it('getResistantTypes should fetch a battle form once across every typing', async () => {
+  it('getResistantTypes should not fetch an unmerged battle form for any typing', async () => {
     mockState.duplicateCharmanderAcrossTypes = true;
     await scanPalafin();
 
-    expect(mockState.requestCounts.get('/api/v2/pokemon/9000/')).toBe(1);
+    expect(mockState.requestCounts.get('/api/v2/pokemon/9000/')).toBeUndefined();
   });
 
   it('getResistantTypes should dedupe repeated pokemon and species detail fetches', async () => {

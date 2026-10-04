@@ -7,8 +7,11 @@ import {
   MEMBER_WEIGHTS,
   SYNERGY_BONUS_WEIGHTS_BY_FORMAT,
   composeTeamScore,
+  getTeamSynergyBreakdown,
+  offenseStatTerm,
   scoreMemberQuality,
-  scoreTeamSynergy
+  scoreTeamSynergy,
+  TYPE_MODULATION
 } from './teamScoring';
 import { normalizeDamageFromScore, normalizeDamageToScore } from './pokedexScoring';
 
@@ -44,6 +47,30 @@ describe('teamScoring weights', () => {
   });
 });
 
+describe('offenseStatTerm', () => {
+  it('is the same number the offence term inside member quality uses', () => {
+    // `candidatePriority` prices reachable coverage by this, so if the two ever
+    // came apart the ranking would contradict the quality score it is built on.
+    // Bulk and Speed are held at zero so the remaining quality is the offence
+    // term alone, times its weight: the typing modulator is 1 at a perfect
+    // offensive score, and an unknown variety scores full firepower.
+    const stats = statsOf({ hp: 1, attack: 150, defense: 1, 'special-attack': 40, 'special-defense': 1, speed: 0 });
+    const quality = scoreMemberQuality({
+      stats,
+      normalizedDamageToScore: 1,
+      normalizedDamageFromScore: 1
+    });
+
+    expect(offenseStatTerm(stats)).toBeCloseTo(quality / MEMBER_WEIGHTS.offense, 10);
+  });
+
+  it('reads the ability, because some abilities change what a stat line is worth', () => {
+    const stats = statsOf({ hp: 90, attack: 120, defense: 90, 'special-attack': 60, 'special-defense': 90, speed: 80 });
+
+    expect(offenseStatTerm(stats, 'purifying-salt')).toBeGreaterThan(offenseStatTerm(stats));
+  });
+});
+
 describe('scoreMemberQuality', () => {
   it('returns a value within 0..1 even for stats above the ceilings', () => {
     const quality = scoreMemberQuality({
@@ -57,13 +84,75 @@ describe('scoreMemberQuality', () => {
   });
 
   it('discounts rather than erases stats behind a poor typing', () => {
+    // Relitigated 2026-08-18. This asserted `badTyping > goodTyping * 0.5` on a
+    // single synthetic stat line, and that expression was wrong in four ways at
+    // once — enough that it had become the binding constraint on
+    // TYPE_MODULATION.defensive while measuring almost nothing about it.
+    //
+    // 1. **It depended entirely on the stat line.** At the shipping constants
+    //    the fixture's balanced 80/100/90/100/90/80 reads 0.5231 and passes,
+    //    while an ordinary wall (100/60/130/60/130/50) reads 0.4406 and an
+    //    ordinary blob (130/70/110/70/110/40) reads 0.4417 — both "fail". That
+    //    is not the model erasing anything; it is the model working. A wall's
+    //    quality is mostly its bulk term, defensive typing is what modulates
+    //    the bulk term, so a wall loses proportionally more to a bad typing
+    //    than a fast frail attacker does (0.6178). The guard was reporting a
+    //    property of `statsOf()`.
+    // 2. **It confounded the two constants that were split apart to be reasoned
+    //    about separately.** Flipping both axes at once, the offensive half
+    //    contributes 0.856 and the defensive half 0.667. A change to
+    //    TYPE_MODULATION.offensive moved a guard that was being read as a
+    //    statement about the defensive one.
+    // 3. **It scored nominal corners.** damage-from of exactly 1 and damage-to
+    //    of exactly 0, which is the same unanchored-absolute mistake
+    //    OBSERVED_STAT_TERMS exists to record.
+    // 4. **The corner it scored is unoccupied.** Both axes do reach their
+    //    extremes separately — Aurorus and Avalugg-Hisui sit at damage-from
+    //    1.000, Snorlax and the mono-Normals at damage-to 0.000 — but nothing
+    //    is bad at both. The nearest real Pokemon to (0, 1) is Garganacl, at a
+    //    distance of 0.540 across a diagonal of 1.414.
+    //
+    // What survives is the structural claim, which needs no threshold because
+    // the form of the expression guarantees it: `(1 - depth) + depth * quality`
+    // is bounded below by `1 - depth`, so a typing scales a term and can never
+    // gate it. That is worth asserting directly, per axis, rather than inferring
+    // it from a ratio of two composite scores.
     const stats = statsOf();
-    const goodTyping = scoreMemberQuality({ stats, normalizedDamageToScore: 1, normalizedDamageFromScore: 0 });
-    const badTyping = scoreMemberQuality({ stats, normalizedDamageToScore: 0, normalizedDamageFromScore: 1 });
+    const q = (to: number, from: number) => scoreMemberQuality({
+      stats, normalizedDamageToScore: to, normalizedDamageFromScore: from
+    });
 
-    expect(badTyping).toBeLessThan(goodTyping);
-    // A bad typing must not zero out the member's stats entirely.
-    expect(badTyping).toBeGreaterThan(goodTyping * 0.5);
+    expect(q(0, 1)).toBeLessThan(q(1, 0));
+
+    // Each depth stays a discount rather than a gate. At 1 the modulator would
+    // reach zero and the worst typing on that axis would erase the term it
+    // scales outright, which is the thing the name of this test is about.
+    expect(TYPE_MODULATION.offensive).toBeLessThan(1);
+    expect(TYPE_MODULATION.defensive).toBeLessThan(1);
+
+    // And each axis leaves the other alone, which is what splitting the constant
+    // bought and what the old joint expression could not see.
+    expect(q(0, 0)).toBeLessThan(q(1, 0));
+    expect(q(1, 1)).toBeLessThan(q(1, 0));
+
+    // The substantive question the 0.5 was reaching for — how much may typing
+    // decide relative to the stats it modulates — is a question about the pool
+    // and cannot be answered by a synthetic stat line at all. It is asserted in
+    // `scoringValidation.test.ts`, against real Pokemon, per axis.
+  });
+
+  it('does not treat low HP and high defenses as equivalent durable bulk', () => {
+    const quality = (stats: ReturnType<typeof statsOf>) => scoreMemberQuality({
+      stats,
+      normalizedDamageToScore: 0.5,
+      normalizedDamageFromScore: 0.5
+    });
+
+    const lowHp = statsOf({ hp: 40, defense: 85, 'special-defense': 85 });
+    const balanced = statsOf({ hp: 70, defense: 70, 'special-defense': 70 });
+
+    // Both additive lines total 210; effective durability is about 58 vs 70.
+    expect(quality(balanced)).toBeGreaterThan(quality(lowHp));
   });
 });
 
@@ -75,6 +164,91 @@ describe('scoreTeamSynergy', () => {
       teamSize: members.length,
       typeCount: 18
     });
+
+  describe('monochromeOffense', () => {
+    // Deliberately past MIXED_ATTACKER_RATIO in both directions, so these are
+    // classified rather than borderline.
+    const physical = { hp: 80, attack: 130, defense: 80, 'special-attack': 50, 'special-defense': 80, speed: 80 };
+    const special = { hp: 80, attack: 50, defense: 80, 'special-attack': 130, 'special-defense': 80, speed: 80 };
+    const mixed = { hp: 80, attack: 100, defense: 80, 'special-attack': 100, 'special-defense': 80, speed: 80 };
+    const member = { weaknesses: [], resistances: ['fire'], coverages: ['rock'] };
+
+    const scoreWith = (memberStats: (typeof physical)[], format = BATTLE_FORMATS.singles) => {
+      const members = memberStats.map(() => member);
+      return scoreTeamSynergy({
+        coverage: analyzeTeamCoverage(members),
+        format,
+        typesTotal: members.length * 2,
+        teamSize: members.length,
+        typeCount: 18,
+        memberStats
+      });
+    };
+
+    it('penalizes a team with no threat off one attacking stat', () => {
+      // The case this exists for. Annihilape, Mamoswine and Corviknight share
+      // zero weaknesses — a defensively perfect singles bring — and have Special
+      // Attack stats of 50, 70 and 53, so one Will-O-Wisp halves all of it.
+      // Every other penalty here is defensive and none of them could see it.
+      expect(scoreWith([physical, physical, physical]))
+        .toBeLessThan(scoreWith([physical, physical, special]));
+      expect(scoreWith([special, special, special]))
+        .toBeLessThan(scoreWith([physical, physical, special]));
+    });
+
+    it('leaves a team with one off-stat threat alone', () => {
+      // Identical teams but for the third member's stat spread, so the whole
+      // difference is this term: with three brings, one second angle is enough.
+      expect(scoreWith([physical, physical, special]))
+        .toBe(scoreWith([physical, physical, mixed]));
+      expect(scoreWith([physical, special, special]))
+        .toBe(scoreWith([physical, physical, special]));
+    });
+
+    it('counts a mixed attacker on both sides, so an all-mixed team is not monochrome', () => {
+      // The reason the term counts threats rather than taking a majority. Every
+      // member of an all-mixed team is on the majority side of both classes at
+      // once, so a majority reading would call the most flexible possible team
+      // the most one-dimensional.
+      expect(scoreWith([mixed, mixed, mixed])).toBe(scoreWith([physical, physical, special]));
+    });
+
+    it('grades in doubles, where a bring of four can be half committed', () => {
+      const none = scoreWith([physical, physical, physical, physical], BATTLE_FORMATS.doubles);
+      const one = scoreWith([physical, physical, physical, special], BATTLE_FORMATS.doubles);
+      const two = scoreWith([physical, physical, special, special], BATTLE_FORMATS.doubles);
+
+      expect(none).toBeLessThan(one);
+      expect(one).toBeLessThan(two);
+      // Halfway, because a balanced bring of four holds two of each: the
+      // denominator is the team's own size and not a constant.
+      expect(one - none).toBeCloseTo(two - one, 10);
+    });
+
+    it('scores nothing rather than guessing when the stats are not supplied', () => {
+      // It is the one penalty needing data from outside the coverage analysis,
+      // so it is the one that can be missing. A caller that cannot supply stats
+      // must not have its team read as maximally monochrome — which is what a
+      // bare `filter` over an empty list would have produced.
+      const members = [member, member, member];
+      const base = {
+        coverage: analyzeTeamCoverage(members),
+        format: BATTLE_FORMATS.singles,
+        typesTotal: 6,
+        teamSize: 3,
+        typeCount: 18
+      };
+      const unpenalized = scoreWith([physical, physical, special]);
+
+      expect(scoreTeamSynergy(base)).toBe(unpenalized);
+      // A length that disagrees with the team is treated the same way, rather
+      // than scoring the members it happens to have been given.
+      expect(scoreTeamSynergy({ ...base, memberStats: [physical] })).toBe(unpenalized);
+      // Which is the point: those same three, supplied in full, are penalized.
+      expect(scoreTeamSynergy({ ...base, memberStats: [physical, physical, physical] }))
+        .toBeLessThan(unpenalized);
+    });
+  });
 
   it('rewards broad coverage and resistance over narrow', () => {
     const broad = synergyFor([
@@ -189,6 +363,58 @@ describe('scoreTeamSynergy', () => {
   it('returns a neutral score when the team shape is degenerate', () => {
     expect(scoreTeamSynergy({ coverage: analyzeTeamCoverage([]), typesTotal: 0, teamSize: 0, typeCount: 18 })).toBe(0);
   });
+
+  it('exposes the canonical contribution terms without changing the score', () => {
+    const members = [
+      {
+        types: ['ground'],
+        weaknesses: ['water', 'ice'],
+        quadruple_weaknesses: ['ice'],
+        resistances: ['rock'],
+        immunities: [],
+        coverages: ['fire']
+      },
+      {
+        types: ['flying'],
+        weaknesses: ['ice'],
+        quadruple_weaknesses: [],
+        resistances: ['ground'],
+        immunities: ['ground'],
+        coverages: ['grass']
+      }
+    ];
+    const input = {
+      coverage: analyzeTeamCoverage(members),
+      roles: analyzeTeamRoles([{ abilityName: 'intimidate' }, { abilityName: 'drought' }]),
+      format: BATTLE_FORMATS.doubles,
+      typesTotal: 2,
+      teamSize: 2,
+      typeCount: 18
+    };
+    const breakdown = getTeamSynergyBreakdown(input);
+
+    expect(Object.is(breakdown.score, scoreTeamSynergy(input))).toBe(true);
+    expect(breakdown.bonusTerms.map((term) => term.id)).toEqual([
+      'coverageBreadth',
+      'resistanceBreadth',
+      'typeDiversity',
+      'enabledSpread',
+      'supportRoles'
+    ]);
+    expect(breakdown.penaltyTerms.map((term) => term.id)).toEqual([
+      'uncoveredWeakness',
+      'uncoveredQuadrupleWeakness',
+      'sharedWeakness',
+      'quadrupleWeakness',
+      'sharedQuadrupleWeakness',
+      'spreadConflict',
+      'fieldConflict',
+      'monochromeOffense'
+    ]);
+    expect(breakdown.unclampedScore).toBe(breakdown.bonus - breakdown.penalty);
+    expect(breakdown.bonusTerms.find((term) => term.id === 'supportRoles')?.facts)
+      .toEqual(['intimidate', 'weather-setter']);
+  });
 });
 
 describe('composeTeamScore', () => {
@@ -217,17 +443,22 @@ describe('damage score normalization', () => {
     // Same raw score, same baseline, same normalized value — regardless of what
     // else the user has filtered in or out.
     expect(normalizeDamageFromScore(18, 18)).toBeCloseTo(normalizeDamageFromScore(18, 18));
-    // Bounds are the observed extremes (11.25..26 and 16..27 at baseScore 18),
+    // Bounds are the observed extremes (8.25..26 and 16..27 at baseScore 18),
     // not the formula's, so a median typing sits near the middle of the range
     // instead of bunched against one end. See pokedexScoring.ts.
-    expect(normalizeDamageFromScore(18, 18)).toBeCloseTo((18 - 11.25) / (26 - 11.25));
+    //
+    // The defensive floor fell from 11.25 when IMMUNITY_VALUE moved to -2:
+    // Ghost/Steel with Earth Eater is immune to four types and now collects -8
+    // for them. The neutral line no longer sits near the middle as a result,
+    // which is a property of the valuation rather than of the normalization.
+    expect(normalizeDamageFromScore(18, 18)).toBeCloseTo((18 - 8.25) / (26 - 8.25));
     expect(normalizeDamageToScore(18, 18)).toBeCloseTo((18 - 16) / (27 - 16));
   });
 
   it('maps the observed extremes onto 0 and 1', () => {
     // The best and worst a real Pokemon reaches, which is what the scale is
-    // anchored to. The formula extremes (0 and 72) are unreachable and clamp.
-    expect(normalizeDamageFromScore(11.25, 18)).toBeCloseTo(0);
+    // anchored to. The formula extremes are unreachable and clamp.
+    expect(normalizeDamageFromScore(8.25, 18)).toBeCloseTo(0);
     expect(normalizeDamageFromScore(26, 18)).toBeCloseTo(1);
     expect(normalizeDamageToScore(16, 18)).toBeCloseTo(0);
     expect(normalizeDamageToScore(27, 18)).toBeCloseTo(1);

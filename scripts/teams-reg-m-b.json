@@ -1,0 +1,1639 @@
+{
+  "_provenance": {
+    "source": "https://www.pikalytics.com/tournaments (Limitless-hosted events)",
+    "retrieved": "2026-08-15",
+    "format": "doubles",
+    "regulation": "M-B",
+    "note": [
+      "Published team lists from three Limitless online events, ordered by final placement.",
+      "These are registered rosters of six, which is exactly what the Team Workbench builds",
+      "and what evaluateRoster scores. Unlike per-Pokemon usage, a team list is a joint",
+      "choice, so it can test the synergy half of the score rather than only member quality.",
+      "",
+      "Placement is Swiss standing, not a team-strength measurement. In a 112-player Bo3",
+      "event most of the variance is player skill and pairing luck, so placement is recorded",
+      "but is the weakest of the comparisons the validation script makes.",
+      "",
+      "Transcribed from rendered pages in one pass. Teams are trusted; placements are",
+      "trusted only as an ordering within an event."
+    ]
+  },
+  "events": [
+    {
+      "slug": "crown-fight-81",
+      "name": "CHAMPIONS REG. M-B CROWN FIGHT Bo3 TOUR #81",
+      "players": 112,
+      "teams": [
+        {
+          "placement": 1,
+          "pokemon": [
+            "Talonflame",
+            "Glimmora-Mega",
+            "Garchomp",
+            "Basculegion",
+            "Floette-Mega",
+            "Annihilape"
+          ]
+        },
+        {
+          "placement": 2,
+          "pokemon": [
+            "Incineroar",
+            "Hisuian Samurott",
+            "Sinistcha",
+            "Sneasler",
+            "Floette-Mega",
+            "Delphox-Mega"
+          ]
+        },
+        {
+          "placement": 3,
+          "pokemon": [
+            "Floette-Mega",
+            "Charizard-Mega-Y",
+            "Whimsicott",
+            "Garchomp",
+            "Basculegion",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 4,
+          "pokemon": [
+            "Pelipper",
+            "Charizard-Mega-Y",
+            "Grimmsnarl",
+            "Archaludon",
+            "Staraptor-Mega",
+            "Venusaur"
+          ]
+        },
+        {
+          "placement": 5,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Basculegion",
+            "Incineroar",
+            "Garchomp",
+            "Grimmsnarl",
+            "Venusaur"
+          ]
+        },
+        {
+          "placement": 6,
+          "pokemon": [
+            "Blastoise-Mega",
+            "Incineroar",
+            "Sneasler",
+            "Sinistcha",
+            "Kingambit",
+            "Delphox-Mega"
+          ]
+        },
+        {
+          "placement": 7,
+          "pokemon": [
+            "Aerodactyl-Mega",
+            "Kingambit",
+            "Sylveon",
+            "Garchomp",
+            "Charizard-Mega-Y",
+            "Farigiraf"
+          ]
+        },
+        {
+          "placement": 8,
+          "pokemon": [
+            "Staraptor-Mega",
+            "Sylveon",
+            "Arcanine-Hisui",
+            "Kingambit",
+            "Basculegion",
+            "Raichu-Mega-Y"
+          ]
+        },
+        {
+          "placement": 9,
+          "pokemon": [
+            "Whimsicott",
+            "Staraptor-Mega",
+            "Glimmora",
+            "Garchomp",
+            "Delphox-Mega",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 10,
+          "pokemon": [
+            "Aerodactyl-Mega",
+            "Farigiraf",
+            "Charizard-Mega-Y",
+            "Kingambit",
+            "Sylveon",
+            "Garchomp"
+          ]
+        },
+        {
+          "placement": 11,
+          "pokemon": [
+            "Tyranitar-Mega",
+            "Excadrill",
+            "Milotic",
+            "Staraptor-Mega",
+            "Sinistcha",
+            "Gholdengo"
+          ]
+        },
+        {
+          "placement": 12,
+          "pokemon": [
+            "Froslass-Mega",
+            "Sneasler",
+            "Kingambit",
+            "Basculegion",
+            "Scovillain-Mega",
+            "Lycanroc-Dusk"
+          ]
+        },
+        {
+          "placement": 13,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Floette-Mega",
+            "Kingambit",
+            "Whimsicott",
+            "Basculegion",
+            "Garchomp"
+          ]
+        },
+        {
+          "placement": 14,
+          "pokemon": [
+            "Pelipper",
+            "Archaludon",
+            "Basculegion",
+            "Grimmsnarl",
+            "Venusaur-Mega",
+            "Charizard-Mega-Y"
+          ]
+        },
+        {
+          "placement": 15,
+          "pokemon": [
+            "Staraptor-Mega",
+            "Delphox-Mega",
+            "Whimsicott",
+            "Glimmora",
+            "Garchomp",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 16,
+          "pokemon": [
+            "Gardevoir-Mega",
+            "Blaziken-Mega",
+            "Gholdengo",
+            "Corviknight",
+            "Meowstic",
+            "Maushold"
+          ]
+        },
+        {
+          "placement": 17,
+          "pokemon": [
+            "Torkoal",
+            "Vileplume",
+            "Mawile-Mega",
+            "Farigiraf",
+            "Aurorus",
+            "Kangaskhan"
+          ]
+        },
+        {
+          "placement": 18,
+          "pokemon": [
+            "Froslass-Mega",
+            "Dragonite-Mega",
+            "Sneasler",
+            "Arcanine-Hisui",
+            "Gholdengo",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 19,
+          "pokemon": [
+            "Pelipper",
+            "Feraligatr-Mega",
+            "Archaludon",
+            "Golurk-Mega",
+            "Whimsicott",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 20,
+          "pokemon": [
+            "Kangaskhan",
+            "Farigiraf",
+            "Camerupt-Mega",
+            "Sinistcha",
+            "Basculegion",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 21,
+          "pokemon": [
+            "Froslass-Mega",
+            "Dragonite",
+            "Sneasler",
+            "Arcanine-Hisui",
+            "Gholdengo",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 22,
+          "pokemon": [
+            "Garchomp",
+            "Kingambit",
+            "Floette-Mega",
+            "Whimsicott",
+            "Charizard-Mega-Y",
+            "Basculegion"
+          ]
+        },
+        {
+          "placement": 23,
+          "pokemon": [
+            "Floette-Mega",
+            "Sneasler",
+            "Sinistcha",
+            "Incineroar",
+            "Basculegion",
+            "Dragonite"
+          ]
+        },
+        {
+          "placement": 24,
+          "pokemon": [
+            "Drampa-Mega",
+            "Cofagrigus",
+            "Incineroar",
+            "Torkoal",
+            "Vileplume",
+            "Mawile-Mega"
+          ]
+        },
+        {
+          "placement": 25,
+          "pokemon": [
+            "Blastoise-Mega",
+            "Delphox-Mega",
+            "Sneasler",
+            "Incineroar",
+            "Kingambit",
+            "Sinistcha"
+          ]
+        },
+        {
+          "placement": 26,
+          "pokemon": [
+            "Froslass-Mega",
+            "Dragonite-Mega",
+            "Kingambit",
+            "Sylveon",
+            "Arcanine-Hisui",
+            "Sneasler"
+          ]
+        },
+        {
+          "placement": 27,
+          "pokemon": [
+            "Aerodactyl-Mega",
+            "Charizard-Mega-Y",
+            "Sylveon",
+            "Kingambit",
+            "Garchomp",
+            "Farigiraf"
+          ]
+        },
+        {
+          "placement": 28,
+          "pokemon": [
+            "Garchomp",
+            "Froslass-Mega",
+            "Primarina",
+            "Sneasler",
+            "Kingambit",
+            "Sableye"
+          ]
+        },
+        {
+          "placement": 29,
+          "pokemon": [
+            "Grimmsnarl",
+            "Venusaur-Mega",
+            "Archaludon",
+            "Pelipper",
+            "Charizard-Mega-Y",
+            "Basculegion"
+          ]
+        },
+        {
+          "placement": 30,
+          "pokemon": [
+            "Aerodactyl-Mega",
+            "Dragonite-Mega",
+            "Sneasler",
+            "Basculegion",
+            "Sylveon",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 31,
+          "pokemon": [
+            "Pelipper",
+            "Sylveon",
+            "Staraptor-Mega",
+            "Archaludon",
+            "Salazzle",
+            "Garchomp"
+          ]
+        },
+        {
+          "placement": 32,
+          "pokemon": [
+            "Skarmory-Mega",
+            "Whimsicott",
+            "Sneasler",
+            "Ceruledge",
+            "Dragonite",
+            "Feraligatr-Mega"
+          ]
+        },
+        {
+          "placement": 33,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Incineroar",
+            "Toxapex",
+            "Sylveon",
+            "Garchomp",
+            "Venusaur"
+          ]
+        },
+        {
+          "placement": 34,
+          "pokemon": [
+            "Milotic",
+            "Garchomp",
+            "Whimsicott",
+            "Sneasler",
+            "Kingambit",
+            "Charizard-Mega-Y"
+          ]
+        },
+        {
+          "placement": 35,
+          "pokemon": [
+            "Raichu-Mega-Y",
+            "Dragonite-Mega",
+            "Whimsicott",
+            "Umbreon",
+            "Jolteon",
+            "Vaporeon"
+          ]
+        },
+        {
+          "placement": 36,
+          "pokemon": [
+            "Delphox-Mega",
+            "Raichu-Mega-Y",
+            "Incineroar",
+            "Garchomp",
+            "Primarina",
+            "Whimsicott"
+          ]
+        },
+        {
+          "placement": 37,
+          "pokemon": [
+            "Milotic",
+            "Maushold",
+            "Sneasler",
+            "Tsareena",
+            "Incineroar",
+            "Gengar-Mega"
+          ]
+        },
+        {
+          "placement": 38,
+          "pokemon": [
+            "Swampert-Mega",
+            "Venusaur-Mega",
+            "Archaludon",
+            "Sableye",
+            "Pelipper",
+            "Vivillon"
+          ]
+        },
+        {
+          "placement": 39,
+          "pokemon": [
+            "Sceptile-Mega",
+            "Rotom-Wash",
+            "Annihilape",
+            "Talonflame",
+            "Floette-Mega",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 40,
+          "pokemon": [
+            "Kingambit",
+            "Altaria-Mega",
+            "Torkoal",
+            "Farigiraf",
+            "Politoed",
+            "Meganium-Mega"
+          ]
+        },
+        {
+          "placement": 41,
+          "pokemon": [
+            "Kangaskhan-Mega",
+            "Incineroar",
+            "Azumarill",
+            "Sinistcha",
+            "Garchomp",
+            "Charizard-Mega-Y"
+          ]
+        },
+        {
+          "placement": 42,
+          "pokemon": [
+            "Aerodactyl-Mega",
+            "Dragonite-Mega",
+            "Sneasler",
+            "Basculegion",
+            "Kingambit",
+            "Sylveon"
+          ]
+        },
+        {
+          "placement": 43,
+          "pokemon": [
+            "Annihilape",
+            "Maushold",
+            "Sinistcha",
+            "Incineroar",
+            "Tyranitar-Mega",
+            "Metagross-Mega"
+          ]
+        },
+        {
+          "placement": 44,
+          "pokemon": [
+            "Lycanroc-Dusk",
+            "Froslass-Mega",
+            "Scovillain-Mega",
+            "Kingambit",
+            "Basculegion",
+            "Sneasler"
+          ]
+        },
+        {
+          "placement": 45,
+          "pokemon": [
+            "Floette-Mega",
+            "Sneasler",
+            "Incineroar",
+            "Kingambit",
+            "Delphox-Mega",
+            "Sinistcha"
+          ]
+        },
+        {
+          "placement": 46,
+          "pokemon": [
+            "Delphox-Mega",
+            "Tyranitar-Mega",
+            "Excadrill",
+            "Hydreigon",
+            "Sinistcha",
+            "Sneasler"
+          ]
+        },
+        {
+          "placement": 47,
+          "pokemon": [
+            "Froslass-Mega",
+            "Sneasler",
+            "Basculegion",
+            "Dragonite-Mega",
+            "Garchomp",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 48,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Pelipper",
+            "Archaludon",
+            "Venusaur",
+            "Grimmsnarl",
+            "Basculegion"
+          ]
+        },
+        {
+          "placement": 49,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Whimsicott",
+            "Basculegion",
+            "Garchomp",
+            "Floette-Mega",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 50,
+          "pokemon": [
+            "Froslass-Mega",
+            "Dragonite-Mega",
+            "Sneasler",
+            "Kingambit",
+            "Basculegion",
+            "Garchomp"
+          ]
+        },
+        {
+          "placement": 51,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Floette-Mega",
+            "Garchomp",
+            "Basculegion",
+            "Kingambit",
+            "Whimsicott"
+          ]
+        },
+        {
+          "placement": 52,
+          "pokemon": [
+            "Staraptor-Mega",
+            "Garchomp",
+            "Whimsicott",
+            "Delphox-Mega",
+            "Glimmora",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 53,
+          "pokemon": [
+            "Aerodactyl-Mega",
+            "Kingambit",
+            "Farigiraf",
+            "Sylveon",
+            "Charizard-Mega-Y",
+            "Garchomp"
+          ]
+        },
+        {
+          "placement": 54,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Pelipper",
+            "Archaludon",
+            "Venusaur",
+            "Swampert-Mega",
+            "Grimmsnarl"
+          ]
+        },
+        {
+          "placement": 55,
+          "pokemon": [
+            "Sylveon",
+            "Basculegion",
+            "Scovillain-Mega",
+            "Kingambit",
+            "Aerodactyl-Mega",
+            "Kommo-o"
+          ]
+        },
+        {
+          "placement": 56,
+          "pokemon": [
+            "Gengar-Mega",
+            "Incineroar",
+            "Vivillon",
+            "Politoed",
+            "Swampert-Mega",
+            "Archaludon"
+          ]
+        },
+        {
+          "placement": 57,
+          "pokemon": [
+            "Blaziken-Mega",
+            "Venusaur-Mega",
+            "Kingambit",
+            "Ninetales-Alola",
+            "Whimsicott",
+            "Sneasler"
+          ]
+        },
+        {
+          "placement": 58,
+          "pokemon": [
+            "Basculegion",
+            "Charizard-Mega-Y",
+            "Floette-Mega",
+            "Garchomp",
+            "Whimsicott",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 59,
+          "pokemon": [
+            "Sceptile-Mega",
+            "Rotom-Wash",
+            "Ninetales-Alola",
+            "Garchomp",
+            "Charizard-Mega-Y",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 60,
+          "pokemon": [
+            "Pinsir-Mega",
+            "Sneasler",
+            "Grimmsnarl",
+            "Pelipper",
+            "Swampert-Mega",
+            "Archaludon"
+          ]
+        },
+        {
+          "placement": 61,
+          "pokemon": [
+            "Tyranitar-Mega",
+            "Excadrill",
+            "Gholdengo",
+            "Milotic",
+            "Sinistcha",
+            "Staraptor-Mega"
+          ]
+        },
+        {
+          "placement": 62,
+          "pokemon": [
+            "Staraptor-Mega",
+            "Tyranitar-Mega",
+            "Excadrill",
+            "Milotic",
+            "Gholdengo",
+            "Sinistcha"
+          ]
+        },
+        {
+          "placement": 63,
+          "pokemon": [
+            "Froslass-Mega",
+            "Scovillain-Mega",
+            "Lycanroc-Dusk",
+            "Basculegion",
+            "Sneasler",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 64,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Sneasler",
+            "Kingambit",
+            "Dragonite",
+            "Floette-Mega",
+            "Whimsicott"
+          ]
+        },
+        {
+          "placement": 65,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Venusaur",
+            "Sylveon",
+            "Farigiraf",
+            "Aerodactyl-Mega",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 66,
+          "pokemon": [
+            "Kingambit",
+            "Whimsicott",
+            "Basculegion",
+            "Garchomp",
+            "Charizard-Mega-Y",
+            "Floette-Mega"
+          ]
+        },
+        {
+          "placement": 67,
+          "pokemon": [
+            "Staraptor-Mega",
+            "Arcanine-Hisui",
+            "Kingambit",
+            "Sylveon",
+            "Raichu-Mega-Y",
+            "Farigiraf"
+          ]
+        },
+        {
+          "placement": 68,
+          "pokemon": [
+            "Froslass-Mega",
+            "Scovillain-Mega",
+            "Lycanroc-Dusk",
+            "Kingambit",
+            "Basculegion",
+            "Sneasler"
+          ]
+        },
+        {
+          "placement": 69,
+          "pokemon": [
+            "Blastoise-Mega",
+            "Sinistcha",
+            "Sneasler",
+            "Incineroar",
+            "Delphox-Mega",
+            "Maushold"
+          ]
+        },
+        {
+          "placement": 70,
+          "pokemon": [
+            "Tyranitar-Mega",
+            "Gholdengo",
+            "Houndstone",
+            "Aerodactyl",
+            "Sinistcha",
+            "Milotic"
+          ]
+        },
+        {
+          "placement": 71,
+          "pokemon": [
+            "Staraptor-Mega",
+            "Arcanine-Hisui",
+            "Kingambit",
+            "Raichu-Mega-Y",
+            "Farigiraf",
+            "Sylveon"
+          ]
+        },
+        {
+          "placement": 72,
+          "pokemon": [
+            "Froslass-Mega",
+            "Dragonite-Mega",
+            "Sneasler",
+            "Arcanine-Hisui",
+            "Gholdengo",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 73,
+          "pokemon": [
+            "Rotom-Heat",
+            "Sneasler",
+            "Garchomp",
+            "Whimsicott",
+            "Kingambit",
+            "Gengar-Mega"
+          ]
+        },
+        {
+          "placement": 74,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Venusaur",
+            "Pelipper",
+            "Grimmsnarl",
+            "Basculegion",
+            "Archaludon"
+          ]
+        },
+        {
+          "placement": 75,
+          "pokemon": [
+            "Scrafty-Mega",
+            "Ceruledge",
+            "Maushold",
+            "Staraptor-Mega",
+            "Grimmsnarl",
+            "Rotom-Wash"
+          ]
+        },
+        {
+          "placement": 76,
+          "pokemon": [
+            "Armarouge",
+            "Scrafty-Mega",
+            "Sinistcha",
+            "Weavile",
+            "Rotom-Wash",
+            "Skarmory-Mega"
+          ]
+        },
+        {
+          "placement": 77,
+          "pokemon": [
+            "Pelipper",
+            "Archaludon",
+            "Alcremie",
+            "Scovillain-Mega",
+            "Swampert-Mega",
+            "Sneasler"
+          ]
+        },
+        {
+          "placement": 78,
+          "pokemon": [
+            "Grimmsnarl",
+            "Basculegion",
+            "Glimmora-Mega",
+            "Archaludon",
+            "Pelipper",
+            "Meganium-Mega"
+          ]
+        },
+        {
+          "placement": 79,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Whimsicott",
+            "Garchomp",
+            "Kingambit",
+            "Basculegion",
+            "Floette-Mega"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "ratorneo-6",
+      "name": "Ratorneo #6 Champions 2026 Reg MB",
+      "players": 36,
+      "teams": [
+        {
+          "placement": 1,
+          "pokemon": [
+            "Pelipper",
+            "Swampert-Mega",
+            "Charizard-Mega-Y",
+            "Venusaur",
+            "Grimmsnarl",
+            "Archaludon"
+          ]
+        },
+        {
+          "placement": 2,
+          "pokemon": [
+            "Swampert-Mega",
+            "Archaludon",
+            "Grimmsnarl",
+            "Pelipper",
+            "Sinistcha",
+            "Scizor-Mega"
+          ]
+        },
+        {
+          "placement": 3,
+          "pokemon": [
+            "Kingambit",
+            "Primarina",
+            "Farigiraf",
+            "Pidgeot-Mega",
+            "Kangaskhan",
+            "Garchomp"
+          ]
+        },
+        {
+          "placement": 4,
+          "pokemon": [
+            "Venusaur",
+            "Charizard-Mega-Y",
+            "Grimmsnarl",
+            "Archaludon",
+            "Basculegion",
+            "Pelipper"
+          ]
+        },
+        {
+          "placement": 5,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Floette-Mega",
+            "Garchomp",
+            "Kingambit",
+            "Basculegion",
+            "Whimsicott"
+          ]
+        },
+        {
+          "placement": 6,
+          "pokemon": [
+            "Staraptor-Mega",
+            "Garchomp",
+            "Whimsicott",
+            "Delphox-Mega",
+            "Glimmora",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 7,
+          "pokemon": [
+            "Froslass-Mega",
+            "Raichu-Mega-Y",
+            "Kingambit",
+            "Basculegion",
+            "Garchomp",
+            "Sneasler"
+          ]
+        },
+        {
+          "placement": 8,
+          "pokemon": [
+            "Staraptor-Mega",
+            "Tyranitar-Mega",
+            "Excadrill",
+            "Milotic",
+            "Gholdengo",
+            "Sinistcha"
+          ]
+        },
+        {
+          "placement": 9,
+          "pokemon": [
+            "Froslass-Mega",
+            "Sneasler",
+            "Sylveon",
+            "Pelipper",
+            "Basculegion",
+            "Tsareena"
+          ]
+        },
+        {
+          "placement": 10,
+          "pokemon": [
+            "Kangaskhan-Mega",
+            "Incineroar",
+            "Azumarill",
+            "Sinistcha",
+            "Garchomp",
+            "Charizard-Mega-Y"
+          ]
+        },
+        {
+          "placement": 11,
+          "pokemon": [
+            "Delphox-Mega",
+            "Blastoise-Mega",
+            "Sneasler",
+            "Incineroar",
+            "Sinistcha",
+            "Maushold"
+          ]
+        },
+        {
+          "placement": 12,
+          "pokemon": [
+            "Raichu-Mega-Y",
+            "Staraptor-Mega",
+            "Arcanine-Hisui",
+            "Farigiraf",
+            "Sylveon",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 13,
+          "pokemon": [
+            "Aerodactyl-Mega",
+            "Charizard-Mega-Y",
+            "Sylveon",
+            "Kingambit",
+            "Garchomp",
+            "Farigiraf"
+          ]
+        },
+        {
+          "placement": 14,
+          "pokemon": [
+            "Raichu-Mega-Y",
+            "Farigiraf",
+            "Mawile-Mega",
+            "Garchomp",
+            "Vivillon",
+            "Torkoal"
+          ]
+        },
+        {
+          "placement": 15,
+          "pokemon": [
+            "Raichu-Mega-Y",
+            "Aerodactyl-Mega",
+            "Kingambit",
+            "Sneasler",
+            "Sylveon",
+            "Basculegion"
+          ]
+        },
+        {
+          "placement": 16,
+          "pokemon": [
+            "Incineroar",
+            "Grimmsnarl",
+            "Kommo-o",
+            "Metagross-Mega",
+            "Dragonite-Mega",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 17,
+          "pokemon": [
+            "Floette-Mega",
+            "Incineroar",
+            "Garchomp-Mega",
+            "Sinistcha",
+            "Kingambit",
+            "Sneasler"
+          ]
+        },
+        {
+          "placement": 18,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Whimsicott",
+            "Garchomp",
+            "Incineroar",
+            "Sylveon",
+            "Sneasler"
+          ]
+        },
+        {
+          "placement": 19,
+          "pokemon": [
+            "Archaludon",
+            "Gengar-Mega",
+            "Politoed",
+            "Incineroar",
+            "Vivillon",
+            "Swampert-Mega"
+          ]
+        },
+        {
+          "placement": 20,
+          "pokemon": [
+            "Farigiraf",
+            "Torkoal",
+            "Sylveon",
+            "Milotic",
+            "Staraptor-Mega",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 21,
+          "pokemon": [
+            "Gengar-Mega",
+            "Incineroar",
+            "Sableye",
+            "Grimmsnarl",
+            "Tinkaton",
+            "Floette-Mega"
+          ]
+        },
+        {
+          "placement": 22,
+          "pokemon": [
+            "Staraptor-Mega",
+            "Tyranitar-Mega",
+            "Excadrill",
+            "Milotic",
+            "Gholdengo",
+            "Sinistcha"
+          ]
+        },
+        {
+          "placement": 23,
+          "pokemon": [
+            "Milotic",
+            "Dragalge-Mega",
+            "Slowking-Galar",
+            "Grimmsnarl",
+            "Scizor",
+            "Gliscor"
+          ]
+        },
+        {
+          "placement": 24,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Floette-Mega",
+            "Tsareena",
+            "Garchomp",
+            "Whimsicott",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 25,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Venusaur",
+            "Garchomp",
+            "Rotom-Wash",
+            "Incineroar",
+            "Farigiraf"
+          ]
+        },
+        {
+          "placement": 26,
+          "pokemon": [
+            "Slowbro-Mega",
+            "Farigiraf",
+            "Archaludon",
+            "Skeledirge",
+            "Pelipper",
+            "Sinistcha"
+          ]
+        },
+        {
+          "placement": 27,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Basculegion",
+            "Kingambit",
+            "Whimsicott",
+            "Garchomp",
+            "Floette-Mega"
+          ]
+        },
+        {
+          "placement": 28,
+          "pokemon": [
+            "Sylveon",
+            "Farigiraf",
+            "Staraptor-Mega",
+            "Kingambit",
+            "Arcanine-Hisui",
+            "Pikachu"
+          ]
+        },
+        {
+          "placement": 29,
+          "pokemon": [
+            "Raichu-Mega-Y",
+            "Dragonite",
+            "Incineroar",
+            "Grimmsnarl",
+            "Primarina",
+            "Gholdengo"
+          ]
+        },
+        {
+          "placement": 30,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Garchomp",
+            "Kingambit",
+            "Sylveon",
+            "Aerodactyl-Mega",
+            "Basculegion-F"
+          ]
+        },
+        {
+          "placement": 31,
+          "pokemon": [
+            "Torterra",
+            "Farigiraf",
+            "Blaziken",
+            "Basculegion",
+            "Klefki",
+            "Charizard-Mega-Y"
+          ]
+        },
+        {
+          "placement": 32,
+          "pokemon": [
+            "Gengar-Mega",
+            "Vivillon",
+            "Incineroar",
+            "Politoed",
+            "Swampert-Mega",
+            "Kommo-o"
+          ]
+        },
+        {
+          "placement": 33,
+          "pokemon": [
+            "Incineroar",
+            "Talonflame",
+            "Gardevoir-Mega",
+            "Maushold",
+            "Ceruledge",
+            "Basculegion"
+          ]
+        },
+        {
+          "placement": 34,
+          "pokemon": [
+            "Gardevoir-Mega",
+            "Drampa",
+            "Abomasnow",
+            "Corviknight",
+            "Conkeldurr",
+            "Heracross"
+          ]
+        },
+        {
+          "placement": 35,
+          "pokemon": [
+            "Gholdengo",
+            "Tyranitar-Mega",
+            "Excadrill",
+            "Pidgeot-Mega",
+            "Tsareena",
+            "Rotom-Wash"
+          ]
+        },
+        {
+          "placement": 36,
+          "pokemon": [
+            "Gengar-Mega",
+            "Incineroar",
+            "Sinistcha",
+            "Floette-Mega",
+            "Tyranitar-Mega",
+            "Sneasler"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "ffn-68",
+      "name": "Friday Fight Night #68 Reg M-B Bo3",
+      "players": 30,
+      "teams": [
+        {
+          "placement": 1,
+          "pokemon": [
+            "Aerodactyl-Mega",
+            "Kingambit",
+            "Farigiraf",
+            "Primarina",
+            "Meowscarada",
+            "Raichu-Mega-Y"
+          ]
+        },
+        {
+          "placement": 2,
+          "pokemon": [
+            "Froslass-Mega",
+            "Scovillain-Mega",
+            "Lycanroc-Dusk",
+            "Kingambit",
+            "Sneasler",
+            "Basculegion"
+          ]
+        },
+        {
+          "placement": 3,
+          "pokemon": [
+            "Raichu-Mega-Y",
+            "Arcanine-Hisui",
+            "Sylveon",
+            "Farigiraf",
+            "Staraptor-Mega",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 4,
+          "pokemon": [
+            "Incineroar",
+            "Floette-Mega",
+            "Basculegion",
+            "Sinistcha",
+            "Raichu-Mega-Y",
+            "Kommo-o"
+          ]
+        },
+        {
+          "placement": 5,
+          "pokemon": [
+            "Raichu-Mega-Y",
+            "Staraptor-Mega",
+            "Sylveon",
+            "Arcanine-Hisui",
+            "Farigiraf",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 6,
+          "pokemon": [
+            "Floette-Mega",
+            "Sneasler",
+            "Sinistcha",
+            "Incineroar",
+            "Basculegion",
+            "Dragonite"
+          ]
+        },
+        {
+          "placement": 7,
+          "pokemon": [
+            "Dragonite-Mega",
+            "Politoed",
+            "Meganium-Mega",
+            "Incineroar",
+            "Sneasler",
+            "Basculegion"
+          ]
+        },
+        {
+          "placement": 8,
+          "pokemon": [
+            "Grimmsnarl",
+            "Charizard-Mega-Y",
+            "Swampert-Mega",
+            "Archaludon",
+            "Pelipper",
+            "Venusaur"
+          ]
+        },
+        {
+          "placement": 9,
+          "pokemon": [
+            "Pelipper",
+            "Archaludon",
+            "Sinistcha",
+            "Grimmsnarl",
+            "Swampert-Mega",
+            "Sneasler"
+          ]
+        },
+        {
+          "placement": 10,
+          "pokemon": [
+            "Rotom-Wash",
+            "Garchomp-Mega",
+            "Tyranitar",
+            "Sneasler",
+            "Corviknight",
+            "Scizor"
+          ]
+        },
+        {
+          "placement": 11,
+          "pokemon": [
+            "Sceptile-Mega",
+            "Rotom-Wash",
+            "Corviknight",
+            "Arcanine-Hisui",
+            "Tyranitar-Mega",
+            "Houndstone"
+          ]
+        },
+        {
+          "placement": 12,
+          "pokemon": [
+            "Staraptor-Mega",
+            "Farigiraf",
+            "Sylveon",
+            "Kingambit",
+            "Raichu-Mega-Y",
+            "Arcanine-Hisui"
+          ]
+        },
+        {
+          "placement": 13,
+          "pokemon": [
+            "Whimsicott",
+            "Sylveon",
+            "Kingambit",
+            "Charizard-Mega-Y",
+            "Basculegion",
+            "Garchomp"
+          ]
+        },
+        {
+          "placement": 14,
+          "pokemon": [
+            "Excadrill",
+            "Tyranitar-Mega",
+            "Incineroar",
+            "Farigiraf",
+            "Milotic",
+            "Torkoal"
+          ]
+        },
+        {
+          "placement": 15,
+          "pokemon": [
+            "Staraptor-Mega",
+            "Glimmora",
+            "Whimsicott",
+            "Kingambit",
+            "Garchomp",
+            "Delphox-Mega"
+          ]
+        },
+        {
+          "placement": 16,
+          "pokemon": [
+            "Froslass-Mega",
+            "Sneasler",
+            "Basculegion",
+            "Garchomp-Mega",
+            "Kingambit",
+            "Hydreigon"
+          ]
+        },
+        {
+          "placement": 17,
+          "pokemon": [
+            "Tyranitar-Mega",
+            "Excadrill",
+            "Milotic",
+            "Sinistcha",
+            "Staraptor-Mega",
+            "Gholdengo"
+          ]
+        },
+        {
+          "placement": 18,
+          "pokemon": [
+            "Sceptile-Mega",
+            "Rotom-Wash",
+            "Garchomp",
+            "Basculegion",
+            "Whimsicott",
+            "Staraptor-Mega"
+          ]
+        },
+        {
+          "placement": 19,
+          "pokemon": [
+            "Basculegion-F",
+            "Charizard-Mega-Y",
+            "Whimsicott",
+            "Garchomp",
+            "Floette-Mega",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 20,
+          "pokemon": [
+            "Blastoise-Mega",
+            "Delphox-Mega",
+            "Incineroar",
+            "Sneasler",
+            "Sinistcha",
+            "Maushold"
+          ]
+        },
+        {
+          "placement": 21,
+          "pokemon": [
+            "Medicham-Mega",
+            "Talonflame",
+            "Kingambit",
+            "Basculegion",
+            "Farigiraf",
+            "Sylveon"
+          ]
+        },
+        {
+          "placement": 22,
+          "pokemon": [
+            "Whimsicott",
+            "Charizard-Mega-Y",
+            "Garchomp",
+            "Raichu-Mega-Y",
+            "Sylveon",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 23,
+          "pokemon": [
+            "Aerodactyl-Mega",
+            "Kommo-o",
+            "Metagross-Mega",
+            "Sneasler",
+            "Kingambit",
+            "Basculegion"
+          ]
+        },
+        {
+          "placement": 24,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Aerodactyl",
+            "Garchomp-Mega",
+            "Sylveon",
+            "Basculegion",
+            "Kingambit"
+          ]
+        },
+        {
+          "placement": 25,
+          "pokemon": [
+            "Charizard-Mega-Y",
+            "Victreebel",
+            "Heliolisk",
+            "Farigiraf",
+            "Staraptor-Mega",
+            "Sylveon"
+          ]
+        },
+        {
+          "placement": 26,
+          "pokemon": [
+            "Kingambit",
+            "Sneasler",
+            "Basculegion",
+            "Froslass-Mega",
+            "Garchomp",
+            "Dragonite-Mega"
+          ]
+        },
+        {
+          "placement": 27,
+          "pokemon": [
+            "Hawlucha-Mega",
+            "Slowking",
+            "Mr. Rime",
+            "Ceruledge",
+            "Incineroar",
+            "Mawile-Mega"
+          ]
+        },
+        {
+          "placement": 28,
+          "pokemon": [
+            "Incineroar",
+            "Sylveon",
+            "Garchomp",
+            "Charizard-Mega-Y",
+            "Kingambit",
+            "Corviknight"
+          ]
+        },
+        {
+          "placement": 29,
+          "pokemon": [
+            "Annihilape",
+            "Charizard-Mega-Y",
+            "Venusaur",
+            "Garchomp",
+            "Incineroar",
+            "Toxapex"
+          ]
+        },
+        {
+          "placement": 30,
+          "pokemon": [
+            "Floette-Mega",
+            "Whimsicott",
+            "Maushold",
+            "Farigiraf",
+            "Meowscarada",
+            "Raichu-Mega-Y"
+          ]
+        }
+      ]
+    }
+  ]
+}

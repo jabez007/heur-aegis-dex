@@ -27,6 +27,22 @@
  *    than trusting the table.
  * 3. **The Pokemon spends the battle in it.** Not "can reach", not "is stronger
  *    in" — spends the battle in.
+ * 4. **Reaching it costs no turn.** Added 2026-08-16, and it disqualified the
+ *    only entry that had ever satisfied the first three. A form the Pokemon must
+ *    spend a turn to enter is a conditional effect, and every other conditional
+ *    effect in this model is excluded on exactly that ground: `abilityEffects.ts`
+ *    requires an effect to "land without setup", which is why Prankster,
+ *    Technician, Sheer Force and Mold Breaker are all recorded and not applied.
+ *    Granting the largest conditional stat swing in the game while refusing every
+ *    small one was the inconsistency, not the size of the swing.
+ *
+ * ## Nothing is merged today, and the machinery stays
+ *
+ * Condition 4 left the whitelist empty. `getMergedBattleForm` and
+ * `sharesTyping` are kept, and are exercised against fixture rules rather than
+ * whichever species happens to qualify — a mechanism whose tests depend on the
+ * table's contents stops testing the mechanism the moment the table changes,
+ * which is precisely what happened here.
  */
 
 export interface BattleFormRule {
@@ -46,7 +62,7 @@ export interface BattleFormRule {
 }
 
 /**
- * Every battle-only form carried by a Regulation M-B legal species, Gigantamax
+ * Every battle-only form carried by a regulation-legal species, Gigantamax
  * and Mega excluded — those are handled as their own mechanics.
  *
  * Enumerated from PokeAPI on 2026-07-27 by walking the M-B roster's varieties
@@ -59,11 +75,26 @@ export const BATTLE_FORMS: readonly BattleFormRule[] = [
     species: 'palafin',
     variety: 'palafin-hero',
     ability: 'zero-to-hero',
-    merged: true,
+    merged: false,
     reason:
-      'Zero to Hero converts Palafin the first time it switches out and does not revert for the rest of the battle. '
-      + 'Every turn it fights is spent as Hero, which is 193 base stat points above the registered Zero form. '
-      + 'Both forms are pure Water, so the typing is unchanged.'
+      'Conditions 1 and 2 hold outright: Zero to Hero is on the registered form, and both forms are pure Water. '
+      + 'This was merged on condition 3 until 2026-08-16 — Zero to Hero converts the first time Palafin switches '
+      + 'out and never reverts, so most turns it fights are spent as Hero, 193 base stat points above the '
+      + 'registered form.\n\n'
+      + 'It fails condition 4, and the old reason overstated the case to reach the old conclusion. "Every turn it '
+      + 'fights is spent as Hero" is false: the first turn is spent as Zero, and Zero — 70 Attack, 72/62 defenses — '
+      + 'has to survive the field and then spend a switch to leave it. In doubles that switch also spends one of '
+      + 'the two Pokemon held in reserve.\n\n'
+      + 'The merge was the largest single ranking error in the browser. On Hero stats Palafin has an offence term '
+      + 'of 0.987 out of 1 — 98% of the competitive ceiling — and ranked **first of 147**. On its registered stats '
+      + 'it ranks 112th. Both external sources put it near the bottom: 1.46% ladder usage at a 46.43% win rate, '
+      + 'E-tier, and zero appearances across 145 published tournament teams. 112th of 147 is the same percentile as '
+      + '72nd of the 93 Pokemon the ladder ranks at all.\n\n'
+      + 'Rating it at the midpoint of the two forms was considered and rejected. It lands at 11th, still far above '
+      + 'anything the data supports, and the fraction would have been invented to reach a number rather than '
+      + 'derived. If a turn model ever lands, this is the entry to revisit: Palafin genuinely does fight as Hero, '
+      + 'and scoring it as a 457-point Water type understates it. Until then the model cannot say "strong but '
+      + 'expensive", and the honest half of that is the half it can defend.'
   },
   {
     species: 'aegislash',
@@ -116,7 +147,7 @@ export const BATTLE_FORMS: readonly BattleFormRule[] = [
 ] as const;
 
 /** Date the table was enumerated from PokeAPI and checked against the mechanics. */
-export const VERIFIED_ON = '2026-07-27';
+export const VERIFIED_ON = '2026-10-03';
 
 /**
  * Distinct species across every regulation at the time of that walk.
@@ -134,8 +165,13 @@ export const VERIFIED_ON = '2026-07-27';
  * entry names Rainy and Snowy explicitly, and Mimikyu-Totem-Busted is a Totem
  * form, which `collapseIndistinctVarieties` handles. That is the sense in which
  * this table is complete: one rule per species, not per variety.
+ *
+ * Re-walked on 2026-10-03 for the 23 species Regulation M-C adds. Their
+ * battle-only varieties are Gigantamax (Cinderace, Inteleon, Rillaboom, both
+ * Toxtricity forms) or Mega (Salamence, Golisopod, Baxcalibur), so nothing new
+ * belongs here.
  */
-export const VERIFIED_SPECIES_COUNT = 208;
+export const VERIFIED_SPECIES_COUNT = 231;
 
 export const SOURCES: readonly string[] = [
   'https://pokeapi.co/api/v2/pokemon-form/',
@@ -151,13 +187,18 @@ const MERGED_BY_SPECIES = new Map(
  *
  * @param speciesName PokeAPI species name of the registered Pokemon.
  * @param abilityNames Abilities the registered form actually has.
+ * @param rules Table to resolve against. Defaults to `BATTLE_FORMS`; tests pass a
+ *   fixture so the mechanism stays covered when the real table merges nothing.
  * @returns The rule to apply, or undefined when the Pokemon is rated as registered.
  */
 export function getMergedBattleForm(
   speciesName: string,
-  abilityNames: readonly string[]
+  abilityNames: readonly string[],
+  rules?: readonly BattleFormRule[]
 ): BattleFormRule | undefined {
-  const rule = MERGED_BY_SPECIES.get(speciesName);
+  const rule = rules
+    ? rules.find((candidate) => candidate.merged && candidate.species === speciesName)
+    : MERGED_BY_SPECIES.get(speciesName);
   if (!rule) return undefined;
   // A form whose trigger the Pokemon does not have is a form it cannot reach.
   return abilityNames.includes(rule.ability) ? rule : undefined;

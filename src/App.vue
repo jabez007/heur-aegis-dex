@@ -16,9 +16,11 @@
           System Online // Waiting for Scan...
         </p>
         <p class="status-regulation">
-          {{ selectedRegulation
-            ? `${selectedRegulation.label} // ${selectedRegulation.legalSpecies.size} legal species`
-            : 'No regulation filter // all breedable species' }}
+          {{ regulationSelectionRequired
+            ? 'Regulation selection required // scan blocked'
+            : selectedRegulation
+              ? `${selectedRegulation.label} // ${selectedRegulation.legalSpecies.size} legal species`
+              : 'Explicit unrestricted scan // all breedable species' }}
         </p>
         <p
           v-if="fetchError"
@@ -37,19 +39,39 @@
               class="gba-btn"
               :class="{ active: loading }"
               :disabled="loading"
-              @click="fetchTypesImmediate"
+              @click="handleScanAction"
             >
-              {{ loading ? 'Loading...' : (fetchError ? 'Retry Scan' : 'Scan Types') }}
+              {{ loading ? 'Loading...' : (scanRequiresReload ? 'Reload App' : 'Scan Types') }}
             </button>
+
+            <WorkspaceSavesDialog
+              :saves="workspaceArchive.saves"
+              :draft-updated-at="workspaceArchive.draftUpdatedAt"
+              :disabled="!workspaceStorageAvailable"
+              :busy="loading"
+              :current-ready="workspaceReady"
+              :storage-error="workspaceStorageError"
+              @save="saveWorkspace"
+              @load="loadWorkspace"
+              @rename="renameWorkspace"
+              @delete="deleteWorkspace"
+            />
             
             <label class="gba-label">
               Regulation:
               <select
-                v-model="regulation"
+                v-model="regulationChoice"
                 class="gba-select regulation-select"
                 @change="fetchTypesImmediate"
               >
-                <option value="">Any (no legality filter)</option>
+                <option
+                  v-if="regulationSelectionRequired"
+                  :value="REGULATION_SELECTION_REQUIRED"
+                  disabled
+                >
+                  No active regulation // choose explicitly
+                </option>
+                <option :value="UNRESTRICTED_REGULATION">Any (no legality filter)</option>
                 <option
                   v-for="reg in REGULATIONS"
                   :key="reg.id"
@@ -105,15 +127,14 @@
               >
               Include Mega Evolutions
             </label>
-            <label class="gba-label">
-              Min Total Stats:
+            <label class="gba-label checkbox-label">
               <input
-                v-model.number="minStatsTotal"
-                type="number"
-                class="gba-input"
-                step="10"
-                @change="fetchTypesImmediate"
+                v-model="limitQuadrupleDamage"
+                type="checkbox"
+                class="gba-checkbox"
+                @change="fetchTypesDebounced"
               >
+              Limit Quadruple Weaknesses
             </label>
             <label class="gba-label">
               Min Attacks:
@@ -126,9 +147,9 @@
               >
             </label>
             <label class="gba-label">
-              Min Defenses:
+              Min Effective Bulk:
               <input
-                v-model.number="minDefenses"
+                v-model.number="minBulk"
                 type="number"
                 class="gba-input"
                 step="5"
@@ -136,16 +157,64 @@
               >
             </label>
             <p class="filter-hint">
-              Attacks and Defenses are either/or — a Pokemon is kept when it reaches
-              one of them, so specialists count.
+              Both floors are required. Attack uses the higher of Attack and Special Attack.
+              Effective Bulk averages sqrt(HP x Defense) and sqrt(HP x Special Defense).
+            </p>
+            <p class="filter-hint">
+              Limit Quadruple Weaknesses hides typings with a 4x weakness alongside any
+              other weakness. It filters what you can register, never what you are scored
+              against: Garchomp and Kingambit still count as opponents either way.
             </p>
           </div>
         </section>
 
-        <CustomCupBuilder
+        <nav
           v-if="types.length > 0"
+          class="workspace-mode gba-container"
+          aria-label="Builder mode"
+        >
+          <div>
+            <p>BUILD MODE</p>
+            <span>Guided help or the full analysis workspace.</span>
+          </div>
+          <div class="workspace-mode-options">
+            <button
+              type="button"
+              :class="{ active: builderMode === 'guided' }"
+              :aria-pressed="builderMode === 'guided'"
+              @click="builderMode = 'guided'"
+            >
+              Guided Build
+            </button>
+            <button
+              type="button"
+              :class="{ active: builderMode === 'advanced' }"
+              :aria-pressed="builderMode === 'advanced'"
+              @click="builderMode = 'advanced'"
+            >
+              Advanced Lab
+            </button>
+          </div>
+        </nav>
+
+        <GuidedPartnerBuilder
+          v-if="types.length > 0 && builderMode === 'guided'"
           :all-data-types="types"
         />
+        <CustomCupBuilder
+          v-else-if="types.length > 0"
+          :all-data-types="types"
+        />
+        <section
+          v-else-if="regulationSelectionRequired"
+          class="gba-container state-panel"
+          aria-labelledby="regulation-required-title"
+        >
+          <h2 id="regulation-required-title">
+            Regulation Selection Required
+          </h2>
+          <p>Select a known regulation or explicitly choose Any before scanning.</p>
+        </section>
         <section
           v-else-if="fetchError"
           class="gba-container state-panel"
@@ -154,12 +223,12 @@
           <h2 id="scan-error-title">
             Scan Interrupted
           </h2>
-          <p>The Pokedex database could not be loaded.</p>
+          <p>The verified Pokemon catalog could not be loaded.</p>
           <button
             class="gba-btn action-btn"
-            @click="fetchTypesImmediate"
+            @click="handleScanAction"
           >
-            Retry Scan
+            Reload App
           </button>
         </section>
         <section
@@ -193,7 +262,7 @@
               SCANNING DATABASE
             </div>
             <div class="loading-subtext">
-              CONNECTED TO POKEAPI_
+              VERIFIED LOCAL CATALOG_
             </div>
           </div>
         </div>
@@ -203,53 +272,156 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onBeforeUnmount, onMounted } from 'vue';
+import { computed, nextTick, ref, watch, onBeforeUnmount, onMounted } from 'vue';
 import lscache from 'lscache';
-import { DEFAULT_STATS_FILTERS, REGULATIONS, getActiveRegulation, getResistantTypes } from './lib/pokedex';
+import { REGULATIONS, getActiveRegulation, getResistantTypes } from './lib/pokedex';
 import CustomCupBuilder from './components/CustomCupBuilder.vue';
+import GuidedPartnerBuilder from './components/GuidedPartnerBuilder.vue';
 import GbaNotification from './components/GbaNotification.vue';
+import WorkspaceSavesDialog from './components/WorkspaceSavesDialog.vue';
+import { useMetaFilters } from './composables/useMetaFilters';
 import { useNotifications } from './composables/useNotifications';
-import type { ResistantTypeResult } from './lib/pokedexTypes';
+import { useTeamBuilder } from './composables/useTeamBuilder';
+import { useWorkspaceState } from './composables/useWorkspaceState';
+import { flattenToPokemon } from './lib/pokemonEntry';
+import {
+  WORKSPACE_STORAGE_KEY,
+  WORKSPACE_VERSION,
+  deleteSavedWorkspace,
+  emptyWorkspaceArchive,
+  mergeUnresolvedTeamIdentifiers,
+  readWorkspaceArchive,
+  renameSavedWorkspace,
+  saveNamedWorkspace,
+  writeWorkspaceArchive,
+  type WorkspaceArchiveV1,
+  type WorkspaceSnapshotV1,
+  type WorkspaceStorage
+} from './lib/workspacePersistence';
+import { isResistantTypeResultList, type ResistantTypeResult } from './lib/pokedexTypes';
+import { POKEMON_SCAN_CACHE_REVISION } from './lib/pokemonCatalog';
 
 const loading = ref(false);
 const types = ref<ResistantTypeResult[]>([]);
+const builderMode = ref<'guided' | 'advanced'>('advanced');
 const fetchError = ref('');
-const inPokedex = ref('national');
+const scanRequiresReload = ref(false);
+const workspace = useWorkspaceState();
+const {
+  inPokedex,
+  regulation,
+  minAttacks,
+  minBulk,
+  allowMegas,
+  includeAbilityImmunities,
+  includeMoveCoverage,
+  limitQuadrupleDamage,
+  selectedAbilityNames,
+  regulationSelectionRequired,
+  snapshotScan,
+  restoreScan,
+  restoreAbilityOverrides,
+  confirmRegulationSelection,
+  requireRegulationSelection
+} = workspace;
+const metaFilters = useMetaFilters();
+const teamBuilder = useTeamBuilder();
+const { notify } = useNotifications();
 // Default to whichever regulation is in force today so the tool is correct for
 // the format being played without the user having to know which one that is.
 const activeRegulationId = getActiveRegulation()?.id ?? '';
-const regulation = ref<string>(activeRegulationId);
 const selectedRegulation = computed(() => REGULATIONS.find(reg => reg.id === regulation.value));
-const minStatsTotal = ref(DEFAULT_STATS_FILTERS.minimumStatsTotal);
-const minAttacks = ref(DEFAULT_STATS_FILTERS.minimumAttacks);
-const minDefenses = ref(DEFAULT_STATS_FILTERS.minimumDefenses);
-const allowMegas = ref(false);
-const includeAbilityImmunities = ref(true);
-const includeMoveCoverage = ref(true);
-const { notify } = useNotifications();
+const REGULATION_SELECTION_REQUIRED = '__selection_required__';
+const UNRESTRICTED_REGULATION = '__unrestricted__';
+const regulationChoice = computed({
+  get: () => regulationSelectionRequired.value
+    ? REGULATION_SELECTION_REQUIRED
+    : (regulation.value || UNRESTRICTED_REGULATION),
+  set: (choice: string) => {
+    regulation.value = choice === UNRESTRICTED_REGULATION ? '' : choice;
+    confirmRegulationSelection();
+  }
+});
 let fetchTypesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let retainedUnresolvedTeam: {
+  team: WorkspaceSnapshotV1['team'];
+  pokemonNames: Set<string>;
+  teamEditRevision: number;
+  rosterEditRevision: number;
+} | null = null;
+
+const workspaceArchive = ref<WorkspaceArchiveV1>(emptyWorkspaceArchive());
+const workspaceStorageError = ref('');
+const workspaceStorageAvailable = ref(false);
+const workspaceReady = ref(false);
+const pendingWorkspace = ref<WorkspaceSnapshotV1 | null>(null);
+const saveDraftAfterRestore = ref(false);
+let saveDraftWhenReady = false;
+let browserStorage: WorkspaceStorage | null = null;
+
+const applyWorkspaceSettings = (snapshot: WorkspaceSnapshotV1) => {
+  const regulationExists = snapshot.scan.regulation === null ||
+    REGULATIONS.some((entry) => entry.id === snapshot.scan.regulation);
+  restoreScan({
+    ...snapshot.scan,
+    regulation: regulationExists ? snapshot.scan.regulation : null
+  });
+  if (!regulationExists) requireRegulationSelection();
+  metaFilters.restoreMetaFilters(snapshot.meta);
+  restoreAbilityOverrides(snapshot.abilityOverrides);
+  return regulationExists ? [] : [`Regulation ${snapshot.scan.regulation} is no longer available.`];
+};
+
+let pendingSettingWarnings: string[] = [];
+if (typeof window !== 'undefined') {
+  try {
+    browserStorage = window.localStorage;
+    workspaceArchive.value = readWorkspaceArchive(browserStorage);
+    workspaceStorageAvailable.value = true;
+    if (workspaceArchive.value.draft) {
+      pendingWorkspace.value = workspaceArchive.value.draft;
+      pendingSettingWarnings = applyWorkspaceSettings(workspaceArchive.value.draft);
+    }
+  } catch (error) {
+    workspaceStorageError.value = error instanceof Error
+      ? error.message
+      : 'Local workspace storage is unavailable.';
+  }
+}
 
 // Scans cannot be aborted mid-flight, so each one claims a token and only the
 // most recent claim is allowed to write back. Without this a slow scan that was
 // superseded by a newer one can resolve last and overwrite the current results.
 let latestScanToken = 0;
+const scansInFlight = new Map<string, Promise<ResistantTypeResult[]>>();
 
-const fetchTypes = () => {
+const fetchTypes = async (): Promise<boolean> => {
   const scanToken = ++latestScanToken;
   const isCurrentScan = () => scanToken === latestScanToken;
 
   loading.value = true;
   fetchError.value = '';
 
+  if (regulationSelectionRequired.value) {
+    types.value = [];
+    loading.value = false;
+    fetchError.value = 'No active regulation is recorded. Select a known regulation or explicitly choose Any.';
+    return false;
+  }
+
   const filters = {
-    maxDamageFromScore: true,
+    // Off: the neutral line stopped being a place typings land once the
+    // defensive score became continuous, so the cut is arbitrary. Ranking says
+    // the same thing without dropping Pokemon off the list. See the option's
+    // documentation in resistantTypeScan.ts.
+    maxDamageFromScore: false,
     allowQuadrupleDamage: true,
-    limitQuadrupleDamage: true,
+    limitQuadrupleDamage: limitQuadrupleDamage.value,
   };
   const statsFilters = {
-    minimumStatsTotal: minStatsTotal.value,
     minimumAttacks: minAttacks.value,
-    minimumDefenses: minDefenses.value,
+    minimumBulk: minBulk.value,
   };
   const pokedexFilter = {
     inPokedex: inPokedex.value,
@@ -259,44 +431,191 @@ const fetchTypes = () => {
     regulation: regulation.value || null
   };
 
-  // Every filter that changes the result must appear in the key, or switching it
-  // serves a cached scan from different settings. The version prefix is bumped
-  // whenever the stored shape changes.
-  const key = `heur_aegis_dex_v18_types_${inPokedex.value}_${minStatsTotal.value}_${minAttacks.value}_${minDefenses.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${regulation.value || 'any'}`;
+  // Every filter that changes the result must appear in the key. The prefix
+  // covers result shape; the scan revision covers catalog, regulation and rule
+  // changes that leave the shape intact.
+  const key = `heur_aegis_dex_v21_${POKEMON_SCAN_CACHE_REVISION}_types_${inPokedex.value}_${minAttacks.value}_${minBulk.value}_${allowMegas.value}_${includeAbilityImmunities.value}_${includeMoveCoverage.value}_${limitQuadrupleDamage.value}_${regulation.value || 'any'}`;
 
-  const cached = lscache.get(key);
-  if (cached) {
+  const cached: unknown = lscache.get(key);
+  if (isResistantTypeResultList(cached)) {
     types.value = cached;
+    scanRequiresReload.value = false;
     loading.value = false;
+    return true;
   } else {
-    getResistantTypes({
-      typeFilters: filters,
-      pokemonFilters: pokedexFilter,
-      statsFilters: statsFilters
-    }).then(data => {
+    try {
+      let scan = scansInFlight.get(key);
+      if (!scan) {
+        scan = getResistantTypes({
+          typeFilters: filters,
+          pokemonFilters: pokedexFilter,
+          statsFilters: statsFilters
+        });
+        scansInFlight.set(key, scan);
+        scan.then(
+          () => scansInFlight.delete(key),
+          () => scansInFlight.delete(key)
+        );
+      }
+      const data = await scan;
       // The cache key encodes the filters this scan ran with, so the result is
       // worth keeping even when a newer scan has already superseded the view.
       lscache.set(key, data, 60 * 24);
-      if (!isCurrentScan()) return;
+      if (!isCurrentScan()) return false;
       types.value = data;
+      scanRequiresReload.value = false;
       loading.value = false;
-    }).catch(err => {
-      console.error(err);
-      if (!isCurrentScan()) return;
+      return true;
+    } catch (error) {
+      console.error(error);
+      if (!isCurrentScan()) return false;
       types.value = [];
-      fetchError.value = 'Pokedex scan failed. Check your connection and try again.';
+      fetchError.value = error instanceof Error && error.message.includes('requires Web Crypto')
+        ? 'Catalog verification requires a secure, modern browser.'
+        : 'Catalog scan failed. Reload the app and try again.';
+      scanRequiresReload.value = true;
       notify(fetchError.value, 'error');
       loading.value = false;
-    });
+      return false;
+    }
   }
 };
 
-const fetchTypesImmediate = () => {
+const captureWorkspace = (): WorkspaceSnapshotV1 => {
+  const currentTeam = teamBuilder.snapshotTeam();
+  const retained = retainedUnresolvedTeam;
+  let team = currentTeam;
+  if (retained && retained.rosterEditRevision === teamBuilder.rosterEditRevision.value) {
+    team = mergeUnresolvedTeamIdentifiers(
+      currentTeam,
+      retained.team,
+      retained.pokemonNames,
+      retained.teamEditRevision === teamBuilder.teamEditRevision.value
+    );
+  }
+
+  return {
+    version: WORKSPACE_VERSION,
+    scan: snapshotScan(),
+    meta: metaFilters.snapshotMetaFilters(),
+    abilityOverrides: { ...selectedAbilityNames.value },
+    team
+  };
+};
+
+const persistArchive = (next: WorkspaceArchiveV1): boolean => {
+  if (!browserStorage || !workspaceStorageAvailable.value) return false;
+  try {
+    writeWorkspaceArchive(browserStorage, next);
+    workspaceArchive.value = next;
+    return true;
+  } catch {
+    workspaceStorageError.value = 'Local save failed. Browser storage may be full or unavailable.';
+    return false;
+  }
+};
+
+const latestWorkspaceArchive = (): WorkspaceArchiveV1 | null => {
+  if (!browserStorage) return workspaceArchive.value;
+  try {
+    return readWorkspaceArchive(browserStorage);
+  } catch {
+    workspaceStorageAvailable.value = false;
+    workspaceStorageError.value = 'Saved workspace data changed or became unreadable. Reload before saving.';
+    return null;
+  }
+};
+
+const saveDraftNow = (snapshot: WorkspaceSnapshotV1 = captureWorkspace()) => {
+  const latest = latestWorkspaceArchive();
+  if (!latest) return;
+  const now = new Date().toISOString();
+  persistArchive({ ...latest, draft: snapshot, draftUpdatedAt: now });
+};
+
+const queueDraftSave = () => {
+  if (!workspaceReady.value || !workspaceStorageAvailable.value) return;
+  if (draftSaveTimer) clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => {
+    draftSaveTimer = null;
+    if (!workspaceReady.value) return;
+    saveDraftNow();
+  }, 500);
+};
+
+const completeWorkspaceRestore = async (snapshot: WorkspaceSnapshotV1) => {
+  const result = teamBuilder.restoreTeam(snapshot.team, flattenToPokemon(types.value));
+  const unavailableAbilityPokemon = result.unavailableAbilities.map((entry) => entry.split(':', 1)[0]);
+  const unresolvedNames = new Set([...result.unavailablePokemon, ...unavailableAbilityPokemon]);
+  retainedUnresolvedTeam = unresolvedNames.size > 0
+    ? {
+        team: snapshot.team,
+        pokemonNames: unresolvedNames,
+        teamEditRevision: teamBuilder.teamEditRevision.value,
+        rosterEditRevision: teamBuilder.rosterEditRevision.value
+      }
+    : null;
+  const warnings = [
+    ...pendingSettingWarnings,
+    ...result.unavailablePokemon.map((name) => `${name} is outside the restored scan.`),
+    ...result.unavailableAbilities.map((ability) => `${ability} is unavailable.`)
+  ];
+  pendingSettingWarnings = [];
+  pendingWorkspace.value = null;
+  // Let restore-triggered watchers flush while autosave is still suspended.
+  // Otherwise an unresolved roster can overwrite the intact saved snapshot.
+  await nextTick();
+  workspaceReady.value = true;
+
+  if (saveDraftAfterRestore.value) {
+    saveDraftAfterRestore.value = false;
+    // Keep unresolved identifiers in the recovery draft rather than replacing
+    // them with a partial roster assembled from the current scan.
+    saveDraftNow(warnings.length > 0 ? snapshot : captureWorkspace());
+  } else if (saveDraftWhenReady) {
+    saveDraftNow();
+  }
+  saveDraftWhenReady = false;
+
+  notify(
+    warnings.length > 0
+      ? `Workspace restored with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}: ${warnings.join(' ')}`
+      : 'Workspace restored.',
+    warnings.length > 0 ? 'error' : 'success'
+  );
+};
+
+const fetchTypesAndRestore = async () => {
+  const success = await fetchTypes();
+  if (success && pendingWorkspace.value) {
+    await completeWorkspaceRestore(pendingWorkspace.value);
+  } else if (!pendingWorkspace.value) {
+    if (success) {
+      teamBuilder.reconcileRoster(flattenToPokemon(types.value));
+    }
+    workspaceReady.value = true;
+    if (saveDraftWhenReady) {
+      saveDraftWhenReady = false;
+      saveDraftNow();
+    }
+  }
+  return success;
+};
+
+const fetchTypesImmediate = async () => {
   if (fetchTypesDebounceTimer) {
     clearTimeout(fetchTypesDebounceTimer);
     fetchTypesDebounceTimer = null;
   }
-  fetchTypes();
+  return fetchTypesAndRestore();
+};
+
+const handleScanAction = () => {
+  if (scanRequiresReload.value) {
+    window.location.reload();
+    return;
+  }
+  void fetchTypesImmediate();
 };
 
 const fetchTypesDebounced = () => {
@@ -306,17 +625,109 @@ const fetchTypesDebounced = () => {
 
   fetchTypesDebounceTimer = setTimeout(() => {
     fetchTypesDebounceTimer = null;
-    fetchTypes();
+    void fetchTypesAndRestore();
   }, 400);
 };
 
+const saveWorkspace = (name: string) => {
+  try {
+    const latest = latestWorkspaceArchive();
+    if (!latest) return;
+    const next = saveNamedWorkspace(
+      latest,
+      name,
+      captureWorkspace(),
+      new Date().toISOString(),
+      () => typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    if (persistArchive(next)) notify(`Saved workspace ${name}.`, 'success');
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Workspace save failed.', 'error');
+  }
+};
+
+const loadWorkspace = async (id: string) => {
+  const saved = workspaceArchive.value.saves.find((entry) => entry.id === id);
+  if (!saved) return;
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+  }
+  workspaceReady.value = false;
+  pendingWorkspace.value = saved.snapshot;
+  saveDraftAfterRestore.value = true;
+  pendingSettingWarnings = applyWorkspaceSettings(saved.snapshot);
+  await fetchTypesImmediate();
+};
+
+const renameWorkspace = (id: string, name: string) => {
+  try {
+    const latest = latestWorkspaceArchive();
+    if (!latest) return;
+    const next = renameSavedWorkspace(latest, id, name);
+    if (persistArchive(next)) notify(`Workspace renamed to ${name}.`, 'success');
+  } catch (error) {
+    notify(error instanceof Error ? error.message : 'Workspace rename failed.', 'error');
+  }
+};
+
+const deleteWorkspace = (id: string) => {
+  const latest = latestWorkspaceArchive();
+  if (!latest) return;
+  const saved = latest.saves.find((entry) => entry.id === id);
+  if (!saved) return;
+  if (persistArchive(deleteSavedWorkspace(latest, id))) {
+    notify(`Deleted workspace ${saved.name}.`, 'success');
+  }
+};
+
+watch(captureWorkspace, queueDraftSave, { deep: true, flush: 'sync' });
+
+const flushDraft = () => {
+  if (!workspaceReady.value || !workspaceStorageAvailable.value || !draftSaveTimer) return;
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = null;
+  saveDraftNow();
+};
+
+const refreshWorkspaceArchive = (event: StorageEvent) => {
+  if (event.key !== WORKSPACE_STORAGE_KEY || !browserStorage) return;
+  const storageWasUnavailable = !workspaceStorageAvailable.value;
+  try {
+    workspaceArchive.value = readWorkspaceArchive(browserStorage);
+    workspaceStorageAvailable.value = true;
+    workspaceStorageError.value = '';
+    // Preserve local edits when another tab repairs unreadable storage. Normal
+    // cross-tab updates must remain read-only or the tabs rewrite each other.
+    if (storageWasUnavailable) {
+      if (workspaceReady.value) {
+        saveDraftNow();
+      } else {
+        saveDraftWhenReady = true;
+      }
+    }
+  } catch {
+    // Keep the last valid in-memory archive. The other tab may be midway
+    // through recovery; a later valid storage event will refresh this list.
+  }
+};
+
 onMounted(() => {
-  fetchTypes();
+  window.addEventListener('pagehide', flushDraft);
+  window.addEventListener('storage', refreshWorkspaceArchive);
+  void fetchTypesAndRestore();
 });
 
 onBeforeUnmount(() => {
   if (fetchTypesDebounceTimer) {
     clearTimeout(fetchTypesDebounceTimer);
+  }
+  flushDraft();
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('pagehide', flushDraft);
+    window.removeEventListener('storage', refreshWorkspaceArchive);
   }
 });
 </script>
@@ -334,6 +745,7 @@ onBeforeUnmount(() => {
   text-align: center;
   width: 100%;
   max-width: 1200px;
+  box-sizing: border-box;
   
   h1 {
     font-size: 3rem;
@@ -362,6 +774,48 @@ onBeforeUnmount(() => {
 
 .state-panel {
   text-align: center;
+}
+
+.workspace-mode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.workspace-mode p,
+.workspace-mode span {
+  margin: 0;
+}
+
+.workspace-mode p {
+  font-family: var(--gba-font-heading);
+  font-size: 1.15rem;
+}
+
+.workspace-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  border: 2px solid var(--gba-text-dark);
+}
+
+.workspace-mode-options button {
+  padding: 9px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--gba-text-dark);
+  cursor: pointer;
+  font-family: var(--gba-font-heading);
+  text-transform: uppercase;
+}
+
+.workspace-mode-options button + button {
+  border-left: 2px solid var(--gba-text-dark);
+}
+
+.workspace-mode-options button.active {
+  background: var(--gba-accent-yellow);
+  box-shadow: inset 0 -4px 0 var(--gba-accent-magenta);
 }
 
 .action-btn {
@@ -422,6 +876,31 @@ onBeforeUnmount(() => {
 @media (max-width: 600px) {
   .stat-controls {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-mode {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .controls {
+    align-items: stretch;
+  }
+
+  .controls .gba-label {
+    align-items: flex-start;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .controls .gba-select,
+  .regulation-select {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .stat-controls .checkbox-label {
+    white-space: normal;
   }
 }
 

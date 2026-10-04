@@ -12,7 +12,7 @@
  * genuinely *different* teams it can field behind that one.
  */
 
-import { analyzeTeamCoverage, type TeamCoverageProfile } from './teamCoverage';
+import { analyzeTeamCoverage, type TeamCoverageProfile, type TypeMatchupValues } from './teamCoverage';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from './abilityRoles';
 import { composeTeamScore, scoreMemberQuality, scoreTeamSynergy } from './teamScoring';
 import { combinationsOf, type BattleFormat } from './battleFormats';
@@ -209,6 +209,13 @@ export interface RosterScoringOptions {
   format: BattleFormat;
   /** Number of elemental types in play. Defaults to the standard eighteen. */
   typeCount?: number;
+  /**
+   * What each type is worth in the metagame being prepared against. Omit to
+   * weight every type equally, which is what a caller with no pool measured
+   * gets — the scores stay comparable within one call either way, and are not
+   * comparable across the two.
+   */
+  typeValues?: TypeMatchupValues;
 }
 
 /**
@@ -225,10 +232,10 @@ export function scoreBring(members: RosterMember[], options: RosterScoringOption
   const coverage = analyzeTeamCoverage(members.map((member) => ({
     ...member,
     immuneToAllyMoves: format.hasAlly && isImmuneToAllyMoves(member.abilityName)
-  })));
+  })), options.typeValues);
 
   const roles = analyzeTeamRoles(
-    members.map((member) => ({ abilityName: member.abilityName })),
+    members.map((member) => ({ abilityName: member.abilityName, varietyName: member.name })),
     { hasAlly: format.hasAlly }
   );
   const typesTotal = new Set(members.flatMap((member) => member.types || [])).size;
@@ -244,7 +251,8 @@ export function scoreBring(members: RosterMember[], options: RosterScoringOption
       stats: member.stats,
       normalizedDamageToScore: member.normalizedDamageToScore ?? 0.5,
       normalizedDamageFromScore: member.normalizedDamageFromScore ?? 0.5,
-      abilityName: member.abilityName
+      abilityName: member.abilityName,
+      varietyName: member.name
     })
     : 0);
 
@@ -254,7 +262,11 @@ export function scoreBring(members: RosterMember[], options: RosterScoringOption
     format,
     typesTotal,
     teamSize: members.length,
-    typeCount
+    typeCount,
+    // In roster order and including the members without stats, so the lengths
+    // agree and `monochromeOffense` scores rather than opting out. A member the
+    // scoring cannot see resolves to `mixed` and counts as a threat either way.
+    memberStats: members.map((member) => member.stats)
   });
 
   return composeTeamScore(memberQualities, synergy, format);

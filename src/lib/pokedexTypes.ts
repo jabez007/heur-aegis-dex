@@ -3,6 +3,21 @@ export interface NamedResource {
   url?: string;
 }
 
+/**
+ * A damage reduction that lands between buckets, kept per attacking type.
+ *
+ * Solid Rock's 0.75x has no bucket to live in, so `calculateDamageFromScore`
+ * cannot see it and the difference is carried alongside the buckets instead.
+ * Recorded per type rather than pre-summed because the sum depends on the threat
+ * weighting in force, and a cup can change that after the scan has run.
+ */
+export interface DamageResidual {
+  /** Attacking type the reduction applies to. */
+  name: string;
+  /** Score difference in bucket units, the same `multiplier - 1` scale. */
+  delta: number;
+}
+
 export interface DamageRelations {
   double_damage_from: NamedResource[];
   half_damage_from: NamedResource[];
@@ -12,6 +27,8 @@ export interface DamageRelations {
   no_damage_to: NamedResource[];
   quadruple_damage_from?: NamedResource[];
   quarter_damage_from?: NamedResource[];
+  /** Between-bucket reductions this score includes. Absent when there are none. */
+  damage_from_residuals?: DamageResidual[];
   damage_from_score?: number;
   damage_to_score?: number;
 }
@@ -34,6 +51,16 @@ export interface PokemonTypeData {
 
 export interface TeamTypeData {
   name: string;
+  /**
+   * Range `damage_from_score` was computed to occupy, when the scan weighted it
+   * by metagame threat. Carried because a weighted score and the range it is
+   * normalized against have to come from the same measurement, and the consumer
+   * flattening this result is usually not the code that ran the scan. Absent on
+   * unweighted results, where the published constants apply.
+   */
+  damage_from_bounds?: { min: number; max: number };
+  /** As above, for the offensive score under the census the scan measured. */
+  damage_to_bounds?: { min: number; max: number };
   weaknesses: string[];
   quadruple_weaknesses?: string[];
   resistances: string[];
@@ -107,8 +134,9 @@ export interface PokemonListEntry {
    */
   battle_form_name?: string;
   /**
-   * Stats the Pokemon fights with: the published line after any unconditional
-   * stat ability. This is what the scan's floors and all scoring judge on.
+   * Stats the Pokemon fights with under its selected ability. Scoring uses this
+   * line; eligibility passes when at least one individual ability profile clears
+   * the scan's stat floors.
    */
   stats?: PokemonStats;
   /** The published line, before abilities. Kept so a UI can show both. */
@@ -137,3 +165,63 @@ export interface ResistantTypeResult extends TeamTypeData {
   include_ability_immunities: boolean;
 }
 
+type UnknownRecord = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const hasStringArrays = (value: UnknownRecord, fields: string[]): boolean =>
+  fields.every((field) =>
+    Array.isArray(value[field]) && value[field].every((entry: unknown) => typeof entry === 'string')
+  );
+
+const isPokemonStats = (value: unknown): value is PokemonStats => {
+  if (!isRecord(value)) return false;
+  return ['hp', 'attack', 'defense', 'special-attack', 'special-defense', 'speed']
+    .every((field) => typeof value[field] === 'number' && Number.isFinite(value[field]));
+};
+
+const isCachedAbilityProfile = (value: unknown): boolean =>
+  isRecord(value) &&
+  isPokemonStats(value.stats) &&
+  hasStringArrays(value, [
+    'weaknesses', 'quadruple_weaknesses', 'resistances', 'immunities',
+    'ineffectives', 'coverages', 'move_coverages'
+  ]);
+
+const isCachedPokemon = (value: unknown): boolean => {
+  if (!isRecord(value) || !isRecord(value.pokemon) || typeof value.pokemon.name !== 'string') return false;
+  if (!isPokemonStats(value.stats) || !isPokemonStats(value.base_stats)) return false;
+  if (!Array.isArray(value.types) || !value.types.every((slot) =>
+    isRecord(slot) && isRecord(slot.type) && typeof slot.type.name === 'string'
+  )) return false;
+  if (!Array.isArray(value.abilities) || !value.abilities.every((ability) =>
+    isRecord(ability) && typeof ability.name === 'string' && typeof ability.is_hidden === 'boolean'
+  )) return false;
+  if (!isRecord(value.ability_profiles) || !Object.values(value.ability_profiles).every(isCachedAbilityProfile)) {
+    return false;
+  }
+  return hasStringArrays(value, [
+    'effective_weaknesses', 'effective_quadruple_weaknesses',
+    'effective_resistances', 'effective_immunities', 'effective_move_coverages',
+    'effective_ineffectives', 'effective_coverages'
+  ]);
+};
+
+/**
+ * Validates data read from the browser scan cache before UI code consumes it.
+ * The check is intentionally strict: stale cache shapes should trigger a fresh
+ * scan rather than being repaired or partially displayed.
+ */
+export function isResistantTypeResultList(value: unknown): value is ResistantTypeResult[] {
+  return Array.isArray(value) && value.every((entry) =>
+    isRecord(entry) &&
+    typeof entry.name === 'string' &&
+    typeof entry.include_ability_immunities === 'boolean' &&
+    hasStringArrays(entry, [
+      'weaknesses', 'quadruple_weaknesses', 'resistances', 'immunities',
+      'ineffectives', 'coverages'
+    ]) &&
+    Array.isArray(entry.pokemon) && entry.pokemon.every(isCachedPokemon)
+  );
+}

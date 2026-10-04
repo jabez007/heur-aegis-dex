@@ -52,6 +52,9 @@ jobs:
       - name: Type check
         run: npm run type-check
 
+      - name: Check regulation freshness
+        run: npm run check:regulations
+
       - name: Test
         # `npm test` is `vitest`, which is watch mode. Vitest does detect CI and
         # run once, but a gate whose termination depends on env detection is not
@@ -68,3 +71,14 @@ jobs:
         # a wide enough surface to trip on it. A broken rollup is a broken
         # package, so it should fail on the pull request, not on the release tag.
         run: npm run build:all
+
+      - name: Verify browser dependencies
+        # The unit suite cannot prove that the catalog stayed in a lazy chunk or
+        # that live acquisition stayed out of the production graph.
+        run: npm run check:browser
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify external-offline scan
+        run: npx playwright test

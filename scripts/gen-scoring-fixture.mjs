@@ -108,7 +108,10 @@ for (const name of FIXTURE) {
   const { abilityProfiles } = applyAbilityModifiers(typeData.damage_relations, abilityNames, BASE);
   const profile = chooseDefaultAbility(
     abilityProfiles.map((p) => ({ ...p, stats: getEffectiveStats(baseStats, [p.ability_name]) })),
-    BASE
+    BASE,
+    undefined,
+    undefined,
+    name
   );
   const abilityName = profile.ability_name;
   const stats = profile.stats;

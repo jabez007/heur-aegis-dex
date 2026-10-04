@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { RELIABLE_STATUS_ABILITIES } from './abilityRoles';
 import {
   ABILITY_QUALITY_EFFECTS,
   getAbilityQualityEffect,
   getQualityMultipliers,
   hasAbilityQualityRule
 } from './abilityEffects';
+import { isDamageTakenAbility } from './pokedexAbilities';
+import { grantsStatusImmunity } from './statusThreat';
 import { MEMBER_WEIGHTS, scoreMemberQuality } from './teamScoring';
 
 describe('ABILITY_QUALITY_EFFECTS', () => {
@@ -14,10 +17,43 @@ describe('ABILITY_QUALITY_EFFECTS', () => {
     });
   });
 
-  it('gives every unapplied rule a condition, and every applied rule none', () => {
+  it('gives every unapplied rule a condition or a destination, and every applied rule neither', () => {
     ABILITY_QUALITY_EFFECTS.forEach((rule) => {
-      if (rule.applied) expect(rule.condition, `${rule.ability}`).toBeUndefined();
-      else expect(rule.condition, `${rule.ability}`).toBeTruthy();
+      if (rule.applied) {
+        expect(rule.condition, `${rule.ability}`).toBeUndefined();
+        expect(rule.migratedTo, `${rule.ability}`).toBeUndefined();
+      } else {
+        // Unapplied means one of two different things, and they must not blur:
+        // a condition the tool cannot see, or an effect priced somewhere better.
+        expect(
+          rule.condition || rule.migratedTo,
+          `${rule.ability} needs a condition or a migratedTo`
+        ).toBeTruthy();
+      }
+    });
+  });
+
+  it('leaves migrated abilities entirely to the module that took them', () => {
+    // Double-counting is the failure mode this guards: an ability priced from
+    // damage relations or from the status model must not also collect a flat
+    // multiplier here. Checked against the destination the rule names, so a
+    // migratedTo pointing nowhere real fails rather than passing quietly.
+    const owners: Record<string, (ability: string) => boolean> = {
+      'pokedexAbilities.ts': isDamageTakenAbility,
+      'statusThreat.ts': grantsStatusImmunity,
+      // Prankster left for the role model rather than a damage or status one: it
+      // raises what a move-sourced support role is worth to its carrier, which is
+      // a third kind of destination and needs its own ownership check.
+      'abilityRoles.ts': (ability: string) => RELIABLE_STATUS_ABILITIES.has(ability)
+    };
+
+    ABILITY_QUALITY_EFFECTS.filter((rule) => rule.migratedTo).forEach((rule) => {
+      expect(getQualityMultipliers(rule.ability), `${rule.ability} must not pay twice`)
+        .toEqual({ bulk: 1, offense: 1, speed: 1 });
+
+      const owns = owners[rule.migratedTo as string];
+      expect(owns, `${rule.ability} names an unknown destination ${rule.migratedTo}`).toBeTruthy();
+      expect(owns(rule.ability), `${rule.migratedTo} should price ${rule.ability}`).toBe(true);
     });
   });
 
@@ -82,12 +118,25 @@ describe('ABILITY_QUALITY_EFFECTS', () => {
   });
 
   it('excludes move-dependent abilities', () => {
-    // The tool cannot see movesets, so crediting these would be scoring
-    // something it has no data for.
-    ['prankster', 'sheer-force', 'technician', 'tough-claws'].forEach((ability) => {
+    // The tool cannot see the moves these need, so crediting them here would be
+    // scoring something it has no data for.
+    ['sheer-force', 'technician', 'tough-claws'].forEach((ability) => {
       expect(hasAbilityQualityRule(ability), `${ability} should be recorded`).toBe(true);
       expect(getAbilityQualityEffect(ability), `${ability} should not apply`).toBeUndefined();
     });
+  });
+
+  it('still gives Prankster no multiplier, now for a different reason', () => {
+    // It was in the list above until the move tables landed, on the grounds that
+    // its value is which moves it accelerates and the tool could not see them.
+    // It can now — Tailwind and screens are in `utilityMoveData.ts`, the status
+    // moves in `statusMoveData.ts` — so the reason changed while the outcome did
+    // not. Prankster does not alter what a stat line is worth, which is the only
+    // question this file answers; it alters whether a support move arrives, and
+    // `PRANKSTER_ROLE_CREDIT` prices it there.
+    expect(hasAbilityQualityRule('prankster')).toBe(true);
+    expect(getAbilityQualityEffect('prankster')).toBeUndefined();
+    expect(RELIABLE_STATUS_ABILITIES.has('prankster')).toBe(true);
   });
 });
 
@@ -105,6 +154,13 @@ describe('getQualityMultipliers', () => {
 
   it('treats Libero exactly as Protean', () => {
     expect(getQualityMultipliers('libero')).toEqual(getQualityMultipliers('protean'));
+  });
+
+  it('is neutral for a resist ability the type layer now prices', () => {
+    // Thick Fat used to return 1.12 here. It returns nothing now, and the point
+    // of the migration is that the credit is not lost — it is computed per
+    // Pokemon in pokedexAbilities.ts, where the typing is in scope.
+    expect(getQualityMultipliers('thick-fat')).toEqual({ bulk: 1, offense: 1, speed: 1 });
   });
 });
 

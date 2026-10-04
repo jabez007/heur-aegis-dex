@@ -81,6 +81,20 @@ export function getAttackerBias(stats?: PokemonStats | null): AttackerBias {
 /** PokeAPI version group the table was generated from. */
 export const COVERAGE_MOVE_VERSION_GROUP = 'champions';
 
+/**
+ * PokeAPI Pokedex holding the roster of that version group — the species that
+ * exist in the game at all.
+ *
+ * Paired with the version group above and stated rather than inferred, because
+ * the two happen to share a name here and will not always. Everything outside
+ * this Pokedex has an empty movepool for the unexciting reason that it is not in
+ * the game, so anything reasoning about *opponents* has to filter on it: 208
+ * species are in Champions and the catalog carries all 1,025 of the National
+ * Dex. `getThreatPool` is the caller that needs this, and the failure it avoids
+ * is described there.
+ */
+export const COVERAGE_MOVE_POKEDEX = 'champions';
+
 /** Attacking type name to the defending types it hits for double damage. */
 export type OffensiveTypeChart = Readonly<Record<string, readonly string[]>>;
 
@@ -146,6 +160,38 @@ export function getMoveCoverage(
     (chart[moveType] || []).forEach((target) => covered.add(target));
   });
   return [...covered].sort();
+}
+
+/**
+ * The types a Pokemon reaches by move that its STAB does not already reach.
+ *
+ * `getMoveCoverage` reads every qualifying move, and the move tables include
+ * moves of the Pokemon's own types — so for 145 of the 146 entries in a default
+ * M-B view, `coverages` is a strict subset of `moveCoverages`. Anything scoring
+ * or displaying the raw length is therefore counting STAB reach a second time.
+ *
+ * That mattered in two places, which disagreed with each other. `PokemonCard`
+ * already subtracted, showing STAB coverage and extra coverage as separate
+ * rows; `candidatePriority` did not, and charged the full list. This is the one
+ * definition, so the number the card shows is the number the ranking pays for.
+ *
+ * The subtraction is not merely tidier — it changes what the quantity measures.
+ * Across the M-B view the full count correlates with the offensive typing score
+ * at +0.22, because it contains it. The remainder correlates at **-0.23**: a
+ * Pokemon whose typing already hits much of the format has less left to gain
+ * from a coverage move. That sign is real information, and the raw count had it
+ * backwards.
+ *
+ * @param coverages Types the Pokemon hits super-effectively off STAB.
+ * @param moveCoverages Types it reaches super-effectively with any learnable move.
+ * @returns The `moveCoverages` entries not already in `coverages`, order preserved.
+ */
+export function coverageBeyondStab(
+  coverages: readonly string[],
+  moveCoverages: readonly string[]
+): string[] {
+  const stab = new Set(coverages);
+  return moveCoverages.filter((type) => !stab.has(type));
 }
 
 /**

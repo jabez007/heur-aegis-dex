@@ -8,7 +8,13 @@ on:
       - vue3
 
 jobs:
+  verify:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/verify.yaml
+
   build-and-deploy:
+    needs: verify
     runs-on: ubuntu-latest
 
     permissions:

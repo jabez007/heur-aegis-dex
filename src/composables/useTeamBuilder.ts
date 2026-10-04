@@ -1,6 +1,8 @@
 import { ref, computed } from 'vue';
 import { withAbility, type PokemonEntry } from '../lib/pokemonEntry';
+import type { WorkspaceSnapshotV1 } from '../lib/workspacePersistence';
 import { generateRosters } from '../lib/rosterGeneration';
+import { selectRosterPortfolio } from '../lib/rosterPortfolio';
 import { analyzeTeamCoverage } from '../lib/teamCoverage';
 import { analyzeTeamRoles, isImmuneToAllyMoves } from '../lib/abilityRoles';
 import { evaluateRoster, type RosterMember } from '../lib/rosterScoring';
@@ -11,6 +13,7 @@ import {
   type BattleFormatId
 } from '../lib/battleFormats';
 import { useNotifications } from './useNotifications';
+import { useThreatScoring } from './useThreatScoring';
 import { createInjectableState } from './injectableState';
 
 export interface PartyMember {
@@ -43,13 +46,35 @@ export interface PartyMember {
   typeName: string;
 }
 
+export interface GenerationAlternativeSummary {
+  optionNumber: number;
+  optionCount: number;
+  scoreBehindBest: number;
+  removedNames: string[];
+  addedNames: string[];
+}
+
 const teamBuilderState = createInjectableState('heur-aegis-dex:team-builder', () => ({
   /** Registered Pokemon — the "show", up to the format's maximum. */
   roster: ref<PartyMember[]>([]),
   /** Roster positions the user has chosen to bring, or null to follow the suggestion. */
   manualBringIndices: ref<number[] | null>(null),
   formatId: ref<BattleFormatId>(DEFAULT_BATTLE_FORMAT),
-  isGenerating: ref(false)
+  isGenerating: ref(false),
+  fillSeedNames: ref<string[]>([]),
+  generationCycleActive: ref(false),
+  lastFilledRosterKey: ref<string | null>(null),
+  fillAlternativeCount: ref(0),
+  fillAlternativesDirty: ref(false),
+  generationAlternative: ref<GenerationAlternativeSummary | null>(null),
+  /** Pokemon varieties automatic roster generation must not add. */
+  excludedPokemonNames: ref<string[]>([]),
+  /** Advances only for deliberate edits that supersede a restored team. */
+  teamEditRevision: ref(0),
+  /** Advances only when roster membership itself changes. */
+  rosterEditRevision: ref(0),
+  /** Registrations that the current scan can no longer resolve exactly. */
+  unavailableRosterNames: ref<string[]>([])
 }));
 
 export const provideTeamBuilder = teamBuilderState.provideState;
@@ -66,12 +91,73 @@ export const __resetTeamBuilderState = teamBuilderState.resetFallbackState;
  * @returns Roster state, bring selection, summary computed values, and actions.
  */
 export function useTeamBuilder() {
-  const { roster, manualBringIndices, formatId, isGenerating } = teamBuilderState.useState();
+  const {
+    roster,
+    manualBringIndices,
+    formatId,
+    isGenerating,
+    fillSeedNames,
+    generationCycleActive,
+    lastFilledRosterKey,
+    fillAlternativeCount,
+    fillAlternativesDirty,
+    generationAlternative,
+    excludedPokemonNames,
+    teamEditRevision,
+    rosterEditRevision,
+    unavailableRosterNames
+  } = teamBuilderState.useState();
   const { notify } = useNotifications();
+  // Undefined until the catalog loads, which is the safe state: the team scorer
+  // falls back to counting types equally, exactly as it did before these values
+  // existed. See `useThreatScoring`.
+  const { scoring } = useThreatScoring();
+  const markTeamEdited = () => { teamEditRevision.value++; };
+  const markRosterEdited = () => {
+    rosterEditRevision.value++;
+    markTeamEdited();
+  };
 
   const format = computed(() => getBattleFormat(formatId.value));
   const maxRosterSize = computed(() => format.value.maxRosterSize);
   const bringSize = computed(() => format.value.broughtToBattle);
+  const canTryAnotherRoster = computed(() =>
+    roster.value.length >= maxRosterSize.value &&
+    generationCycleActive.value &&
+    (fillAlternativeCount.value > 1 || fillAlternativesDirty.value)
+  );
+  const hasUnavailableRosterMembers = computed(() => unavailableRosterNames.value.length > 0);
+
+  const resetFillCycle = () => {
+    fillSeedNames.value = [];
+    generationCycleActive.value = false;
+    lastFilledRosterKey.value = null;
+    fillAlternativeCount.value = 0;
+    fillAlternativesDirty.value = false;
+    generationAlternative.value = null;
+  };
+
+  const isExcludedFromGeneration = (name: string) => excludedPokemonNames.value.includes(name);
+
+  const toggleGenerationExclusion = (name: string) => {
+    const index = excludedPokemonNames.value.indexOf(name);
+    if (index === -1) {
+      excludedPokemonNames.value.push(name);
+    } else {
+      excludedPokemonNames.value.splice(index, 1);
+    }
+    fillAlternativesDirty.value = generationCycleActive.value;
+    lastFilledRosterKey.value = null;
+    generationAlternative.value = null;
+  };
+
+  const clearGenerationExclusions = () => {
+    if (excludedPokemonNames.value.length === 0) return;
+    excludedPokemonNames.value = [];
+    fillAlternativesDirty.value = generationCycleActive.value;
+    lastFilledRosterKey.value = null;
+    generationAlternative.value = null;
+  };
 
   const toRosterMember = (member: PartyMember): RosterMember => ({
     name: member.name,
@@ -89,11 +175,15 @@ export function useTeamBuilder() {
   });
 
   const rosterEvaluation = computed(() =>
-    evaluateRoster(roster.value.map(toRosterMember), { format: format.value })
+    evaluateRoster(
+      hasUnavailableRosterMembers.value ? [] : roster.value.map(toRosterMember),
+      { format: format.value, typeValues: scoring.value?.typeValues }
+    )
   );
 
   /** Roster positions currently brought: the user's pick, else the best option. */
   const bringIndices = computed<number[]>(() => {
+    if (hasUnavailableRosterMembers.value) return [];
     if (manualBringIndices.value) {
       return [...manualBringIndices.value].filter((index) => index < roster.value.length).sort((a, b) => a - b);
     }
@@ -151,7 +241,7 @@ export function useTeamBuilder() {
    */
   const cycleBringLine = (step: number) => {
     const lines = bringLines.value;
-    if (lines.length === 0 || !Number.isFinite(step)) return;
+    if (lines.length === 0 || !Number.isInteger(step)) return;
 
     const from = currentLineIndex.value;
     if (from === -1 && step === 0) return;
@@ -164,6 +254,7 @@ export function useTeamBuilder() {
     // Line 0 is the best bring, which is what following the suggestion means, so
     // landing there clears the manual pick rather than pinning the same indices.
     manualBringIndices.value = next === 0 ? null : [...lines[next].indices].sort((a, b) => a - b);
+    markTeamEdited();
   };
 
   const isBrought = (index: number) => bringIndices.value.includes(index);
@@ -179,10 +270,14 @@ export function useTeamBuilder() {
     broughtTeam.value.map((member) => ({
       ...toRosterMember(member),
       immuneToAllyMoves: format.value.hasAlly && isImmuneToAllyMoves(member.abilityName)
-    }))
+    })),
+    scoring.value?.typeValues
   ));
 
-  const roleAnalysis = computed(() => analyzeTeamRoles(broughtTeam.value, { hasAlly: format.value.hasAlly }));
+  const roleAnalysis = computed(() => analyzeTeamRoles(
+    broughtTeam.value.map((member) => ({ abilityName: member.abilityName, varietyName: member.name })),
+    { hasAlly: format.value.hasAlly }
+  ));
 
   // The workbench reports weaknesses with no *defensive* answer, because that is
   // what "Team Weaknesses" means to a player: types nobody can switch into.
@@ -229,11 +324,31 @@ export function useTeamBuilder() {
     typeName: entry.typeName
   });
 
+  /** Refreshes registrations from a new scan without silently removing user choices. */
+  const reconcileRoster = (pokemon: PokemonEntry[]) => {
+    const byName = new Map(pokemon.map((entry) => [entry.name, entry]));
+    const unavailable: string[] = [];
+
+    roster.value = roster.value.map((member) => {
+      const entry = byName.get(member.name);
+      const abilityAvailable = !member.abilityName || !!entry?.abilityProfiles[member.abilityName];
+      if (!entry || !abilityAvailable) {
+        unavailable.push(member.name);
+        return member;
+      }
+      return fromPokemonEntry(withAbility(entry, member.abilityName));
+    });
+    unavailableRosterNames.value = unavailable;
+    resetFillCycle();
+  };
+
   const setFormat = (nextFormatId: BattleFormatId) => {
     if (!isBattleFormatId(nextFormatId)) return;
     formatId.value = nextFormatId;
     // A bring sized for the old format is meaningless under the new one.
     manualBringIndices.value = null;
+    resetFillCycle();
+    markTeamEdited();
   };
 
   const toggleBring = (index: number) => {
@@ -248,11 +363,13 @@ export function useTeamBuilder() {
       current.add(index);
     }
     manualBringIndices.value = [...current].sort((a, b) => a - b);
+    markTeamEdited();
   };
 
   /** Drops the manual pick and returns to the highest scoring bring. */
   const useSuggestedBring = () => {
     manualBringIndices.value = null;
+    markTeamEdited();
   };
 
   /**
@@ -277,6 +394,8 @@ export function useTeamBuilder() {
 
     roster.value.push(fromPokemonEntry(withAbility(entry, abilityName)));
     manualBringIndices.value = null;
+    resetFillCycle();
+    markRosterEdited();
     notify(`Added ${entry.name.toUpperCase()} to roster.`, 'success');
     return true;
   };
@@ -285,13 +404,71 @@ export function useTeamBuilder() {
     roster.value.some((member) => member.speciesName === speciesName);
 
   const removeFromParty = (index: number) => {
+    if (index < 0 || index >= roster.value.length) return;
     roster.value.splice(index, 1);
+    const currentNames = new Set(roster.value.map((member) => member.name));
+    unavailableRosterNames.value = unavailableRosterNames.value.filter((name) => currentNames.has(name));
     manualBringIndices.value = null;
+    resetFillCycle();
+    markRosterEdited();
   };
 
   const clearParty = () => {
+    const hadRoster = roster.value.length > 0;
     roster.value = [];
+    unavailableRosterNames.value = [];
     manualBringIndices.value = null;
+    resetFillCycle();
+    if (hadRoster) markRosterEdited();
+  };
+
+  const snapshotTeam = (): WorkspaceSnapshotV1['team'] => ({
+    format: formatId.value,
+    roster: roster.value.map((member) => ({
+      pokemon: member.name,
+      ability: member.abilityName ?? null
+    })),
+    bring: manualBringIndices.value === null
+      ? null
+      : manualBringIndices.value
+        .map((index) => roster.value[index]?.name)
+        .filter((name): name is string => name !== undefined),
+    excluded: [...excludedPokemonNames.value]
+  });
+
+  const restoreTeam = (team: WorkspaceSnapshotV1['team'], pokemon: PokemonEntry[]) => {
+    const byName = new Map(pokemon.map((entry) => [entry.name, entry]));
+    const unavailablePokemon: string[] = [];
+    const unavailableAbilities: string[] = [];
+    const seenSpecies = new Set<string>();
+    const restored = team.roster.flatMap((saved) => {
+      const entry = byName.get(saved.pokemon);
+      if (!entry || seenSpecies.has(entry.speciesName)) {
+        unavailablePokemon.push(saved.pokemon);
+        return [];
+      }
+      seenSpecies.add(entry.speciesName);
+      if (saved.ability && !entry.abilityProfiles[saved.ability]) {
+        unavailableAbilities.push(`${saved.pokemon}: ${saved.ability}`);
+      }
+      return [fromPokemonEntry(withAbility(entry, saved.ability))];
+    });
+
+    resetFillCycle();
+    formatId.value = team.format;
+    roster.value = restored;
+    unavailableRosterNames.value = [];
+    excludedPokemonNames.value = [...new Set(team.excluded)];
+    if (team.bring === null) {
+      manualBringIndices.value = null;
+    } else {
+      const indices = team.bring
+        .map((name) => roster.value.findIndex((member) => member.name === name))
+        .filter((index) => index >= 0);
+      manualBringIndices.value = indices.length === team.bring.length ? indices : null;
+    }
+
+    return { unavailablePokemon, unavailableAbilities };
   };
 
   /**
@@ -300,23 +477,73 @@ export function useTeamBuilder() {
    * @param pool Pokemon the search was allowed to draw from.
    * @param seed Pokemon that must survive into the result.
    * @param successMessage Prefix for the success notification.
+   * @param cycleAlternatives Whether to advance through the strongest completions.
    * @returns Whether a roster was produced.
    */
-  const runGeneration = (pool: PokemonEntry[], seed: PokemonEntry[], successMessage: string): boolean => {
+  const runGeneration = (
+    pool: PokemonEntry[],
+    seed: PokemonEntry[],
+    successMessage: string,
+    cycleAlternatives = false
+  ): boolean => {
+    const previousRosterNames = roster.value.length >= maxRosterSize.value
+      ? roster.value.map((member) => member.name)
+      : [];
+    const allowedPokemon = pool.filter((entry) => !isExcludedFromGeneration(entry.name));
     const rosters = generateRosters({
-      pokemon: pool,
+      pokemon: allowedPokemon,
       format: format.value,
       rosterSize: maxRosterSize.value,
-      seed
+      seed,
+      typeValues: scoring.value?.typeValues
     });
 
+    if (cycleAlternatives) {
+      fillAlternativesDirty.value = false;
+      fillAlternativeCount.value = 0;
+      generationAlternative.value = null;
+    }
     if (rosters.length === 0) return false;
 
-    roster.value = rosters[0].members.map(fromPokemonEntry);
+    const alternatives = cycleAlternatives ? selectRosterPortfolio(rosters) : [rosters[0]];
+    if (cycleAlternatives) generationCycleActive.value = true;
+    fillAlternativeCount.value = cycleAlternatives ? alternatives.length : 0;
+    const rosterKey = (members: PokemonEntry[]) =>
+      members.map((member) => member.name).sort().join('|');
+    const previousIndex = alternatives.findIndex((candidate) =>
+      rosterKey(candidate.members) === lastFilledRosterKey.value
+    );
+    const selectedIndex = cycleAlternatives && previousIndex >= 0
+      ? (previousIndex + 1) % alternatives.length
+      : 0;
+    const selected = alternatives[selectedIndex];
+    const selectedNames = new Set(selected.members.map((member) => member.name));
+    const previousNames = new Set(previousRosterNames);
+
+    roster.value = selected.members.map(fromPokemonEntry);
+    unavailableRosterNames.value = [];
     manualBringIndices.value = null;
+    lastFilledRosterKey.value = rosterKey(selected.members);
+    generationAlternative.value = cycleAlternatives && alternatives.length > 1
+      ? {
+          optionNumber: selectedIndex + 1,
+          optionCount: alternatives.length,
+          scoreBehindBest: alternatives[0].score - selected.score,
+          removedNames: previousRosterNames.filter((name) => !selectedNames.has(name)),
+          addedNames: previousRosterNames.length > 0
+            ? selected.members
+              .map((member) => member.name)
+              .filter((name) => !previousNames.has(name))
+            : []
+        }
+      : null;
+    markRosterEdited();
     // Deliberately not "optimal": generateRosters prunes twice, so this is the
     // best roster the search found, not the best that exists.
-    notify(`${successMessage} — ${Math.round(rosters[0].score)}/100.`, "success");
+    const option = cycleAlternatives && alternatives.length > 1
+      ? ` (option ${selectedIndex + 1}/${alternatives.length})`
+      : '';
+    notify(`${successMessage}${option} — ${Math.round(selected.score)}/100.`, "success");
     return true;
   };
 
@@ -329,11 +556,13 @@ export function useTeamBuilder() {
   const generateFullTeam = (pool: PokemonEntry[]) => {
     isGenerating.value = true;
     try {
-      if (!runGeneration(pool, [], 'Best roster found')) {
+      resetFillCycle();
+      if (!runGeneration(pool, [], 'Best roster found', true)) {
         notify("No valid rosters found with current filters.", "error");
       }
-    } catch (e: any) {
-      notify(`Generation failed: ${e.message}`, "error");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      notify(`Generation failed: ${message}`, "error");
     } finally {
       isGenerating.value = false;
     }
@@ -347,9 +576,18 @@ export function useTeamBuilder() {
    * @returns Nothing.
    */
   const fillRemainingSlots = (allPokemon: PokemonEntry[], pool: PokemonEntry[]) => {
-    if (roster.value.length >= maxRosterSize.value) return;
+    const isTryingAnother = canTryAnotherRoster.value;
+    if (roster.value.length >= maxRosterSize.value && !isTryingAnother) return;
     if (roster.value.length === 0) {
       generateFullTeam(pool);
+      return;
+    }
+    if (hasUnavailableRosterMembers.value) {
+      notify(
+        `Cannot fill: ${unavailableRosterNames.value.join(', ')} ${unavailableRosterNames.value.length === 1 ? 'is' : 'are'} `
+        + 'unavailable in the current scan. Rescan or remove them first.',
+        'error'
+      );
       return;
     }
 
@@ -358,8 +596,16 @@ export function useTeamBuilder() {
       // Locked members can sit outside the current filters, so the seed is
       // resolved against everything rather than the filtered pool.
       const byName = new Map(allPokemon.map((entry) => [entry.name, entry]));
-      const seed = roster.value
-        .map((member) => byName.get(member.name))
+      const membersToKeep = isTryingAnother
+        ? fillSeedNames.value
+          .map((name) => roster.value.find((member) => member.name === name))
+          .filter((member): member is PartyMember => member !== undefined)
+        : roster.value;
+      const seed = membersToKeep
+        .map((member) => {
+          const entry = byName.get(member.name);
+          return entry ? withAbility(entry, member.abilityName) : undefined;
+        })
         .filter((entry): entry is PokemonEntry => entry !== undefined);
 
       // Anything the scan cannot resolve would drop out of the seed silently,
@@ -368,7 +614,7 @@ export function useTeamBuilder() {
       // search preferred. A rescan under a different regulation is enough to
       // get here. Refuse rather than destroy a registration the user made:
       // they can remove it deliberately, which is a choice, or rescan.
-      const unresolved = roster.value
+      const unresolved = membersToKeep
         .filter((member) => !byName.has(member.name))
         .map((member) => member.name);
 
@@ -381,11 +627,14 @@ export function useTeamBuilder() {
         return;
       }
 
-      if (!runGeneration(pool, seed, 'Roster filled')) {
+      if (!runGeneration(pool, seed, 'Roster filled', true)) {
         notify("No compatible partners found for this roster.", "error");
+      } else if (!isTryingAnother) {
+        fillSeedNames.value = membersToKeep.map((member) => member.name);
       }
-    } catch (e: any) {
-      notify(`Filling slots failed: ${e.message}`, "error");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      notify(`Filling slots failed: ${message}`, "error");
     } finally {
       isGenerating.value = false;
     }
@@ -400,6 +649,16 @@ export function useTeamBuilder() {
     formatId,
     maxRosterSize,
     bringSize,
+    canTryAnotherRoster,
+    generationAlternative,
+    teamEditRevision,
+    rosterEditRevision,
+    unavailableRosterNames,
+    hasUnavailableRosterMembers,
+    excludedPokemonNames,
+    isExcludedFromGeneration,
+    toggleGenerationExclusion,
+    clearGenerationExclusions,
     bringIndices,
     broughtTeam,
     isBrought,
@@ -420,6 +679,9 @@ export function useTeamBuilder() {
     teamRoleSummary,
     removeFromParty,
     clearParty,
+    snapshotTeam,
+    restoreTeam,
+    reconcileRoster,
     generateFullTeam,
     fillRemainingSlots
   };

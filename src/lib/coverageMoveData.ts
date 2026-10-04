@@ -24,12 +24,25 @@
  * Moves that choose their class at use time (Shell Side Arm and friends) appear
  * under both, since either stat can be the one that fires.
  *
- * Regenerate with `npm run gen:coverage-moves` when a regulation changes the
- * roster, then paste the emitted coverage-table.txt into the literal below and
- * update the line that follows. The generator does not write this file: the
- * header above it is hand-written and would be lost.
+ * Regenerate with `npm run gen:coverage-moves` when the game adds Pokemon, then
+ * paste the emitted coverage-table.txt into the literal below and update the
+ * line that follows. The generator does not write this file: the header above it
+ * is hand-written and would be lost.
  *
- * Generated 2026-07-27 from 208 legal species / 361 varieties.
+ * When *the game* adds Pokemon, not when a regulation changes. The generator
+ * used to take its species list from regulations.ts, which is a different thing
+ * that currently holds the same 208 names; it now reads the Champions Pokedex.
+ * A regulation narrowing legality no longer deletes movepools for Pokemon that
+ * still exist and can still be faced.
+ *
+ * Regenerating over the full 1,025-species National Dex is not the way to fill a
+ * gap here, and looks like it should be. Species outside the Champions Pokedex
+ * have no learnset in that version group at all, so the crawl returns nothing —
+ * see COVERAGE_MOVE_POKEDEX.
+ *
+ * Generated 2026-08-15 from the 208-species Champions Pokedex / 359 varieties,
+ * 318 of which have a learnset. Byte-identical to the 2026-07-27 run, which is
+ * the expected result of changing where the same roster is read from.
  */
 
 export interface CoverageMoveTypes {
