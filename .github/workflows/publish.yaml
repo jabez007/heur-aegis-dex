@@ -65,7 +65,9 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Publish to NPM
-        run: npm publish package/*.tgz --provenance --access public --registry=https://registry.npmjs.org/
+        # The ./ matters: npm reads package/<file>.tgz as a GitHub user/repo
+        # shorthand and tries to git clone it
+        run: npm publish ./package/*.tgz --provenance --access public --registry=https://registry.npmjs.org/
 
   publish_to_ghpr:
     needs: package
@@ -87,7 +89,7 @@ jobs:
           scope: "@jabez007"
 
       - name: Publish to GitHub Packages
-        run: npm publish package/*.tgz --access public --registry=https://npm.pkg.github.com/
+        run: npm publish ./package/*.tgz --access public --registry=https://npm.pkg.github.com/
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
